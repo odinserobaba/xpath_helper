@@ -78,7 +78,21 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 #tabList.active { display: flex; flex-direction: column; gap: 8px; }
 
 /* List tab */
-.list-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.list-toolbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.scenario-row { display: flex; gap: 8px; align-items: center; }
+.scenario-row input[type="text"] { flex: 1; padding: 6px 10px; background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 4px; color: var(--text); font-size: 12px; }
+.scenario-row select { min-width: 140px; padding: 6px 10px; background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 4px; color: var(--text); font-size: 12px; }
+.list-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.search-row { margin-top: 4px; }
+.search-row input { width: 100%; padding: 6px 10px; background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 4px; color: var(--text); font-size: 12px; box-sizing: border-box; }
+.btn-stop { background: var(--error) !important; color: white !important; }
+.log-section { background: var(--bg2); padding: 10px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #2a2a4a; }
+.log-section h3 { font-size: 11px; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; }
+.execution-log { max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 10px; color: var(--text2); white-space: pre-wrap; word-break: break-all; margin-bottom: 6px; }
+.btn-sm { padding: 4px 8px; font-size: 11px; }
+.import-preview { padding: 10px; background: var(--bg3); border-radius: 4px; margin: 10px 0; font-size: 12px; color: var(--text2); }
+.banner { position: fixed; top: 0; left: 0; right: 0; padding: 8px 12px; background: var(--warning); color: #000; font-size: 12px; text-align: center; z-index: 999; }
+.history-list { max-height: 150px; }
 .btn-primary-list { background: linear-gradient(135deg, var(--accent), #00b894); color: #000; font-weight: bold; }
 .btn-execute { background: linear-gradient(135deg, var(--success), #27ae60); color: #000; font-weight: bold; }
 .list-hint { font-size: 11px; color: var(--text2); margin-bottom: 12px; }

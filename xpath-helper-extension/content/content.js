@@ -139,10 +139,25 @@ function init() {
                 const token = ++runToken;
                 const steps = Array.isArray(request.steps) ? request.steps : [];
                 const continueOnError = request.continueOnError !== false;
-                runExecutionList(steps, token, { continueOnError })
+                const stepDelayMs = request.stepDelayMs ?? 100;
+                runExecutionList(steps, token, { continueOnError, stepDelayMs })
                     .then((results) => sendResponse({ ok: true, results }))
                     .catch((e) => sendResponse({ ok: false, error: e?.message || 'Unknown error' }));
                 return true;
+            }
+            if (request.action === 'stopExecution') {
+                runToken++;
+                sendResponse({ ok: true });
+                return false;
+            }
+            if (request.action === 'validateXpath') {
+                try {
+                    const r = document.evaluate(request.xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    sendResponse({ ok: true, count: r.snapshotLength });
+                } catch (e) {
+                    sendResponse({ ok: false, error: e?.message });
+                }
+                return false;
             }
         });
     } catch (e) {
@@ -199,7 +214,7 @@ function init() {
     }, true);
 
     /** Выполняет список шагов на странице по очереди и возвращает результаты по каждому шагу */
-    async function runExecutionList(steps, token, { continueOnError } = { continueOnError: true }) {
+    async function runExecutionList(steps, token, { continueOnError, stepDelayMs = 100 } = { continueOnError: true }) {
         const results = [];
         async function findElementByXPath(xpath, timeoutMs) {
             const deadline = Date.now() + Math.max(0, timeoutMs || 0);
@@ -219,17 +234,22 @@ function init() {
         }
 
         for (let i = 0; i < steps.length; i++) {
-            const step = steps[i];
             if (!isContextValid() || token !== runToken) break;
+            if (i > 0 && stepDelayMs > 0) await new Promise((r) => setTimeout(r, stepDelayMs));
+            const step = steps[i];
             const id = step?.id || null;
+            const retryCount = step?.params?.retryOnError ? 3 : 1;
             sendExecutionProgress({ phase: 'start', stepId: id, index: i, total: steps.length });
-            try {
-                if (step.action === 'wait') {
+            let lastErr = null;
+            for (let attempt = 0; attempt < retryCount; attempt++) {
+                try {
+                    if (step.action === 'wait') {
                     const delayMs = step.params?.delayMs ?? 500;
                     await new Promise((r) => setTimeout(r, Math.max(0, delayMs)));
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
-                    continue;
+                    lastErr = null;
+                    break;
                 }
 
                 const el = await findElementByXPath(step.xpath, selectorTimeoutMs);
@@ -241,7 +261,8 @@ function init() {
                     await new Promise((r) => setTimeout(r, 150));
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
-                    continue;
+                    lastErr = null;
+                    break;
                 }
 
                 if (step.action === 'file_upload') {
@@ -269,7 +290,8 @@ function init() {
                     await new Promise((r) => setTimeout(r, 150));
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
-                    continue;
+                    lastErr = null;
+                    break;
                 }
 
                 if (step.action === 'input') {
@@ -294,16 +316,24 @@ function init() {
                     await new Promise((r) => setTimeout(r, 100));
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
-                    continue;
+                    lastErr = null;
+                    break;
                 }
 
                 const err = 'Неизвестное действие: ' + String(step.action);
                 results.push({ id, ok: false, error: err });
                 sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: err });
                 if (!continueOnError) break;
+                lastErr = null;
+                break;
             } catch (e) {
                 if (isContextInvalidatedError(e)) break;
-                const err = e?.message || String(e);
+                lastErr = e;
+                if (attempt < retryCount - 1) await new Promise((r) => setTimeout(r, 300));
+            }
+            }
+            if (lastErr) {
+                const err = lastErr?.message || String(lastErr);
                 results.push({ id, ok: false, error: err });
                 sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: err });
                 if (!continueOnError) break;

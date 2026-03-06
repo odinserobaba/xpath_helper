@@ -30,11 +30,24 @@
                 </div>
             </div>
             <div class="setting-row">
-                <label for="selectorTimeoutMs">Ожидание селектора (мс):</label>
+                <label for="selectorTimeoutMs" title="Макс. время ожидания появления элемента по XPath при выполнении шагов">Ожидание селектора (мс):</label>
                 <div class="setting-input-row">
-                    <input type="number" id="selectorTimeoutMs" min="0" max="60000" value="5000" aria-label="Ожидание селектора в миллисекундах">
+                    <input type="number" id="selectorTimeoutMs" min="0" max="60000" value="5000" aria-label="Ожидание селектора">
                     <span class="setting-value">ms</span>
                 </div>
+            </div>
+            <div class="setting-row">
+                <label for="stepDelayMs" title="Пауза между шагами при выполнении списка">Пауза между шагами (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="stepDelayMs" min="0" max="5000" value="100" aria-label="Пауза между шагами">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label class="filter-check">
+                    <input type="checkbox" id="onlyUniqueMode" title="Показывать только уникальные XPath в инспекторе">
+                    <span>Только уникальные XPath</span>
+                </label>
             </div>
             <p class="setting-hint">Alt+X — вкл/выкл режим инспекции (без удержания Ctrl)</p>
         </section>
@@ -74,9 +87,14 @@
         <section id="exportSection" class="xpath-section hidden">
             <h3>Экспорт</h3>
             <div class="export-actions">
-                <button id="copyAllUnique" class="btn btn-export" aria-label="Копировать все уникальные XPath">📋 Все уникальные</button>
-                <button id="exportFile" class="btn btn-export" aria-label="Скачать файл с XPath">💾 Скачать файл</button>
+                <button id="copyAllUnique" class="btn btn-export" title="Скопировать все уникальные XPath">📋 Уникальные</button>
+                <button id="copyAllXpath" class="btn btn-export" title="Скопировать все XPath (уникальные + неуникальные)">📋 Все</button>
+                <button id="exportFile" class="btn btn-export" title="Скачать файл с XPath">💾 Скачать</button>
             </div>
+        </section>
+        <section id="historySection" class="xpath-section hidden">
+            <h3>История элементов <span id="historyCount" class="count">(0)</span></h3>
+            <div id="historyList" class="xpath-list history-list"></div>
         </section>
         
         <section id="uniqueSection" class="xpath-section hidden">
@@ -97,15 +115,33 @@
 
         <div id="tabList" class="tab-panel" role="tabpanel" hidden>
             <section class="list-toolbar">
-                <button type="button" id="addStepBtn" class="btn btn-primary-list">+ Добавить текущий</button>
-                <button type="button" id="addStepManualBtn" class="btn">+ Шаг вручную</button>
-                <button type="button" id="executeListBtn" class="btn btn-execute">▶ Выполнить</button>
-                <button type="button" id="saveListBtn" class="btn">💾 Сохранить</button>
-                <button type="button" id="exportJsonBtn" class="btn">📤 Экспорт JSON</button>
-                <button type="button" id="importJsonBtn" class="btn">📥 Загрузить шаги</button>
+                <div class="scenario-row">
+                    <input type="text" id="scenarioName" placeholder="Название сценария" title="Имя сценария для отображения и экспорта">
+                    <select id="scenarioSelect" title="Выберите сохранённый сценарий">
+                        <option value="">— Сценарий —</option>
+                    </select>
+                </div>
+                <div class="list-buttons">
+                    <button type="button" id="addStepBtn" class="btn btn-primary-list" title="Добавить XPath текущего элемента">+ Добавить текущий</button>
+                    <button type="button" id="addStepManualBtn" class="btn" title="Добавить шаг с вводом XPath вручную">+ Вручную</button>
+                    <button type="button" id="executeListBtn" class="btn btn-execute" title="Выполнить все шаги">▶ Выполнить</button>
+                    <button type="button" id="stopExecuteBtn" class="btn btn-stop hidden" title="Остановить выполнение">⏹ Стоп</button>
+                    <button type="button" id="saveListBtn" class="btn" title="Сохранить в storage">💾 Сохранить</button>
+                    <button type="button" id="exportJsonBtn" class="btn" title="Экспорт в JSON для автотестов">📤 JSON</button>
+                    <button type="button" id="exportTemplatesBtn" class="btn" title="Экспорт в Playwright/Cypress/Selenium">📤 Шаблоны</button>
+                    <button type="button" id="importJsonBtn" class="btn" title="Загрузить шаги из JSON">📥 Загрузить</button>
+                </div>
                 <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
+                <div class="search-row">
+                    <input type="text" id="listSearch" placeholder="Поиск по XPath или действию..." title="Фильтр списка шагов">
+                </div>
             </section>
-            <p id="listHint" class="list-hint">Наведите на элемент в инспекторе, затем нажмите «Добавить текущий» и выберите действие.</p>
+            <section id="executionLogSection" class="log-section hidden">
+                <h3>Лог выполнения</h3>
+                <div id="executionLog" class="execution-log"></div>
+                <button type="button" id="copyLogBtn" class="btn btn-sm">Копировать лог</button>
+            </section>
+            <p id="listHint" class="list-hint">Наведите на элемент в инспекторе, затем «Добавить текущий» и выберите действие.</p>
             <ul id="executionList" class="execution-list"></ul>
         </div>
     </div>
@@ -138,12 +174,18 @@
                 <div id="stepParamsFile" class="form-row hidden">
                     <label for="stepFileName">Имя файла</label>
                     <input type="text" id="stepFileName" placeholder="document.pdf">
-                    <label class="setting-hint">Прикрепить файл для эмуляции загрузки:</label>
+                    <label class="setting-hint">Прикрепить файл (макс. 1 MB, иначе только имя):</label>
                     <div class="setting-input-row">
                         <button type="button" id="stepChooseFileBtn" class="btn">Выбрать файл</button>
                         <span id="stepFileLabel" class="setting-value">—</span>
                     </div>
                     <input type="file" id="stepFileInput" hidden>
+                </div>
+                <div class="form-row">
+                    <label class="filter-check">
+                        <input type="checkbox" id="stepRetryOnError" title="Повторить шаг до 3 раз при ошибке">
+                        <span>Повтор при ошибке (до 3 раз)</span>
+                    </label>
                 </div>
             </div>
             <div class="modal-actions">
@@ -152,6 +194,23 @@
             </div>
         </div>
     </div>
+
+    <div id="importModal" class="modal hidden" role="dialog">
+        <div class="modal-content">
+            <h3 class="modal-title">Загрузить шаги</h3>
+            <div id="importPreview" class="import-preview"></div>
+            <div class="modal-actions">
+                <button type="button" id="importReplace" class="btn">Заменить список</button>
+                <button type="button" id="importAppend" class="btn">Добавить к текущему</button>
+                <button type="button" id="importCancel" class="btn">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="contextInvalidatedBanner" class="banner hidden" role="alert">
+        Расширение обновлено. <button type="button" id="reloadTabBtn" class="btn btn-sm">Обновить вкладку</button>
+    </div>
+
     <script src="sidepanel.js"></script>
 </body>
 </html>
