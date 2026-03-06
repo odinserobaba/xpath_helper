@@ -71,6 +71,22 @@ class XPathGenerator {
                     isAngular: c.isAngular || false,
                     complexity: this.calcComplexity(c.xpath)
                 });
+                if (count > 1) {
+                    const idx = this.getElementIndex(c.xpath, element);
+                    if (idx >= 1) {
+                        const indexedXpath = `(${c.xpath})[${idx}]`;
+                        if (!seen.has(indexedXpath)) {
+                            seen.add(indexedXpath);
+                            validated.push({
+                                ...c, xpath: indexedXpath, matchCount: 1, isUnique: true,
+                                usesPartial: c.usesPartial || false,
+                                isAngular: c.isAngular || false,
+                                complexity: this.calcComplexity(indexedXpath),
+                                type: (c.type || '') + ':indexed'
+                            });
+                        }
+                    }
+                }
             }
             if (validated.length % 20 === 0) await new Promise(r => setTimeout(r, 0));
         }
@@ -156,9 +172,19 @@ class XPathGenerator {
     generateAttrSelectors(data) {
         const selectors = [];
         const tag = data.tag;
+        const presenceAttrs = ['matsteppernext', 'matstepperprevious', 'matripple', 'matbadge'];
         
         data.attributes.forEach(attr => {
-            if (attr.value.length < 3 || this.priorityAttrs.includes(attr.name)) return;
+            if (this.priorityAttrs.includes(attr.name)) return;
+            if (attr.value.length < 3 && !presenceAttrs.includes(attr.name.toLowerCase())) return;
+            
+            if (presenceAttrs.includes(attr.name.toLowerCase()) || (attr.value.length < 3 && /^mat|^ng|^cdk/.test(attr.name))) {
+                selectors.push(this.createCandidate(
+                    `//${tag}[@${attr.name}]`,
+                    `attr:presence:${attr.name}`, 82
+                ));
+            }
+            if (attr.value.length < 3) return;
             
             const shortVal = attr.value.length > this.options.maxAttrLength 
                 ? attr.value.substring(0, this.options.maxAttrLength) 
@@ -222,6 +248,15 @@ class XPathGenerator {
             ));
         }
         
+        // matsteppernext/matstepperprevious + текст (для кнопок stepper)
+        const matStepAttr = data.attributes.find(a => /^matstepper(next|previous)$/i.test(a.name));
+        if (matStepAttr && this.textTags.includes(tag.toUpperCase()) && data.text) {
+            selectors.push(this.createCandidate(
+                `//${tag}[@${matStepAttr.name} and normalize-space()='${this.escapeXPathString(data.text.trim().substring(0, 50))}']`,
+                'combo:matstepper+text', 93, { isAngular: true }
+            ));
+        }
+        
         return selectors;
     }
 
@@ -277,6 +312,17 @@ class XPathGenerator {
             const result = this.doc.evaluate(xpath, this.doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
             return result.snapshotLength;
         } catch (e) { return 0; }
+    }
+
+    /** Возвращает 1-based индекс element среди всех совпадений xpath, или 0 если не найден */
+    getElementIndex(xpath, element) {
+        try {
+            const result = this.doc.evaluate(xpath, this.doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for (let i = 0; i < result.snapshotLength; i++) {
+                if (result.snapshotItem(i) === element) return i + 1;
+            }
+        } catch (e) { /* ignore */ }
+        return 0;
     }
 
     createCandidate(xpath, type, score, extras = {}) {
