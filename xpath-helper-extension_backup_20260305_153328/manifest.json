@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "XPath Helper Pro",
+  "version": "1.0.1",
+  "description": "Интерактивная генерация XPath (Ctrl+Hover) - показывает ВСЕ варианты",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "clipboardWrite",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "Открыть XPath Helper"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/xpath-generator.js", "content/content.js"],
+      "css": ["content/highlighter.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

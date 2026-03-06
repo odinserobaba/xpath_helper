@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XPath Helper</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+    <div class="panel-container">
+        <header class="panel-header">
+            <div class="logo">
+                <span class="logo-icon">✦</span>
+                <h1>XPath Helper</h1>
+            </div>
+            <div class="controls">
+                <button id="toggleHighlight" class="btn btn-sm" title="Вкл/выкл подсветку">👁</button>
+                <button id="refreshBtn" class="btn btn-sm" title="Обновить">↻</button>
+            </div>
+        </header>
+
+        <div id="modeInfo" class="mode-info">
+            <span class="key-badge">CTRL</span>
+            <span>Зажмите Ctrl и наведите на элемент</span>
+        </div>
+
+        <section id="elementInfo" class="info-section hidden">
+            <div class="element-badge">
+                <span id="elementTag" class="tag">element</span>
+                <span id="elementComponent" class="component-badge hidden">Angular</span>
+            </div>
+            <div id="elementPreview" class="element-preview"></div>
+            <div id="elementStats" class="stats"></div>
+        </section>
+
+        <section id="primarySection" class="xpath-section hidden">
+            <h3>🎯 Основной XPath</h3>
+            <div class="xpath-card primary">
+                <code id="primaryXpath" class="xpath-code"></code>
+                <div class="xpath-meta">
+                    <span class="badge unique" id="primaryUnique">✓ Уникальный</span>
+                    <span class="badge score" id="primaryScore">Score: 100</span>
+                    <span class="badge type" id="primaryType">type</span>
+                </div>
+                <button class="btn-copy" data-target="primaryXpath">📋 Копировать</button>
+            </div>
+        </section>
+
+        <section id="uniqueSection" class="xpath-section hidden">
+            <h3>✅ Все уникальные варианты <span id="uniqueCount" class="count">(0)</span></h3>
+            <div id="uniqueList" class="fallbacks-list"></div>
+        </section>
+
+        <section id="nonUniqueSection" class="xpath-section hidden">
+            <h3>⚠️ Неуникальные варианты <span id="nonUniqueCount" class="count">(0)</span></h3>
+            <div id="nonUniqueList" class="fallbacks-list"></div>
+        </section>
+
+        <div id="emptyState" class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <p><strong>Зажмите Ctrl</strong> и наведите курсор на элемент</p>
+            <p class="hint">Все XPath появятся здесь автоматически</p>
+        </div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Генерация XPath...</p>
+        </div>
+    </div>
+
+    <script src="../content/xpath-generator.js"></script>
+    <script src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "XPath Helper Pro",
+  "version": "3.0.0",
+  "description": "Полная генерация XPath для Angular Material",
+  "permissions": ["sidePanel", "activeTab", "scripting", "clipboardWrite", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "action": {"default_title": "XPath Helper"},
+  "side_panel": {"default_path": "sidepanel/sidepanel.html"},
+  "commands": {
+    "toggle-inspect": {
+      "suggested_key": { "default": "Alt+X" },
+      "description": "Вкл/выкл режим инспекции XPath (без удержания Ctrl)"
+    }
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content/xpath-generator.js", "content/content.js"],
+    "run_at": "document_idle",
+    "all_frames": false
+  }],
+  "background": {"service_worker": "background.js"}
+}

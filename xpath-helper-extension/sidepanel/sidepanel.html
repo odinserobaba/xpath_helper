@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>XPath Helper</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+    <div class="panel-container">
+        <header class="header">
+            <h1>✦ XPath Helper</h1>
+            <div class="controls">
+                <button id="refreshBtn" class="btn" aria-label="Обновить панель">↻</button>
+            </div>
+        </header>
+
+        <nav class="tabs" role="tablist">
+            <button type="button" class="tab active" data-tab="inspect" aria-selected="true">Инспектор</button>
+            <button type="button" class="tab" data-tab="list" aria-selected="false">Список</button>
+        </nav>
+
+        <div id="tabInspect" class="tab-panel active" role="tabpanel">
+        <section class="settings-section">
+            <h3 class="settings-title">Настройки</h3>
+            <div class="setting-row">
+                <label for="debounceSlider">Задержка наведения (мс):</label>
+                <div class="setting-input-row">
+                    <input type="range" id="debounceSlider" min="80" max="200" value="120" aria-label="Задержка наведения">
+                    <span id="debounceValue" class="setting-value">120</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label for="selectorTimeoutMs">Ожидание селектора (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="selectorTimeoutMs" min="0" max="60000" value="5000" aria-label="Ожидание селектора в миллисекундах">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <p class="setting-hint">Alt+X — вкл/выкл режим инспекции (без удержания Ctrl)</p>
+        </section>
+        
+        <div id="status" class="status">Ожидание элемента...</div>
+        
+        <section id="elementInfo" class="info-section hidden">
+            <div class="element-badge">
+                <span id="elementTag" class="tag">element</span>
+                <span id="angularBadge" class="angular-badge hidden">Angular</span>
+            </div>
+            <code id="elementCode" class="element-code"></code>
+            <div id="stats" class="stats"></div>
+        </section>
+        
+        <section id="filterSection" class="filter-section hidden">
+            <h3 class="filter-title">Фильтр по типу</h3>
+            <div id="filterChecks" class="filter-checks"></div>
+        </section>
+
+        <section id="primarySection" class="xpath-section hidden">
+            <h3>🎯 Основной XPath</h3>
+            <div class="xpath-card primary">
+                <code id="primaryXpath" class="xpath-code"></code>
+                <div class="xpath-meta">
+                    <span id="primaryUnique" class="badge unique">✓</span>
+                    <span id="primaryScore" class="badge score">100</span>
+                </div>
+                <div class="primary-actions">
+                    <button id="copyPrimary" class="btn-copy" aria-label="Копировать основной XPath">📋 Копировать</button>
+                    <button id="copyForConsole" class="btn-console" aria-label="Копировать для консоли DevTools">🖥 Для консоли</button>
+                    <button id="addPrimaryToList" class="btn-console" aria-label="Добавить основной XPath в список">➕ В список</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="exportSection" class="xpath-section hidden">
+            <h3>Экспорт</h3>
+            <div class="export-actions">
+                <button id="copyAllUnique" class="btn btn-export" aria-label="Копировать все уникальные XPath">📋 Все уникальные</button>
+                <button id="exportFile" class="btn btn-export" aria-label="Скачать файл с XPath">💾 Скачать файл</button>
+            </div>
+        </section>
+        
+        <section id="uniqueSection" class="xpath-section hidden">
+            <h3>✅ Уникальные <span id="uniqueCount" class="count">(0)</span></h3>
+            <div id="uniqueList" class="xpath-list"></div>
+        </section>
+        
+        <section id="nonUniqueSection" class="xpath-section hidden">
+            <h3>⚠️ Неуникальные <span id="nonUniqueCount" class="count">(0)</span></h3>
+            <div id="nonUniqueList" class="xpath-list"></div>
+        </section>
+        
+        <div id="emptyState" class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <p>Зажмите <strong>Ctrl</strong> или нажмите <strong>Alt+X</strong> и наведите на элемент</p>
+        </div>
+        </div>
+
+        <div id="tabList" class="tab-panel" role="tabpanel" hidden>
+            <section class="list-toolbar">
+                <button type="button" id="addStepBtn" class="btn btn-primary-list">+ Добавить текущий</button>
+                <button type="button" id="addStepManualBtn" class="btn">+ Шаг вручную</button>
+                <button type="button" id="executeListBtn" class="btn btn-execute">▶ Выполнить</button>
+                <button type="button" id="saveListBtn" class="btn">💾 Сохранить список</button>
+            </section>
+            <p id="listHint" class="list-hint">Наведите на элемент в инспекторе, затем нажмите «Добавить текущий» и выберите действие.</p>
+            <ul id="executionList" class="execution-list"></ul>
+        </div>
+    </div>
+
+    <div id="stepModal" class="modal hidden" role="dialog" aria-labelledby="stepModalTitle">
+        <div class="modal-content">
+            <h3 id="stepModalTitle" class="modal-title">Добавить шаг</h3>
+            <div class="modal-body">
+                <div class="form-row">
+                    <label for="stepXpath">XPath</label>
+                    <textarea id="stepXpath" rows="2" placeholder="//button[@id='submit']"></textarea>
+                </div>
+                <div class="form-row">
+                    <label for="stepAction">Действие</label>
+                    <select id="stepAction">
+                        <option value="click">Клик</option>
+                        <option value="input">Ввод текста</option>
+                        <option value="file_upload">Загрузка файла (клик по input)</option>
+                        <option value="wait">Пауза (мс)</option>
+                    </select>
+                </div>
+                <div id="stepParamsInput" class="form-row hidden">
+                    <label for="stepInputValue">Текст для ввода</label>
+                    <input type="text" id="stepInputValue" placeholder="Значение">
+                </div>
+                <div id="stepParamsWait" class="form-row hidden">
+                    <label for="stepWaitMs">Задержка (мс)</label>
+                    <input type="number" id="stepWaitMs" min="0" max="60000" value="500" placeholder="500">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="stepModalCancel" class="btn">Отмена</button>
+                <button type="button" id="stepModalSave" class="btn btn-save">Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <script src="sidepanel.js"></script>
+</body>
+</html>
