@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build / dist
+dist/
+build/
+*.crx
+*.pem
+*.zip
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs and temp
+*.log
+*.tmp
+.temp/
+tmp/
+temp/
+
+# Backups (local copy backups)
+*-backup/
+*_backup_*/
+*.bak
+*.backup
+
+# Env and secrets
+.env
+.env.*
+*.pem
+secrets/
+
+# Test / coverage (if added later)
+coverage/
+.nyc_output/
+*.lcov
+
+# Optional
+*.local

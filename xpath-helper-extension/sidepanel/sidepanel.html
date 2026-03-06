@@ -100,7 +100,10 @@
                 <button type="button" id="addStepBtn" class="btn btn-primary-list">+ Добавить текущий</button>
                 <button type="button" id="addStepManualBtn" class="btn">+ Шаг вручную</button>
                 <button type="button" id="executeListBtn" class="btn btn-execute">▶ Выполнить</button>
-                <button type="button" id="saveListBtn" class="btn">💾 Сохранить список</button>
+                <button type="button" id="saveListBtn" class="btn">💾 Сохранить</button>
+                <button type="button" id="exportJsonBtn" class="btn">📤 Экспорт JSON</button>
+                <button type="button" id="importJsonBtn" class="btn">📥 Загрузить шаги</button>
+                <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
             </section>
             <p id="listHint" class="list-hint">Наведите на элемент в инспекторе, затем нажмите «Добавить текущий» и выберите действие.</p>
             <ul id="executionList" class="execution-list"></ul>
@@ -120,7 +123,7 @@
                     <select id="stepAction">
                         <option value="click">Клик</option>
                         <option value="input">Ввод текста</option>
-                        <option value="file_upload">Загрузка файла (клик по input)</option>
+                        <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
                     </select>
                 </div>
@@ -131,6 +134,16 @@
                 <div id="stepParamsWait" class="form-row hidden">
                     <label for="stepWaitMs">Задержка (мс)</label>
                     <input type="number" id="stepWaitMs" min="0" max="60000" value="500" placeholder="500">
+                </div>
+                <div id="stepParamsFile" class="form-row hidden">
+                    <label for="stepFileName">Имя файла</label>
+                    <input type="text" id="stepFileName" placeholder="document.pdf">
+                    <label class="setting-hint">Прикрепить файл для эмуляции загрузки:</label>
+                    <div class="setting-input-row">
+                        <button type="button" id="stepChooseFileBtn" class="btn">Выбрать файл</button>
+                        <span id="stepFileLabel" class="setting-value">—</span>
+                    </div>
+                    <input type="file" id="stepFileInput" hidden>
                 </div>
             </div>
             <div class="modal-actions">

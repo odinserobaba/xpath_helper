@@ -54,8 +54,16 @@ const stepParamsInput = $('stepParamsInput');
 const stepInputValue = $('stepInputValue');
 const stepParamsWait = $('stepParamsWait');
 const stepWaitMs = $('stepWaitMs');
+const stepParamsFile = $('stepParamsFile');
+const stepFileName = $('stepFileName');
+const stepChooseFileBtn = $('stepChooseFileBtn');
+const stepFileLabel = $('stepFileLabel');
+const stepFileInput = $('stepFileInput');
 const stepModalCancel = $('stepModalCancel');
 const stepModalSave = $('stepModalSave');
+const exportJsonBtn = $('exportJsonBtn');
+const importJsonBtn = $('importJsonBtn');
+const importJsonInput = $('importJsonInput');
 
 /** Группы типов для фильтра: ключ — префикс type, значение — подпись */
 const TYPE_GROUPS = [
@@ -485,9 +493,10 @@ function renderExecutionList() {
         const statusBadge = s?.state
             ? `<span class="execution-item-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>`
             : '';
-        const paramsText = step.action === 'input' && step.params?.value
-            ? `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`
-            : step.action === 'wait' ? `${step.params?.delayMs ?? 500} мс` : '';
+        let paramsText = '';
+        if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
+        else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
+        else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
         li.innerHTML = `
             <div class="execution-item-header">
                 <span class="execution-item-idx">${i + 1}</span>
@@ -524,12 +533,17 @@ function openListTab() {
 }
 
 // ——— Step modal ———
+let stepFileBase64 = null;
+
 function showStepModal(step) {
     editingStepId = step ? step.id : null;
     stepXpath.value = step ? step.xpath : (primaryXpathEl ? primaryXpathEl.textContent : '') || '';
     stepAction.value = step ? step.action : 'click';
     stepInputValue.value = (step?.params?.value) || '';
     stepWaitMs.value = (step?.params?.delayMs) ?? 500;
+    stepFileName.value = (step?.params?.fileName) || '';
+    stepFileBase64 = (step?.params?.fileContentBase64) || null;
+    stepFileLabel.textContent = stepFileBase64 ? 'Файл прикреплён' : '—';
     toggleStepParams();
     stepModal.classList.remove('hidden');
     stepModal.querySelector('.modal-title').textContent = step ? 'Редактировать шаг' : 'Добавить шаг';
@@ -546,9 +560,26 @@ function toggleStepParams() {
     stepParamsInput.style.display = action === 'input' ? '' : 'none';
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
+    stepParamsFile.classList.toggle('hidden', action !== 'file_upload');
+    stepParamsFile.style.display = action === 'file_upload' ? '' : 'none';
 }
 
 stepAction.addEventListener('change', toggleStepParams);
+
+stepChooseFileBtn.addEventListener('click', () => stepFileInput.click());
+stepFileInput.addEventListener('change', () => {
+    const file = stepFileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        const b64 = reader.result?.split(',')?.[1] || '';
+        stepFileBase64 = b64;
+        stepFileLabel.textContent = file.name;
+        if (!stepFileName.value.trim()) stepFileName.value = file.name;
+    };
+    reader.readAsDataURL(file);
+    stepFileInput.value = '';
+});
 
 stepModalCancel.addEventListener('click', hideStepModal);
 stepModalSave.addEventListener('click', () => {
@@ -558,6 +589,10 @@ stepModalSave.addEventListener('click', () => {
     const params = {};
     if (action === 'input') params.value = stepInputValue.value;
     if (action === 'wait') params.delayMs = Math.max(0, parseInt(stepWaitMs.value, 10) || 500);
+    if (action === 'file_upload') {
+        params.fileName = stepFileName.value.trim() || 'file';
+        if (stepFileBase64) params.fileContentBase64 = stepFileBase64;
+    }
     if (editingStepId) {
         const idx = executionList.findIndex((s) => s.id === editingStepId);
         if (idx !== -1) {
@@ -645,7 +680,66 @@ document.addEventListener('click', (e) => {
 saveListBtn.addEventListener('click', () => {
     saveExecutionList();
     saveListBtn.textContent = '✓ Сохранено';
-    setTimeout(() => { saveListBtn.textContent = '💾 Сохранить список'; }, 1500);
+    setTimeout(() => { saveListBtn.textContent = '💾 Сохранить'; }, 1500);
+});
+
+// ——— Export JSON (формат для автотестов) ———
+const EXPORT_JSON_VERSION = 1;
+
+function exportToJson() {
+    const payload = {
+        name: 'XPath Helper — сценарий',
+        version: EXPORT_JSON_VERSION,
+        exportedAt: new Date().toISOString(),
+        steps: executionList.map((s, i) => ({
+            step: i + 1,
+            xpath: s.xpath,
+            action: s.action,
+            params: s.params || {}
+        }))
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `xpath-autotest-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importFromJson(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const data = JSON.parse(reader.result);
+            let raw = Array.isArray(data) ? data : (data?.steps || []);
+            if (raw.length && raw.some((s) => s.step != null)) {
+                raw = [...raw].sort((a, b) => (Number(a.step) || 0) - (Number(b.step) || 0));
+            }
+            executionList = raw.map((s, i) => ({
+                id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
+                xpath: typeof s.xpath === 'string' ? s.xpath : '',
+                action: ['click', 'input', 'file_upload', 'wait'].includes(s.action) ? s.action : 'click',
+                params: s.params && typeof s.params === 'object' ? s.params : {}
+            })).filter((s) => s.xpath);
+            saveExecutionList();
+            renderExecutionList();
+            importJsonBtn.textContent = '✓ Загружено ' + executionList.length;
+            setTimeout(() => { importJsonBtn.textContent = '📥 Загрузить шаги'; }, 2000);
+        } catch (e) {
+            importJsonBtn.textContent = 'Ошибка JSON';
+            setTimeout(() => { importJsonBtn.textContent = '📥 Загрузить шаги'; }, 2000);
+        }
+    };
+    reader.readAsText(file, 'UTF-8');
+}
+
+if (exportJsonBtn) exportJsonBtn.addEventListener('click', exportToJson);
+if (importJsonBtn) importJsonBtn.addEventListener('click', () => importJsonInput.click());
+if (importJsonInput) importJsonInput.addEventListener('change', () => {
+    const f = importJsonInput.files?.[0];
+    if (f) importFromJson(f);
+    importJsonInput.value = '';
 });
 
 // ——— Execute list ———

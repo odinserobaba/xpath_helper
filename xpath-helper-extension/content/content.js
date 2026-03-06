@@ -246,8 +246,27 @@ function init() {
 
                 if (step.action === 'file_upload') {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.click();
-                    await new Promise((r) => setTimeout(r, 200));
+                    const fileName = step.params?.fileName || 'file';
+                    const base64 = step.params?.fileContentBase64;
+                    let file;
+                    if (base64 && typeof base64 === 'string') {
+                        try {
+                            const bin = atob(base64);
+                            const bytes = new Uint8Array(bin.length);
+                            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                            file = new File([bytes], fileName, { type: 'application/octet-stream' });
+                        } catch (_) {
+                            file = new File([], fileName, { type: 'application/octet-stream' });
+                        }
+                    } else {
+                        file = new File([], fileName, { type: 'application/octet-stream' });
+                    }
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    el.files = dt.files;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    await new Promise((r) => setTimeout(r, 150));
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     continue;
