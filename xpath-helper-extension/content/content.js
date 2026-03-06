@@ -267,26 +267,44 @@ function init() {
 
                 if (step.action === 'file_upload') {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    let fileInput = el;
+                    const isFileInput = (el.tagName || '').toLowerCase() === 'input' && (el.type || '').toLowerCase() === 'file';
+                    if (!isFileInput) {
+                        const findFileInput = (root) => {
+                            const inp = root.querySelector?.('input[type="file"]');
+                            if (inp) return inp;
+                            let p = root.parentElement;
+                            while (p) {
+                                const i = p.querySelector?.('input[type="file"]');
+                                if (i) return i;
+                                p = p.parentElement;
+                            }
+                            return null;
+                        };
+                        fileInput = findFileInput(el) || document.querySelector('input[type="file"]');
+                        if (!fileInput) throw new Error('Рядом с кнопкой не найден input[type="file"]. Укажите XPath на сам input.');
+                    }
                     const fileName = step.params?.fileName || 'file';
                     const base64 = step.params?.fileContentBase64;
+                    const mime = /\.pdf$/i.test(fileName) ? 'application/pdf' : 'application/octet-stream';
                     let file;
                     if (base64 && typeof base64 === 'string') {
                         try {
                             const bin = atob(base64);
                             const bytes = new Uint8Array(bin.length);
                             for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                            file = new File([bytes], fileName, { type: 'application/octet-stream' });
+                            file = new File([bytes], fileName, { type: mime });
                         } catch (_) {
-                            file = new File([], fileName, { type: 'application/octet-stream' });
+                            file = new File([], fileName, { type: mime });
                         }
                     } else {
-                        file = new File([], fileName, { type: 'application/octet-stream' });
+                        file = new File([], fileName, { type: mime });
                     }
                     const dt = new DataTransfer();
                     dt.items.add(file);
-                    el.files = dt.files;
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    fileInput.files = dt.files;
+                    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
                     await new Promise((r) => setTimeout(r, 150));
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });

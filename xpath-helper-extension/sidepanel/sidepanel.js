@@ -17,6 +17,9 @@ const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
 const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза' };
 
+// Минимальный валидный PDF (~400 байт) для тестирования загрузки файлов
+const MINIMAL_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK';
+
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
 const elementInfoEl = $('elementInfo');
@@ -65,6 +68,7 @@ const stepWaitMs = $('stepWaitMs');
 const stepParamsFile = $('stepParamsFile');
 const stepFileName = $('stepFileName');
 const stepChooseFileBtn = $('stepChooseFileBtn');
+const stepUseMinimalPdfBtn = $('stepUseMinimalPdfBtn');
 const stepFileLabel = $('stepFileLabel');
 const stepFileInput = $('stepFileInput');
 const stepModalCancel = $('stepModalCancel');
@@ -507,8 +511,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
 });
 
-// ——— Delegated click: copy, highlight ———
+// ——— Delegated click: copy, highlight, minimal PDF ———
 document.addEventListener('click', (e) => {
+    const minimalPdfBtn = e.target.closest('#stepUseMinimalPdfBtn');
+    if (minimalPdfBtn && stepModal && !stepModal.classList.contains('hidden')) {
+        stepFileBase64 = MINIMAL_PDF_BASE64;
+        if (stepFileName) stepFileName.value = (stepFileName.value || '').trim() || 'test.pdf';
+        if (stepFileLabel) {
+            stepFileLabel.textContent = '✓ test.pdf (минимальный PDF)';
+            stepFileLabel.dataset.minimalPdf = '1';
+        }
+        return;
+    }
+
     const addBtn = e.target.closest('.btn-add-step');
     if (addBtn) {
         const xp = (addBtn.dataset.xpath || '').trim();
@@ -634,6 +649,45 @@ if (scenarioSelect) {
     });
 }
 
+let draggedStepIdx = null;
+
+function onStepDragStart(e) {
+    const li = e.target.closest('.execution-item');
+    if (!li || li.dataset.idx === undefined) return;
+    draggedStepIdx = parseInt(li.dataset.idx, 10);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(draggedStepIdx));
+    li.classList.add('dragging');
+}
+
+function onStepDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    executionListEl.querySelectorAll('.execution-item').forEach((el) => el.classList.remove('drag-over'));
+    const li = e.target.closest('.execution-item');
+    if (li && li.dataset.idx !== undefined) li.classList.add('drag-over');
+}
+
+function onStepDrop(e) {
+    e.preventDefault();
+    document.querySelectorAll('.execution-item').forEach((el) => el.classList.remove('drag-over'));
+    const li = e.target.closest('.execution-item');
+    if (!li || li.dataset.idx === undefined || draggedStepIdx == null) return;
+    const dropIdx = parseInt(li.dataset.idx, 10);
+    if (dropIdx === draggedStepIdx) return;
+    const step = executionList[draggedStepIdx];
+    executionList.splice(draggedStepIdx, 1);
+    const newIdx = dropIdx > draggedStepIdx ? dropIdx - 1 : dropIdx;
+    executionList.splice(newIdx, 0, step);
+    saveExecutionList();
+    renderExecutionList();
+}
+
+function onStepDragEnd(e) {
+    document.querySelectorAll('.execution-item').forEach((el) => { el.classList.remove('dragging', 'drag-over'); });
+    draggedStepIdx = null;
+}
+
 function renderExecutionList() {
     executionListEl.innerHTML = '';
     const searchQ = (listSearch?.value || '').trim().toLowerCase();
@@ -666,6 +720,7 @@ function renderExecutionList() {
         else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
         li.innerHTML = `
             <div class="execution-item-header">
+                ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
                 <span class="execution-item-idx">${displayIdx + 1}</span>
                 <span class="execution-item-xpath" title="${escapeHtml(step.xpath)}">${escapeHtml(truncate(step.xpath, 50))}</span>
                 <span class="execution-item-badge ${step.action}">${ACTION_LABELS[step.action] || step.action}</span>
@@ -674,12 +729,21 @@ function renderExecutionList() {
             ${paramsText ? `<div class="execution-item-params">${paramsText}</div>` : ''}
             <div class="execution-item-actions">
                 <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить шаг" aria-label="Выполнить шаг">▶</button>
+                <button type="button" class="btn-icon btn-clone-step" data-id="${escapeHtml(step.id)}" title="Клонировать">⧉</button>
                 <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать">✏</button>
                 <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
                 <button type="button" class="btn-icon btn-move-up" data-idx="${actualIdx}" title="Вверх" ${actualIdx === 0 ? 'disabled' : ''}>↑</button>
                 <button type="button" class="btn-icon btn-move-down" data-idx="${actualIdx}" title="Вниз" ${actualIdx === executionList.length - 1 ? 'disabled' : ''}>↓</button>
             </div>
         `;
+        if (!searchQ) {
+            li.draggable = true;
+            li.dataset.idx = String(actualIdx);
+            li.addEventListener('dragstart', onStepDragStart);
+            li.addEventListener('dragover', onStepDragOver);
+            li.addEventListener('drop', onStepDrop);
+            li.addEventListener('dragend', onStepDragEnd);
+        }
         executionListEl.appendChild(li);
     });
 
@@ -710,7 +774,10 @@ function showStepModal(step) {
     stepWaitMs.value = (step?.params?.delayMs) ?? 500;
     stepFileName.value = (step?.params?.fileName) || '';
     stepFileBase64 = (step?.params?.fileContentBase64) || null;
-    stepFileLabel.textContent = stepFileBase64 ? 'Файл прикреплён' : '—';
+    if (stepFileLabel) {
+        stepFileLabel.textContent = stepFileBase64 ? 'Файл прикреплён' : '—';
+        delete stepFileLabel.dataset.minimalPdf;
+    }
     if (stepRetryOnError) stepRetryOnError.checked = !!step?.params?.retryOnError;
     toggleStepParams();
     stepModal.classList.remove('hidden');
@@ -735,6 +802,7 @@ function toggleStepParams() {
 stepAction.addEventListener('change', toggleStepParams);
 
 stepChooseFileBtn.addEventListener('click', () => stepFileInput.click());
+
 stepFileInput.addEventListener('change', () => {
     const file = stepFileInput.files?.[0];
     if (!file) return;
@@ -744,7 +812,10 @@ stepFileInput.addEventListener('change', () => {
         const sizeBytes = b64 ? Math.ceil(b64.length * 3 / 4) : 0;
         const warn = sizeBytes > 1024 * 1024 ? ' (>1 MB — будет только имя файла)' : '';
         stepFileBase64 = sizeBytes <= 1024 * 1024 ? b64 : null;
-        stepFileLabel.textContent = file.name + warn;
+        if (stepFileLabel) {
+            stepFileLabel.textContent = file.name + warn;
+            delete stepFileLabel.dataset.minimalPdf;
+        }
         if (!stepFileName.value.trim()) stepFileName.value = file.name;
     };
     reader.readAsDataURL(file);
@@ -761,7 +832,9 @@ stepModalSave.addEventListener('click', () => {
     if (action === 'wait') params.delayMs = Math.max(0, parseInt(stepWaitMs.value, 10) || 500);
     if (action === 'file_upload') {
         params.fileName = stepFileName.value.trim() || 'file';
-        if (stepFileBase64) params.fileContentBase64 = stepFileBase64;
+        const hasMinimalPdf = stepFileLabel?.dataset?.minimalPdf === '1';
+        const fileB64 = stepFileBase64 || (hasMinimalPdf ? MINIMAL_PDF_BASE64 : null);
+        if (fileB64) params.fileContentBase64 = fileB64;
     }
     if (stepRetryOnError?.checked) params.retryOnError = true;
     if (editingStepId) {
@@ -819,6 +892,23 @@ document.addEventListener('click', (e) => {
                 renderExecutionList();
             });
         });
+        return;
+    }
+
+    const cloneBtn = e.target.closest('.btn-clone-step');
+    if (cloneBtn) {
+        const step = executionList.find((s) => s.id === cloneBtn.dataset.id);
+        if (step) {
+            const clone = {
+                ...step,
+                id: 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+                params: step.params ? { ...step.params } : {}
+            };
+            const idx = executionList.indexOf(step);
+            executionList.splice(idx + 1, 0, clone);
+            saveExecutionList();
+            renderExecutionList();
+        }
         return;
     }
 

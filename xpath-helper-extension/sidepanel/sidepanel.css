@@ -112,6 +112,10 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .execution-item-params { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
 .execution-item-actions { display: flex; gap: 4px; }
 .execution-item-actions .btn-icon { width: 28px; height: 28px; }
+.execution-item-drag { cursor: grab; color: var(--text2); font-size: 14px; padding: 0 4px; user-select: none; }
+.execution-item-drag:active { cursor: grabbing; }
+.execution-item.dragging { opacity: 0.6; }
+.execution-item.drag-over { border-color: var(--accent); background: rgba(0, 212, 170, 0.08); }
 
 /* Modal */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 12px; }
