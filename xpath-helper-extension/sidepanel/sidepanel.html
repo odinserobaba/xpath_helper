@@ -124,6 +124,7 @@
                 <div class="list-buttons">
                     <button type="button" id="addStepBtn" class="btn btn-primary-list" title="Добавить XPath текущего элемента">+ Добавить текущий</button>
                     <button type="button" id="addStepManualBtn" class="btn" title="Добавить шаг с вводом XPath вручную">+ Вручную</button>
+                    <button type="button" id="addSeparatorBtn" class="btn" title="Добавить разделитель между группами шагов">— Разделитель</button>
                     <button type="button" id="executeListBtn" class="btn btn-execute" title="Выполнить все шаги">▶ Выполнить</button>
                     <button type="button" id="stopExecuteBtn" class="btn btn-stop hidden" title="Остановить выполнение">⏹ Стоп</button>
                     <button type="button" id="saveListBtn" class="btn" title="Сохранить в storage">💾 Сохранить</button>
@@ -134,6 +135,12 @@
                 <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
                 <div class="search-row">
                     <input type="text" id="listSearch" placeholder="Поиск по XPath или действию..." title="Фильтр списка шагов">
+                </div>
+                <div class="setting-row list-setting">
+                    <label class="filter-check">
+                        <input type="checkbox" id="stopOnError" title="Остановить выполнение при первой ошибке шага">
+                        <span>Останавливаться при ошибке</span>
+                    </label>
                 </div>
             </section>
             <section id="executionLogSection" class="log-section hidden">
@@ -161,7 +168,15 @@
                         <option value="input">Ввод текста</option>
                         <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
+                        <option value="separator">Разделитель</option>
                     </select>
+                </div>
+                <div id="stepParamsSeparator" class="form-row hidden">
+                    <label for="stepSeparatorColor">Цвет разделителя</label>
+                    <div class="setting-input-row">
+                        <input type="color" id="stepSeparatorColor" value="#00d4aa" title="Цвет линии">
+                        <span id="stepSeparatorColorHex" class="setting-value">#00d4aa</span>
+                    </div>
                 </div>
                 <div id="stepParamsInput" class="form-row hidden">
                     <label for="stepInputValue">Текст для ввода</label>

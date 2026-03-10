@@ -8,6 +8,7 @@ const STORAGE_KEY_STEP_DELAY = 'xpath-helper-step-delay-ms';
 const STORAGE_KEY_ONLY_UNIQUE = 'xpath-helper-only-unique';
 const STORAGE_KEY_SCENARIOS = 'xpath-helper-scenarios';
 const STORAGE_KEY_HISTORY = 'xpath-helper-element-history';
+const STORAGE_KEY_STOP_ON_ERROR = 'xpath-helper-stop-on-error';
 const DEBOUNCE_DEFAULT = 120;
 const SELECTOR_TIMEOUT_DEFAULT = 5000;
 const STEP_DELAY_DEFAULT = 100;
@@ -15,7 +16,7 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза' };
+const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—' };
 
 // Минимальный валидный PDF (~400 байт) для тестирования загрузки файлов
 const MINIMAL_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK';
@@ -54,6 +55,11 @@ const tabInspect = $('tabInspect');
 const tabList = $('tabList');
 const addStepBtn = $('addStepBtn');
 const addStepManualBtn = $('addStepManualBtn');
+const addSeparatorBtn = $('addSeparatorBtn');
+const stopOnErrorEl = $('stopOnError');
+const stepParamsSeparator = $('stepParamsSeparator');
+const stepSeparatorColor = $('stepSeparatorColor');
+const stepSeparatorColorHex = $('stepSeparatorColorHex');
 const executeListBtn = $('executeListBtn');
 const saveListBtn = $('saveListBtn');
 const listHint = $('listHint');
@@ -695,7 +701,8 @@ function renderExecutionList() {
         ? executionList.filter((s) =>
             (s.xpath || '').toLowerCase().includes(searchQ) ||
             (s.action || '').toLowerCase().includes(searchQ) ||
-            (ACTION_LABELS[s.action] || '').toLowerCase().includes(searchQ))
+            (ACTION_LABELS[s.action] || '').toLowerCase().includes(searchQ) ||
+            (s.action === 'separator' && 'разделитель'.includes(searchQ)))
         : executionList;
     if (filtered.length === 0) {
         listHint.classList.remove('hidden');
@@ -708,34 +715,49 @@ function renderExecutionList() {
     filtered.forEach((step, displayIdx) => {
         const actualIdx = executionList.indexOf(step);
         const li = document.createElement('li');
-        li.className = 'execution-item' + (step.id === currentExecutingStepId ? ' current' : '');
+        li.className = 'execution-item' + (step.id === currentExecutingStepId ? ' current' : '') + (step.action === 'separator' ? ' execution-item-separator' : '');
         li.dataset.stepId = step.id;
-        const s = stepRunStatus[step.id];
-        const statusBadge = s?.state
-            ? `<span class="execution-item-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>`
-            : '';
-        let paramsText = '';
-        if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
-        else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
-        else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
-        li.innerHTML = `
-            <div class="execution-item-header">
-                ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
-                <span class="execution-item-idx">${displayIdx + 1}</span>
-                <span class="execution-item-xpath" title="${escapeHtml(step.xpath)}">${escapeHtml(truncate(step.xpath, 50))}</span>
-                <span class="execution-item-badge ${step.action}">${ACTION_LABELS[step.action] || step.action}</span>
-                ${statusBadge}
-            </div>
-            ${paramsText ? `<div class="execution-item-params">${paramsText}</div>` : ''}
-            <div class="execution-item-actions">
-                <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить шаг" aria-label="Выполнить шаг">▶</button>
-                <button type="button" class="btn-icon btn-clone-step" data-id="${escapeHtml(step.id)}" title="Клонировать">⧉</button>
-                <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать">✏</button>
-                <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
-                <button type="button" class="btn-icon btn-move-up" data-idx="${actualIdx}" title="Вверх" ${actualIdx === 0 ? 'disabled' : ''}>↑</button>
-                <button type="button" class="btn-icon btn-move-down" data-idx="${actualIdx}" title="Вниз" ${actualIdx === executionList.length - 1 ? 'disabled' : ''}>↓</button>
-            </div>
-        `;
+        if (step.action === 'separator') {
+            const color = step.params?.color || '#00d4aa';
+            li.innerHTML = `
+                <div class="execution-separator-wrap">
+                    <div class="execution-separator-line" style="border-color: ${escapeHtml(color)}"></div>
+                    <div class="execution-item-actions execution-separator-actions">
+                        <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать цвет">✏</button>
+                        <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
+                        <button type="button" class="btn-icon btn-move-up" data-idx="${actualIdx}" title="Вверх" ${actualIdx === 0 ? 'disabled' : ''}>↑</button>
+                        <button type="button" class="btn-icon btn-move-down" data-idx="${actualIdx}" title="Вниз" ${actualIdx === executionList.length - 1 ? 'disabled' : ''}>↓</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            const s = stepRunStatus[step.id];
+            const statusBadge = s?.state
+                ? `<span class="execution-item-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>`
+                : '';
+            let paramsText = '';
+            if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
+            else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
+            else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
+            li.innerHTML = `
+                <div class="execution-item-header">
+                    ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
+                    <span class="execution-item-idx">${displayIdx + 1}</span>
+                    <span class="execution-item-xpath" title="${escapeHtml(step.xpath)}">${escapeHtml(truncate(step.xpath, 50))}</span>
+                    <span class="execution-item-badge ${step.action}">${ACTION_LABELS[step.action] || step.action}</span>
+                    ${statusBadge}
+                </div>
+                ${paramsText ? `<div class="execution-item-params">${paramsText}</div>` : ''}
+                <div class="execution-item-actions">
+                    <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить шаг" aria-label="Выполнить шаг">▶</button>
+                    <button type="button" class="btn-icon btn-clone-step" data-id="${escapeHtml(step.id)}" title="Клонировать">⧉</button>
+                    <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать">✏</button>
+                    <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
+                    <button type="button" class="btn-icon btn-move-up" data-idx="${actualIdx}" title="Вверх" ${actualIdx === 0 ? 'disabled' : ''}>↑</button>
+                    <button type="button" class="btn-icon btn-move-down" data-idx="${actualIdx}" title="Вниз" ${actualIdx === executionList.length - 1 ? 'disabled' : ''}>↓</button>
+                </div>
+            `;
+        }
         if (!searchQ) {
             li.draggable = true;
             li.dataset.idx = String(actualIdx);
@@ -770,6 +792,9 @@ function showStepModal(step) {
     editingStepId = step ? step.id : null;
     stepXpath.value = step ? step.xpath : (primaryXpathEl ? primaryXpathEl.textContent : '') || '';
     stepAction.value = step ? step.action : 'click';
+    const sepColor = step?.params?.color || '#00d4aa';
+    if (stepSeparatorColor) stepSeparatorColor.value = sepColor;
+    if (stepSeparatorColorHex) stepSeparatorColorHex.textContent = sepColor;
     stepInputValue.value = (step?.params?.value) || '';
     stepWaitMs.value = (step?.params?.delayMs) ?? 500;
     stepFileName.value = (step?.params?.fileName) || '';
@@ -791,15 +816,28 @@ function hideStepModal() {
 
 function toggleStepParams() {
     const action = stepAction.value;
+    const isSeparator = action === 'separator';
     stepParamsInput.classList.toggle('hidden', action !== 'input');
     stepParamsInput.style.display = action === 'input' ? '' : 'none';
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
     stepParamsFile.classList.toggle('hidden', action !== 'file_upload');
     stepParamsFile.style.display = action === 'file_upload' ? '' : 'none';
+    if (stepParamsSeparator) {
+        stepParamsSeparator.classList.toggle('hidden', !isSeparator);
+        stepParamsSeparator.style.display = isSeparator ? '' : 'none';
+    }
+    const xpathRow = stepModal?.querySelector('.form-row:first-child');
+    if (xpathRow) xpathRow.style.display = isSeparator ? 'none' : '';
 }
 
 stepAction.addEventListener('change', toggleStepParams);
+
+if (stepSeparatorColor) {
+    stepSeparatorColor.addEventListener('input', () => {
+        if (stepSeparatorColorHex) stepSeparatorColorHex.textContent = stepSeparatorColor.value;
+    });
+}
 
 stepChooseFileBtn.addEventListener('click', () => stepFileInput.click());
 
@@ -824,12 +862,13 @@ stepFileInput.addEventListener('change', () => {
 
 stepModalCancel.addEventListener('click', hideStepModal);
 stepModalSave.addEventListener('click', () => {
-    const xpath = stepXpath.value.trim();
-    if (!xpath) return;
     const action = stepAction.value;
+    const xpath = action === 'separator' ? '—' : stepXpath.value.trim();
+    if (!xpath && action !== 'separator') return;
     const params = {};
     if (action === 'input') params.value = stepInputValue.value;
     if (action === 'wait') params.delayMs = Math.max(0, parseInt(stepWaitMs.value, 10) || 500);
+    if (action === 'separator') params.color = stepSeparatorColor?.value || '#00d4aa';
     if (action === 'file_upload') {
         params.fileName = stepFileName.value.trim() || 'file';
         const hasMinimalPdf = stepFileLabel?.dataset?.minimalPdf === '1';
@@ -874,7 +913,7 @@ document.addEventListener('click', (e) => {
     const runBtn = e.target.closest('.btn-run-step');
     if (runBtn) {
         const step = executionList.find((s) => s.id === runBtn.dataset.id);
-        if (!step) return;
+        if (!step || step.action === 'separator') return;
         currentExecutingStepId = step.id;
         setStepStatus(step.id, 'running', '');
         renderExecutionList();
@@ -946,15 +985,32 @@ saveListBtn.addEventListener('click', () => {
 
 if (listSearch) listSearch.addEventListener('input', renderExecutionList);
 
+if (stopOnErrorEl) {
+    chrome.storage.local.get(STORAGE_KEY_STOP_ON_ERROR, (d) => {
+        stopOnErrorEl.checked = !!d[STORAGE_KEY_STOP_ON_ERROR];
+    });
+    stopOnErrorEl.addEventListener('change', () => {
+        chrome.storage.local.set({ [STORAGE_KEY_STOP_ON_ERROR]: stopOnErrorEl.checked });
+    });
+}
+
+if (addSeparatorBtn) {
+    addSeparatorBtn.addEventListener('click', () => {
+        openListTab();
+        showStepModal({ xpath: '—', action: 'separator', params: { color: '#00d4aa' } });
+    });
+}
+
 // ——— Export JSON (формат для автотестов) ———
 const EXPORT_JSON_VERSION = 1;
 
 function exportToJson() {
+    const stepsToExport = executionList.filter((s) => s.action !== 'separator');
     const payload = {
         name: 'XPath Helper — сценарий',
         version: EXPORT_JSON_VERSION,
         exportedAt: new Date().toISOString(),
-        steps: executionList.map((s, i) => ({
+        steps: stepsToExport.map((s, i) => ({
             step: i + 1,
             xpath: s.xpath,
             action: s.action,
@@ -977,10 +1033,10 @@ function parseImportFile(data) {
     }
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
-        xpath: typeof s.xpath === 'string' ? s.xpath : '',
-        action: ['click', 'input', 'file_upload', 'wait'].includes(s.action) ? s.action : 'click',
+        xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
+        action: ['click', 'input', 'file_upload', 'wait', 'separator'].includes(s.action) ? s.action : 'click',
         params: s.params && typeof s.params === 'object' ? s.params : {}
-    })).filter((s) => s.xpath);
+    })).filter((s) => s.xpath || s.action === 'separator');
 }
 
 function showImportModal(steps) {
@@ -1045,7 +1101,7 @@ function importFromJson(file) {
 // ——— Export templates (Playwright, Cypress, Selenium) ———
 function exportToTemplates() {
     const name = (scenarioName?.value || 'scenario').trim() || 'scenario';
-    const steps = executionList;
+    const steps = executionList.filter((s) => s.action !== 'separator');
     if (steps.length === 0) {
         if (exportTemplatesBtn) exportTemplatesBtn.textContent = 'Список пуст';
         setTimeout(() => { if (exportTemplatesBtn) exportTemplatesBtn.textContent = '📤 Шаблоны'; }, 2000);
@@ -1126,18 +1182,25 @@ executeListBtn.addEventListener('click', () => {
     }
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
         if (!tab?.id) return;
+        const stepsToRun = executionList.filter((s) => s.action !== 'separator');
+        if (stepsToRun.length === 0) {
+            executeListBtn.textContent = 'Нет шагов для выполнения';
+            setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2000);
+            return;
+        }
+        const continueOnError = !stopOnErrorEl?.checked;
+        const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
         if (executionLog) executionLog.textContent = '';
-        appendExecutionLog(`Старт: ${executionList.length} шагов`);
-        executionList.forEach((s) => setStepStatus(s.id, 'running', ''));
-        currentExecutingStepId = executionList[0]?.id || null;
+        appendExecutionLog(`Старт: ${stepsToRun.length} шагов`);
+        stepsToRun.forEach((s) => setStepStatus(s.id, 'running', ''));
+        currentExecutingStepId = stepsToRun[0]?.id || null;
         show(stopExecuteBtn);
         hide(executeListBtn);
         renderExecutionList();
-        const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
         chrome.tabs.sendMessage(tab.id, {
             action: 'executeList',
-            steps: executionList,
-            continueOnError: true,
+            steps: stepsToRun,
+            continueOnError,
             stepDelayMs: stepDelay
         }).then((resp) => {
             const results = resp?.results || [];
@@ -1153,11 +1216,11 @@ executeListBtn.addEventListener('click', () => {
                     appendExecutionLog(`✗ ${r.id}: ${r.error || 'Ошибка'}`);
                 }
             });
-            appendExecutionLog(`Готово: ${okCount}/${executionList.length}`);
+            appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length}`);
             renderExecutionList();
             hide(stopExecuteBtn);
             show(executeListBtn);
-            executeListBtn.textContent = `✓ ${okCount}/${executionList.length}`;
+            executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
         }).catch((err) => {
             appendExecutionLog(`Ошибка: ${err?.message || 'нет связи'}`);

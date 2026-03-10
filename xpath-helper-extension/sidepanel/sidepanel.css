@@ -112,6 +112,11 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .execution-item-params { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
 .execution-item-actions { display: flex; gap: 4px; }
 .execution-item-actions .btn-icon { width: 28px; height: 28px; }
+.execution-item-separator { padding: 4px 10px; min-height: auto; }
+.execution-separator-wrap { display: flex; align-items: center; gap: 8px; width: 100%; }
+.execution-separator-line { flex: 1; height: 0; border-top: 2px solid; min-width: 20px; }
+.execution-separator-actions { flex-shrink: 0; }
+.list-setting { margin-top: 8px; }
 .execution-item-drag { cursor: grab; color: var(--text2); font-size: 14px; padding: 0 4px; user-select: none; }
 .execution-item-drag:active { cursor: grabbing; }
 .execution-item.dragging { opacity: 0.6; }
