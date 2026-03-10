@@ -17,6 +17,8 @@
         <nav class="tabs" role="tablist">
             <button type="button" class="tab active" data-tab="inspect" aria-selected="true">Инспектор</button>
             <button type="button" class="tab" data-tab="list" aria-selected="false">Список</button>
+            <button type="button" class="tab" data-tab="editor" aria-selected="false">Редактор</button>
+            <button type="button" class="tab" data-tab="log" aria-selected="false">Лог</button>
         </nav>
 
         <div id="tabInspect" class="tab-panel active" role="tabpanel">
@@ -143,13 +145,96 @@
                     </label>
                 </div>
             </section>
-            <section id="executionLogSection" class="log-section hidden">
-                <h3>Лог выполнения</h3>
-                <div id="executionLog" class="execution-log"></div>
-                <button type="button" id="copyLogBtn" class="btn btn-sm">Копировать лог</button>
-            </section>
             <p id="listHint" class="list-hint">Наведите на элемент в инспекторе, затем «Добавить текущий» и выберите действие.</p>
             <ul id="executionList" class="execution-list"></ul>
+        </div>
+
+        <div id="tabEditor" class="tab-panel tab-editor" role="tabpanel" hidden>
+            <div class="editor-split">
+                <div class="editor-list-pane">
+                    <h3 class="editor-pane-title">Шаги</h3>
+                    <ul id="editorStepList" class="editor-step-list"></ul>
+                </div>
+                <div class="editor-detail-pane">
+                    <div id="editorEmpty" class="editor-empty">
+                        <p>Выберите шаг слева для редактирования</p>
+                    </div>
+                    <div id="editorDetail" class="editor-detail hidden">
+                        <h3 class="editor-pane-title">Редактирование шага</h3>
+                        <div class="form-row">
+                            <label for="editorXpath">XPath</label>
+                            <div class="editor-xpath-row">
+                                <textarea id="editorXpath" rows="3" placeholder="//button[@id='submit']"></textarea>
+                                <button type="button" id="editorValidateBtn" class="btn" title="Подсветить элемент на странице">Проверить</button>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label for="editorAction">Действие</label>
+                            <select id="editorAction">
+                                <option value="click">Клик</option>
+                                <option value="click_if_exists">Клик если есть</option>
+                                <option value="input">Ввод текста</option>
+                                <option value="file_upload">Загрузка файла</option>
+                                <option value="wait">Пауза</option>
+                                <option value="separator">Разделитель</option>
+                            </select>
+                        </div>
+                        <div id="editorParamsInput" class="form-row hidden">
+                            <label for="editorInputValue">Текст для ввода</label>
+                            <input type="text" id="editorInputValue" placeholder="Значение">
+                        </div>
+                        <div id="editorParamsWait" class="form-row hidden">
+                            <label for="editorWaitMs">Задержка (мс)</label>
+                            <input type="number" id="editorWaitMs" min="0" max="60000" value="500">
+                        </div>
+                        <div id="editorParamsFile" class="form-row hidden">
+                            <label for="editorFileName">Имя файла</label>
+                            <input type="text" id="editorFileName" placeholder="document.pdf">
+                            <div class="setting-input-row">
+                                <button type="button" id="editorChooseFileBtn" class="btn">Выбрать файл</button>
+                                <button type="button" id="editorMinimalPdfBtn" class="btn">Минимальный PDF</button>
+                                <span id="editorFileLabel" class="setting-value">—</span>
+                            </div>
+                            <input type="file" id="editorFileInput" hidden>
+                        </div>
+                        <div id="editorParamsSeparator" class="form-row hidden">
+                            <label for="editorSeparatorLabel">Надпись</label>
+                            <input type="text" id="editorSeparatorLabel" placeholder="Группа 1" maxlength="40">
+                            <label class="setting-hint">Цвет</label>
+                            <div id="editorSeparatorColors" class="separator-colors"></div>
+                        </div>
+                        <div class="form-row">
+                            <label class="filter-check">
+                                <input type="checkbox" id="editorRetryOnError">
+                                <span>Повтор при ошибке (до 3 раз)</span>
+                            </label>
+                        </div>
+                        <div id="editorParamsWaitForLoad" class="form-row">
+                            <label class="filter-check">
+                                <input type="checkbox" id="editorWaitForLoad">
+                                <span>Ждать загрузки страницы после действия</span>
+                            </label>
+                        </div>
+                        <div class="editor-actions">
+                            <button type="button" id="editorApplyBtn" class="btn btn-save">Применить</button>
+                            <button type="button" id="editorTestBtn" class="btn">Тест шага</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tabLog" class="tab-panel" role="tabpanel" hidden>
+            <section class="log-section log-tab-section">
+                <div class="log-tab-header">
+                    <h3>Лог выполнения</h3>
+                    <div class="log-tab-actions">
+                        <button type="button" id="clearLogBtn" class="btn btn-sm">Очистить</button>
+                        <button type="button" id="copyLogBtn" class="btn btn-sm">Копировать</button>
+                    </div>
+                </div>
+                <div id="executionLog" class="execution-log"></div>
+            </section>
         </div>
     </div>
 
@@ -165,18 +250,24 @@
                     <label for="stepAction">Действие</label>
                     <select id="stepAction">
                         <option value="click">Клик</option>
+                        <option value="click_if_exists">Клик если есть</option>
                         <option value="input">Ввод текста</option>
                         <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
                         <option value="separator">Разделитель</option>
                     </select>
                 </div>
+                <div id="stepParamsWaitForLoad" class="form-row">
+                    <label class="filter-check">
+                        <input type="checkbox" id="stepWaitForLoad" title="Ждать полной загрузки страницы после действия">
+                        <span>Ждать загрузки страницы после действия</span>
+                    </label>
+                </div>
                 <div id="stepParamsSeparator" class="form-row hidden">
-                    <label for="stepSeparatorColor">Цвет разделителя</label>
-                    <div class="setting-input-row">
-                        <input type="color" id="stepSeparatorColor" value="#00d4aa" title="Цвет линии">
-                        <span id="stepSeparatorColorHex" class="setting-value">#00d4aa</span>
-                    </div>
+                    <label for="stepSeparatorLabel">Надпись (опционально)</label>
+                    <input type="text" id="stepSeparatorLabel" placeholder="Группа 1" maxlength="40">
+                    <label class="setting-hint">Цвет</label>
+                    <div id="stepSeparatorColors" class="separator-colors"></div>
                 </div>
                 <div id="stepParamsInput" class="form-row hidden">
                     <label for="stepInputValue">Текст для ввода</label>

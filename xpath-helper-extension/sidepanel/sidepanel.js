@@ -16,7 +16,8 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—' };
+const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть' };
+const SEPARATOR_COLORS = ['#00d4aa', '#667eea', '#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', '#e91e63'];
 
 // Минимальный валидный PDF (~400 байт) для тестирования загрузки файлов
 const MINIMAL_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK';
@@ -53,13 +54,40 @@ const copyAllUniqueBtn = $('copyAllUnique');
 const exportFileBtn = $('exportFile');
 const tabInspect = $('tabInspect');
 const tabList = $('tabList');
+const tabEditor = $('tabEditor');
+const tabLog = $('tabLog');
+const editorStepList = $('editorStepList');
+const editorEmpty = $('editorEmpty');
+const editorDetail = $('editorDetail');
+const editorXpath = $('editorXpath');
+const editorAction = $('editorAction');
+const editorInputValue = $('editorInputValue');
+const editorWaitMs = $('editorWaitMs');
+const editorFileName = $('editorFileName');
+const editorFileLabel = $('editorFileLabel');
+const editorFileInput = $('editorFileInput');
+const editorChooseFileBtn = $('editorChooseFileBtn');
+const editorMinimalPdfBtn = $('editorMinimalPdfBtn');
+const editorSeparatorLabel = $('editorSeparatorLabel');
+const editorSeparatorColors = $('editorSeparatorColors');
+const editorParamsInput = $('editorParamsInput');
+const editorParamsWait = $('editorParamsWait');
+const editorParamsFile = $('editorParamsFile');
+const editorParamsSeparator = $('editorParamsSeparator');
+const editorParamsWaitForLoad = $('editorParamsWaitForLoad');
+const editorRetryOnError = $('editorRetryOnError');
+const editorWaitForLoad = $('editorWaitForLoad');
+const editorApplyBtn = $('editorApplyBtn');
+const editorTestBtn = $('editorTestBtn');
+const editorValidateBtn = $('editorValidateBtn');
 const addStepBtn = $('addStepBtn');
 const addStepManualBtn = $('addStepManualBtn');
 const addSeparatorBtn = $('addSeparatorBtn');
 const stopOnErrorEl = $('stopOnError');
 const stepParamsSeparator = $('stepParamsSeparator');
-const stepSeparatorColor = $('stepSeparatorColor');
-const stepSeparatorColorHex = $('stepSeparatorColorHex');
+const stepParamsWaitForLoad = $('stepParamsWaitForLoad');
+const stepSeparatorLabel = $('stepSeparatorLabel');
+const stepSeparatorColors = $('stepSeparatorColors');
 const executeListBtn = $('executeListBtn');
 const saveListBtn = $('saveListBtn');
 const listHint = $('listHint');
@@ -87,7 +115,6 @@ const scenarioName = $('scenarioName');
 const scenarioSelect = $('scenarioSelect');
 const listSearch = $('listSearch');
 const stopExecuteBtn = $('stopExecuteBtn');
-const executionLogSection = $('executionLogSection');
 const executionLog = $('executionLog');
 const copyLogBtn = $('copyLogBtn');
 const historySection = $('historySection');
@@ -97,6 +124,7 @@ const copyAllXpathBtn = $('copyAllXpath');
 const onlyUniqueMode = $('onlyUniqueMode');
 const stepDelayMsEl = $('stepDelayMs');
 const stepRetryOnError = $('stepRetryOnError');
+const stepWaitForLoad = $('stepWaitForLoad');
 const importModal = $('importModal');
 const importPreview = $('importPreview');
 const importReplace = $('importReplace');
@@ -150,6 +178,10 @@ let scenarios = [];
 let currentScenarioId = null;
 /** Ожидающий импорт (для модалки) */
 let pendingImportData = null;
+/** Выбранный шаг в редакторе */
+let selectedEditorStepId = null;
+/** Файл в редакторе (base64) */
+let editorFileBase64 = null;
 
 function setStepStatus(id, state, message) {
     stepRunStatus[id] = { state, message: message || '' };
@@ -594,15 +626,132 @@ document.querySelectorAll('.tab').forEach((tab) => {
         document.querySelectorAll('.tab-panel').forEach((x) => { x.classList.remove('active'); x.hidden = true; });
         tab.classList.add('active');
         if (t === 'inspect') {
-            tabInspect.classList.add('active');
-            tabInspect.hidden = false;
+            if (tabInspect) { tabInspect.classList.add('active'); tabInspect.hidden = false; }
+        } else if (t === 'editor') {
+            if (tabEditor) { tabEditor.classList.add('active'); tabEditor.hidden = false; renderEditorStepList(); }
+        } else if (t === 'log') {
+            if (tabLog) { tabLog.classList.add('active'); tabLog.hidden = false; }
         } else {
-            tabList.classList.add('active');
-            tabList.hidden = false;
-            renderExecutionList();
+            if (tabList) { tabList.classList.add('active'); tabList.hidden = false; renderExecutionList(); }
         }
     });
 });
+
+// ——— Editor tab ———
+function renderEditorStepList() {
+    if (!editorStepList) return;
+    editorStepList.innerHTML = '';
+    executionList.forEach((step, i) => {
+        const li = document.createElement('li');
+        li.className = 'editor-step-item' + (step.id === selectedEditorStepId ? ' selected' : '') + (step.action === 'separator' ? ' separator-item' : '');
+        li.dataset.stepId = step.id;
+        const badge = step.action === 'separator' ? '—' : (ACTION_LABELS[step.action] || step.action);
+        let preview = step.xpath || '—';
+        if (step.action === 'input' && step.params?.value) preview += ` → "${step.params.value.substring(0, 20)}${step.params.value.length > 20 ? '…' : ''}"`;
+        else if (step.action === 'wait') preview += ` (${step.params?.delayMs ?? 500} мс)`;
+        else if (step.action === 'separator' && step.params?.label) preview = step.params.label;
+        li.innerHTML = `<span class="step-badge">${i + 1}. ${badge}</span><div class="step-preview" title="${escapeHtml(step.xpath || '')}">${escapeHtml(preview)}</div>`;
+        li.addEventListener('click', () => selectEditorStep(step.id));
+        editorStepList.appendChild(li);
+    });
+}
+
+function selectEditorStep(stepId) {
+    selectedEditorStepId = stepId;
+    renderEditorStepList();
+    const step = executionList.find((s) => s.id === stepId);
+    if (!step) {
+        if (editorEmpty) show(editorEmpty);
+        if (editorDetail) hide(editorDetail);
+        return;
+    }
+    if (editorEmpty) hide(editorEmpty);
+    if (editorDetail) show(editorDetail);
+    editorXpath.value = step.xpath || '';
+    editorAction.value = step.action || 'click';
+    editorInputValue.value = step.params?.value || '';
+    editorWaitMs.value = step.params?.delayMs ?? 500;
+    editorFileName.value = step.params?.fileName || '';
+    editorFileBase64 = step.params?.fileContentBase64 || null;
+    editorFileLabel.textContent = editorFileBase64 ? 'Файл прикреплён' : '—';
+    editorSeparatorLabel.value = step.params?.label || '';
+    editorRetryOnError.checked = !!step.params?.retryOnError;
+    editorWaitForLoad.checked = step.params?.waitForLoad !== false;
+    renderEditorSeparatorColors(step.params?.color || SEPARATOR_COLORS[0]);
+    toggleEditorParams();
+}
+
+function toggleEditorParams() {
+    const action = editorAction.value;
+    if (editorParamsInput) { editorParamsInput.classList.toggle('hidden', action !== 'input'); editorParamsInput.style.display = action === 'input' ? '' : 'none'; }
+    if (editorParamsWait) { editorParamsWait.classList.toggle('hidden', action !== 'wait'); editorParamsWait.style.display = action === 'wait' ? '' : 'none'; }
+    if (editorParamsFile) { editorParamsFile.classList.toggle('hidden', action !== 'file_upload'); editorParamsFile.style.display = action === 'file_upload' ? '' : 'none'; }
+    if (editorParamsSeparator) { editorParamsSeparator.classList.toggle('hidden', action !== 'separator'); editorParamsSeparator.style.display = action === 'separator' ? '' : 'none'; }
+    const hideEditorWaitForLoad = action === 'separator' || action === 'wait';
+    if (editorParamsWaitForLoad) { editorParamsWaitForLoad.classList.toggle('hidden', hideEditorWaitForLoad); editorParamsWaitForLoad.style.display = hideEditorWaitForLoad ? 'none' : ''; }
+    const xpathRow = editorDetail?.querySelector('.form-row:first-child');
+    if (xpathRow) xpathRow.style.display = action === 'separator' ? 'none' : '';
+}
+
+function renderEditorSeparatorColors(selected) {
+    if (!editorSeparatorColors) return;
+    editorSeparatorColors.innerHTML = SEPARATOR_COLORS.map((c) =>
+        `<button type="button" class="separator-color-btn ${c === selected ? 'selected' : ''}" data-color="${escapeHtml(c)}" style="background:${c}"></button>`
+    ).join('');
+    editorSeparatorColors.querySelectorAll('.separator-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            editorSeparatorColors.querySelectorAll('.separator-color-btn').forEach((b) => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        });
+    });
+}
+
+function applyEditorStep() {
+    const step = executionList.find((s) => s.id === selectedEditorStepId);
+    if (!step) return;
+    const action = editorAction.value;
+    step.xpath = action === 'separator' ? '—' : (editorXpath.value || '').trim();
+    step.action = action;
+    step.params = step.params || {};
+    if (action === 'input') step.params.value = editorInputValue.value;
+    if (action === 'wait') step.params.delayMs = Math.max(0, parseInt(editorWaitMs.value, 10) || 500);
+    if (action === 'file_upload') {
+        step.params.fileName = editorFileName.value.trim() || 'file';
+        if (editorFileBase64) step.params.fileContentBase64 = editorFileBase64;
+    }
+    if (action === 'separator') {
+        step.params.label = (editorSeparatorLabel.value || '').trim();
+        step.params.color = editorSeparatorColors?.querySelector('.separator-color-btn.selected')?.dataset.color || SEPARATOR_COLORS[0];
+    }
+    if (editorRetryOnError?.checked) step.params.retryOnError = true;
+    else delete step.params.retryOnError;
+    step.params.waitForLoad = !!editorWaitForLoad?.checked;
+    saveExecutionList();
+    renderEditorStepList();
+    renderExecutionList();
+}
+
+function highlightElementOnPage(xpath) {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (!tab?.id) return;
+        chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: (xp) => {
+                try {
+                    const r = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                    const el = r.singleNodeValue;
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const orig = el.style.outline;
+                        el.style.outline = '3px solid #00d4aa';
+                        setTimeout(() => { el.style.outline = orig; }, 2000);
+                    }
+                } catch (_) {}
+            },
+            args: [xpath]
+        });
+    });
+}
 
 // ——— Execution list: load, save, render ———
 function loadExecutionList() {
@@ -611,6 +760,7 @@ function loadExecutionList() {
         scenarios = Array.isArray(data[STORAGE_KEY_SCENARIOS]) ? data[STORAGE_KEY_SCENARIOS] : [];
         renderScenarioSelect();
         renderExecutionList();
+        renderEditorStepList();
     });
 }
 
@@ -718,10 +868,13 @@ function renderExecutionList() {
         li.className = 'execution-item' + (step.id === currentExecutingStepId ? ' current' : '') + (step.action === 'separator' ? ' execution-item-separator' : '');
         li.dataset.stepId = step.id;
         if (step.action === 'separator') {
-            const color = step.params?.color || '#00d4aa';
+            const color = step.params?.color || SEPARATOR_COLORS[0];
+            const label = (step.params?.label || '').trim();
             li.innerHTML = `
                 <div class="execution-separator-wrap">
-                    <div class="execution-separator-line" style="border-color: ${escapeHtml(color)}"></div>
+                    <div class="execution-separator-line" style="--sep-color: ${escapeHtml(color)}">
+                        ${label ? `<span class="execution-separator-label" style="color: ${escapeHtml(color)}">${escapeHtml(label)}</span>` : ''}
+                    </div>
                     <div class="execution-item-actions execution-separator-actions">
                         <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать цвет">✏</button>
                         <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
@@ -750,6 +903,7 @@ function renderExecutionList() {
                 ${paramsText ? `<div class="execution-item-params">${paramsText}</div>` : ''}
                 <div class="execution-item-actions">
                     <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить шаг" aria-label="Выполнить шаг">▶</button>
+                    <button type="button" class="btn-icon btn-run-from-step" data-id="${escapeHtml(step.id)}" title="Выполнить с этого шага" aria-label="Выполнить с этого шага">▶▶</button>
                     <button type="button" class="btn-icon btn-clone-step" data-id="${escapeHtml(step.id)}" title="Клонировать">⧉</button>
                     <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать">✏</button>
                     <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
@@ -792,9 +946,10 @@ function showStepModal(step) {
     editingStepId = step ? step.id : null;
     stepXpath.value = step ? step.xpath : (primaryXpathEl ? primaryXpathEl.textContent : '') || '';
     stepAction.value = step ? step.action : 'click';
-    const sepColor = step?.params?.color || '#00d4aa';
-    if (stepSeparatorColor) stepSeparatorColor.value = sepColor;
-    if (stepSeparatorColorHex) stepSeparatorColorHex.textContent = sepColor;
+    const sepColor = step?.params?.color || SEPARATOR_COLORS[0];
+    const sepLabel = step?.params?.label || '';
+    if (stepSeparatorLabel) stepSeparatorLabel.value = sepLabel;
+    renderSeparatorColorButtons(sepColor);
     stepInputValue.value = (step?.params?.value) || '';
     stepWaitMs.value = (step?.params?.delayMs) ?? 500;
     stepFileName.value = (step?.params?.fileName) || '';
@@ -804,6 +959,7 @@ function showStepModal(step) {
         delete stepFileLabel.dataset.minimalPdf;
     }
     if (stepRetryOnError) stepRetryOnError.checked = !!step?.params?.retryOnError;
+    if (stepWaitForLoad) stepWaitForLoad.checked = step?.params?.waitForLoad !== false;
     toggleStepParams();
     stepModal.classList.remove('hidden');
     stepModal.querySelector('.modal-title').textContent = step ? 'Редактировать шаг' : 'Добавить шаг';
@@ -826,6 +982,12 @@ function toggleStepParams() {
     if (stepParamsSeparator) {
         stepParamsSeparator.classList.toggle('hidden', !isSeparator);
         stepParamsSeparator.style.display = isSeparator ? '' : 'none';
+        if (isSeparator) renderSeparatorColorButtons(selectedSeparatorColor);
+    }
+    const hideWaitForLoad = action === 'separator' || action === 'wait';
+    if (stepParamsWaitForLoad) {
+        stepParamsWaitForLoad.classList.toggle('hidden', hideWaitForLoad);
+        stepParamsWaitForLoad.style.display = hideWaitForLoad ? 'none' : '';
     }
     const xpathRow = stepModal?.querySelector('.form-row:first-child');
     if (xpathRow) xpathRow.style.display = isSeparator ? 'none' : '';
@@ -833,9 +995,19 @@ function toggleStepParams() {
 
 stepAction.addEventListener('change', toggleStepParams);
 
-if (stepSeparatorColor) {
-    stepSeparatorColor.addEventListener('input', () => {
-        if (stepSeparatorColorHex) stepSeparatorColorHex.textContent = stepSeparatorColor.value;
+let selectedSeparatorColor = SEPARATOR_COLORS[0];
+
+function renderSeparatorColorButtons(selected) {
+    if (!stepSeparatorColors) return;
+    selectedSeparatorColor = selected || selectedSeparatorColor;
+    stepSeparatorColors.innerHTML = SEPARATOR_COLORS.map((c) =>
+        `<button type="button" class="separator-color-btn ${c === selectedSeparatorColor ? 'selected' : ''}" data-color="${escapeHtml(c)}" style="background:${c}" title="${c}"></button>`
+    ).join('');
+    stepSeparatorColors.querySelectorAll('.separator-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            selectedSeparatorColor = btn.dataset.color;
+            renderSeparatorColorButtons(selectedSeparatorColor);
+        });
     });
 }
 
@@ -868,7 +1040,10 @@ stepModalSave.addEventListener('click', () => {
     const params = {};
     if (action === 'input') params.value = stepInputValue.value;
     if (action === 'wait') params.delayMs = Math.max(0, parseInt(stepWaitMs.value, 10) || 500);
-    if (action === 'separator') params.color = stepSeparatorColor?.value || '#00d4aa';
+    if (action === 'separator') {
+        params.color = selectedSeparatorColor || SEPARATOR_COLORS[0];
+        params.label = (stepSeparatorLabel?.value || '').trim();
+    }
     if (action === 'file_upload') {
         params.fileName = stepFileName.value.trim() || 'file';
         const hasMinimalPdf = stepFileLabel?.dataset?.minimalPdf === '1';
@@ -876,6 +1051,7 @@ stepModalSave.addEventListener('click', () => {
         if (fileB64) params.fileContentBase64 = fileB64;
     }
     if (stepRetryOnError?.checked) params.retryOnError = true;
+    params.waitForLoad = !!stepWaitForLoad?.checked;
     if (editingStepId) {
         const idx = executionList.findIndex((s) => s.id === editingStepId);
         if (idx !== -1) {
@@ -908,6 +1084,14 @@ document.addEventListener('click', (e) => {
     if (editBtn) {
         const step = executionList.find((s) => s.id === editBtn.dataset.id);
         if (step) showStepModal(step);
+    }
+
+    const runFromBtn = e.target.closest('.btn-run-from-step');
+    if (runFromBtn) {
+        const step = executionList.find((s) => s.id === runFromBtn.dataset.id);
+        if (!step || step.action === 'separator') return;
+        runExecutionFromStep(step.id);
+        return;
     }
 
     const runBtn = e.target.closest('.btn-run-step');
@@ -997,9 +1181,71 @@ if (stopOnErrorEl) {
 if (addSeparatorBtn) {
     addSeparatorBtn.addEventListener('click', () => {
         openListTab();
-        showStepModal({ xpath: '—', action: 'separator', params: { color: '#00d4aa' } });
+        showStepModal({ xpath: '—', action: 'separator', params: { color: SEPARATOR_COLORS[0] } });
     });
 }
+
+// ——— Editor tab handlers ———
+if (editorAction) editorAction.addEventListener('change', toggleEditorParams);
+if (editorApplyBtn) editorApplyBtn.addEventListener('click', applyEditorStep);
+if (editorValidateBtn) editorValidateBtn.addEventListener('click', () => {
+    const xpath = editorXpath?.value?.trim();
+    if (!xpath) return;
+    highlightElementOnPage(xpath);
+    editorValidateBtn.textContent = '✓ Подсвечено';
+    setTimeout(() => { editorValidateBtn.textContent = 'Проверить'; }, 1500);
+});
+if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
+    const step = executionList.find((s) => s.id === selectedEditorStepId);
+    if (!step || step.action === 'separator') return;
+    applyEditorStep();
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (!tab?.id) return;
+        const stepToRun = executionList.find((s) => s.id === selectedEditorStepId);
+        if (!stepToRun) return;
+        currentExecutingStepId = stepToRun.id;
+        setStepStatus(stepToRun.id, 'running', '');
+        renderExecutionList();
+        renderEditorStepList();
+        chrome.tabs.sendMessage(tab.id, { action: 'executeList', steps: [stepToRun], continueOnError: true }).then((resp) => {
+            const r = resp?.results?.[0];
+            if (r?.ok) setStepStatus(stepToRun.id, 'ok', '');
+            else setStepStatus(stepToRun.id, 'error', r?.error || resp?.error || 'Ошибка');
+            currentExecutingStepId = null;
+            renderExecutionList();
+            renderEditorStepList();
+            editorTestBtn.textContent = r?.ok ? '✓ Выполнено' : '✗ Ошибка';
+            setTimeout(() => { editorTestBtn.textContent = 'Тест шага'; }, 2000);
+        }).catch((err) => {
+            setStepStatus(stepToRun.id, 'error', err?.message || 'нет связи');
+            currentExecutingStepId = null;
+            renderExecutionList();
+            renderEditorStepList();
+            editorTestBtn.textContent = '✗ Ошибка';
+            setTimeout(() => { editorTestBtn.textContent = 'Тест шага'; }, 2000);
+        });
+    });
+});
+if (editorChooseFileBtn) editorChooseFileBtn.addEventListener('click', () => editorFileInput?.click());
+if (editorFileInput) editorFileInput.addEventListener('change', () => {
+    const file = editorFileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        const b64 = reader.result?.split(',')?.[1] || '';
+        const sizeBytes = b64 ? Math.ceil(b64.length * 3 / 4) : 0;
+        editorFileBase64 = sizeBytes <= 1024 * 1024 ? b64 : null;
+        editorFileLabel.textContent = editorFileBase64 ? file.name : file.name + ' (>1 MB)';
+        if (!editorFileName.value.trim()) editorFileName.value = file.name;
+    };
+    reader.readAsDataURL(file);
+    editorFileInput.value = '';
+});
+if (editorMinimalPdfBtn) editorMinimalPdfBtn.addEventListener('click', () => {
+    editorFileBase64 = MINIMAL_PDF_BASE64;
+    if (!editorFileName.value.trim()) editorFileName.value = 'test.pdf';
+    editorFileLabel.textContent = 'test.pdf (минимальный PDF)';
+});
 
 // ——— Export JSON (формат для автотестов) ———
 const EXPORT_JSON_VERSION = 1;
@@ -1034,7 +1280,7 @@ function parseImportFile(data) {
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
-        action: ['click', 'input', 'file_upload', 'wait', 'separator'].includes(s.action) ? s.action : 'click',
+        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'separator'].includes(s.action) ? s.action : 'click',
         params: s.params && typeof s.params === 'object' ? s.params : {}
     })).filter((s) => s.xpath || s.action === 'separator');
 }
@@ -1108,21 +1354,27 @@ function exportToTemplates() {
         return;
     }
     const pw = steps.map((s, i) => {
-        if (s.action === 'click') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').click();`;
+        if (s.action === 'click' || s.action === 'click_if_exists') return s.action === 'click_if_exists'
+            ? `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').click({ timeout: 500 }).catch(() => {});`
+            : `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').click();`;
         if (s.action === 'input') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').fill('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'wait') return `  await page.waitForTimeout(${s.params?.delayMs ?? 500});`;
         if (s.action === 'file_upload') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').setInputFiles({ path: '${(s.params?.fileName || 'file').replace(/'/g, "\\'")}' });`;
         return `  // ${s.action}: ${s.xpath}`;
     }).join('\n');
     const cyp = steps.map((s, i) => {
-        if (s.action === 'click') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').click();`;
+        if (s.action === 'click' || s.action === 'click_if_exists') return s.action === 'click_if_exists'
+            ? `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').click({ timeout: 500 }).catch(() => {});`
+            : `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').click();`;
         if (s.action === 'input') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').type('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'wait') return `  cy.wait(${s.params?.delayMs ?? 500});`;
         if (s.action === 'file_upload') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').attachFile('${(s.params?.fileName || 'file').replace(/'/g, "\\'")}');`;
         return `  // ${s.action}: ${s.xpath}`;
     }).join('\n');
     const sel = steps.map((s, i) => {
-        if (s.action === 'click') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).click();`;
+        if (s.action === 'click' || s.action === 'click_if_exists') return s.action === 'click_if_exists'
+            ? `  try { driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).click(); } catch (Exception e) {}`
+            : `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).click();`;
         if (s.action === 'input') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).sendKeys("${(s.params?.value || '').replace(/"/g, '\\"')}");`;
         if (s.action === 'wait') return `  Thread.sleep(${s.params?.delayMs ?? 500});`;
         if (s.action === 'file_upload') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).sendKeys("${(s.params?.fileName || 'file').replace(/"/g, '\\"')}");`;
@@ -1150,8 +1402,14 @@ if (copyLogBtn) copyLogBtn.addEventListener('click', () => {
     if (!text) return;
     copyToClipboard(text).then(() => {
         copyLogBtn.textContent = '✓ Скопировано';
-        setTimeout(() => { copyLogBtn.textContent = 'Копировать лог'; }, 1500);
+        setTimeout(() => { copyLogBtn.textContent = 'Копировать'; }, 1500);
     });
+});
+
+const clearLogBtn = $('clearLogBtn');
+if (clearLogBtn) clearLogBtn.addEventListener('click', () => {
+    if (executionLog) executionLog.textContent = '';
+    document.querySelector('.tab[data-tab="log"]')?.classList.remove('log-has-content');
 });
 
 if (exportJsonBtn) exportJsonBtn.addEventListener('click', exportToJson);
@@ -1163,14 +1421,65 @@ if (importJsonInput) importJsonInput.addEventListener('change', () => {
 });
 
 // ——— Execute list ———
+function runExecutionFromStep(fromStepId) {
+    const idx = executionList.findIndex((s) => s.id === fromStepId);
+    if (idx < 0) return;
+    const stepsToRun = executionList.slice(idx).filter((s) => s.action !== 'separator');
+    if (stepsToRun.length === 0) return;
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (!tab?.id) return;
+        const continueOnError = !stopOnErrorEl?.checked;
+        const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
+        if (executionLog) executionLog.textContent = '';
+        appendExecutionLog(`Старт с шага ${idx + 1}: ${stepsToRun.length} шагов`);
+        stepsToRun.forEach((s) => setStepStatus(s.id, 'running', ''));
+        currentExecutingStepId = stepsToRun[0]?.id || null;
+        show(stopExecuteBtn);
+        hide(executeListBtn);
+        renderExecutionList();
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'executeList',
+            steps: stepsToRun,
+            continueOnError,
+            stepDelayMs: stepDelay
+        }).then((resp) => {
+            const results = resp?.results || [];
+            let okCount = 0;
+            results.forEach((r) => {
+                if (!r?.id) return;
+                if (r.ok) {
+                    okCount++;
+                    setStepStatus(r.id, 'ok', '');
+                    appendExecutionLog(`✓ ${r.id}`);
+                } else {
+                    setStepStatus(r.id, 'error', r.error || 'Ошибка');
+                    appendExecutionLog(`✗ ${r.id}: ${r.error || 'Ошибка'}`);
+                }
+            });
+            appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length}`);
+            renderExecutionList();
+            hide(stopExecuteBtn);
+            show(executeListBtn);
+            executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
+            setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
+        }).catch((err) => {
+            appendExecutionLog(`Ошибка: ${err?.message || 'нет связи'}`);
+            hide(stopExecuteBtn);
+            show(executeListBtn);
+            executeListBtn.textContent = 'Ошибка: ' + (err?.message || 'нет связи');
+            setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
+        });
+    });
+}
+
 function appendExecutionLog(line) {
     if (!executionLog) return;
     const t = new Date().toLocaleTimeString('ru-RU', { hour12: false });
     executionLog.textContent += `[${t}] ${line}\n`;
     executionLog.scrollTop = executionLog.scrollHeight;
-    if (executionLogSection) {
-        show(executionLogSection);
-        executionLogSection.classList.remove('hidden');
+    const logTab = document.querySelector('.tab[data-tab="log"]');
+    if (logTab && !logTab.classList.contains('log-has-content')) {
+        logTab.classList.add('log-has-content');
     }
 }
 

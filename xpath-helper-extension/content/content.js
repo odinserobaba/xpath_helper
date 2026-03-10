@@ -216,6 +216,14 @@ function init() {
     /** Выполняет список шагов на странице по очереди и возвращает результаты по каждому шагу */
     async function runExecutionList(steps, token, { continueOnError, stepDelayMs = 100 } = { continueOnError: true }) {
         const results = [];
+        async function waitForPageLoad(timeoutMs = 10000) {
+            const deadline = Date.now() + timeoutMs;
+            while (document.readyState !== 'complete' && Date.now() < deadline) {
+                await new Promise((r) => setTimeout(r, 100));
+                if (!isContextValid() || token !== runToken) return;
+            }
+            await new Promise((r) => setTimeout(r, 300));
+        }
         async function findElementByXPath(xpath, timeoutMs) {
             const deadline = Date.now() + Math.max(0, timeoutMs || 0);
             while (true) {
@@ -252,6 +260,20 @@ function init() {
                     break;
                 }
 
+                if (step.action === 'click_if_exists') {
+                    const elOpt = await findElementByXPath(step.xpath, 0);
+                    if (elOpt) {
+                        elOpt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        elOpt.click();
+                        await new Promise((r) => setTimeout(r, 150));
+                        if (step.params?.waitForLoad !== false) await waitForPageLoad();
+                    }
+                    results.push({ id, ok: true });
+                    sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
+                    lastErr = null;
+                    break;
+                }
+
                 const el = await findElementByXPath(step.xpath, selectorTimeoutMs);
                 if (!el) throw new Error('Элемент не найден (таймаут ' + selectorTimeoutMs + 'мс): ' + (step.xpath || '').substring(0, 80));
 
@@ -259,6 +281,7 @@ function init() {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     el.click();
                     await new Promise((r) => setTimeout(r, 150));
+                    if (step.params?.waitForLoad !== false) await waitForPageLoad();
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -306,6 +329,7 @@ function init() {
                     fileInput.dispatchEvent(new Event('input', { bubbles: true }));
                     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
                     await new Promise((r) => setTimeout(r, 150));
+                    if (step.params?.waitForLoad !== false) await waitForPageLoad();
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -332,6 +356,7 @@ function init() {
                         el.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                     await new Promise((r) => setTimeout(r, 100));
+                    if (step.params?.waitForLoad !== false) await waitForPageLoad();
                     results.push({ id, ok: true });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
