@@ -123,6 +123,11 @@ function init() {
     document.documentElement.appendChild(indicator);
     updateIndicatorActive();
 
+    // Отключаем bfcache — страница не будет кэшироваться при навигации,
+    // канал связи с расширением останется активным
+    window.addEventListener('beforeunload', () => {});
+    window.addEventListener('unload', () => {});
+
     try {
         chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
             if (!isContextValid()) return;

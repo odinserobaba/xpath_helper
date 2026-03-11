@@ -233,6 +233,22 @@ function setExecutionUIRunning(running) {
     else { show(executeListBtn); hide(stopExecuteBtn); show(flowExecuteBtn); hide(flowStopBtn); }
 }
 
+/** Ошибка bfcache: страница в кэше, канал закрыт */
+function isBfcacheError(e) {
+    const msg = String(e?.message || e || '').toLowerCase();
+    return msg.includes('back/forward cache') || msg.includes('message channel is closed') || msg.includes('receiving end does not');
+}
+
+function getTabErrorMessage(e) {
+    if (isBfcacheError(e)) return 'Страница в кэше. Обновите вкладку (F5) и попробуйте снова.';
+    return e?.message || e || 'Нет связи';
+}
+
+function showBfcacheBanner() {
+    const banner = $('bfcacheBanner');
+    if (banner) { show(banner); banner.classList.remove('hidden'); }
+}
+
 function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
@@ -1426,9 +1442,11 @@ document.addEventListener('click', (e) => {
                 currentExecutingStepId = null;
                 renderExecutionList();
             }).catch((err) => {
-                setStepStatus(step.id, 'error', err?.message || 'нет связи');
+                const msg = getTabErrorMessage(err);
+                setStepStatus(step.id, 'error', msg);
                 currentExecutingStepId = null;
                 renderExecutionList();
+                if (isBfcacheError(err)) showBfcacheBanner();
             });
         });
         return;
@@ -1561,12 +1579,14 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
             editorTestBtn.textContent = r?.ok ? '✓ Выполнено' : '✗ Ошибка';
             setTimeout(() => { editorTestBtn.textContent = 'Тест шага'; }, 2000);
         }).catch((err) => {
-            setStepStatus(stepToRun.id, 'error', err?.message || 'нет связи');
+            const msg = getTabErrorMessage(err);
+            setStepStatus(stepToRun.id, 'error', msg);
             currentExecutingStepId = null;
             renderExecutionList();
             renderEditorStepList();
             editorTestBtn.textContent = '✗ Ошибка';
             setTimeout(() => { editorTestBtn.textContent = 'Тест шага'; }, 2000);
+            if (isBfcacheError(err)) showBfcacheBanner();
         });
     });
 });
@@ -1869,8 +1889,10 @@ async function runExecutionWithBranching(tabId, fromStepId) {
                 currentIdx++;
             }
         } catch (err) {
-            setStepStatus(step.id, 'error', err?.message || 'нет связи');
-            appendExecutionLog(`✗ ${step.id}: ${err?.message || 'нет связи'}`);
+            const msg = getTabErrorMessage(err);
+            setStepStatus(step.id, 'error', msg);
+            appendExecutionLog(`✗ ${step.id}: ${msg}`);
+            if (isBfcacheError(err)) showBfcacheBanner();
             if (!continueOnError) break;
             currentIdx++;
         }
@@ -1929,10 +1951,12 @@ function runExecutionFromStep(fromStepId) {
             executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
         }).catch((err) => {
-            appendExecutionLog(`Ошибка: ${err?.message || 'нет связи'}`);
+            const msg = getTabErrorMessage(err);
+            appendExecutionLog(`Ошибка: ${msg}`);
             setExecutionUIRunning(false);
-            executeListBtn.textContent = 'Ошибка: ' + (err?.message || 'нет связи');
+            executeListBtn.textContent = 'Ошибка: ' + msg.substring(0, 30);
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
+            if (isBfcacheError(err)) showBfcacheBanner();
         });
     });
 }
@@ -2002,10 +2026,12 @@ executeListBtn.addEventListener('click', () => {
             executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
         }).catch((err) => {
-            appendExecutionLog(`Ошибка: ${err?.message || 'нет связи'}`);
+            const msg = getTabErrorMessage(err);
+            appendExecutionLog(`Ошибка: ${msg}`);
             setExecutionUIRunning(false);
-            executeListBtn.textContent = 'Ошибка: ' + (err?.message || 'нет связи');
+            executeListBtn.textContent = 'Ошибка: ' + msg.substring(0, 30);
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
+            if (isBfcacheError(err)) showBfcacheBanner();
         });
     });
 });
@@ -2039,11 +2065,17 @@ chrome.runtime.sendMessage({ action: 'ping' }, () => {
     }
 });
 
-if (reloadTabBtn) {
-    reloadTabBtn.addEventListener('click', () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-            if (tab?.id) chrome.tabs.reload(tab.id);
-        });
+function reloadActiveTab() {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (tab?.id) chrome.tabs.reload(tab.id);
+    });
+}
+if (reloadTabBtn) reloadTabBtn.addEventListener('click', reloadActiveTab);
+const reloadTabBtnBfcache = $('reloadTabBtnBfcache');
+if (reloadTabBtnBfcache) {
+    reloadTabBtnBfcache.addEventListener('click', () => {
+        reloadActiveTab();
+        hide($('bfcacheBanner'));
     });
 }
 
