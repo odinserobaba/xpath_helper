@@ -163,7 +163,7 @@ function init() {
                 runExecutionList([step], token, { continueOnError: false, stepDelayMs: 0, selectorTimeoutMs })
                     .then((results) => {
                         const r = results[0];
-                        const res = r ? { ok: r.ok, error: r.error, conditionResult: r.conditionResult } : { ok: false, error: 'No result' };
+                        const res = r ? { ok: r.soft ? true : r.ok, error: r.error, conditionResult: r.conditionResult } : { ok: false, error: 'No result' };
                         try { chrome.runtime.sendMessage({ action: 'executionResult', requestId, result: res }); } catch (_) {}
                     })
                     .catch((e) => {
@@ -243,13 +243,48 @@ function init() {
     async function runExecutionList(steps, token, { continueOnError, stepDelayMs = 100, selectorTimeoutMs: defaultTimeout } = { continueOnError: true }) {
         const baseTimeout = defaultTimeout ?? selectorTimeoutMs;
         const results = [];
-        async function waitForPageLoad(timeoutMs = 10000) {
+        async function waitForNetworkIdle(quietMs = 500, timeoutMs = 10000) {
+            let lastCount = -1;
+            let stableSince = Date.now();
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                if (!isContextValid() || token !== runToken) return;
+                try {
+                    const entries = performance.getEntriesByType?.('resource') || [];
+                    const count = entries.length;
+                    if (count === lastCount) {
+                        if (Date.now() - stableSince >= quietMs) return;
+                    } else {
+                        lastCount = count;
+                        stableSince = Date.now();
+                    }
+                } catch (_) {}
+                await new Promise((r) => setTimeout(r, 100));
+            }
+        }
+        async function waitForDomStable(quietMs = 300, timeoutMs = 5000) {
+            return new Promise((resolve) => {
+                let timer = null;
+                const observer = new MutationObserver(() => {
+                    if (timer) clearTimeout(timer);
+                    timer = setTimeout(() => {
+                        observer.disconnect();
+                        resolve();
+                    }, quietMs);
+                });
+                observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+                setTimeout(() => { observer.disconnect(); if (timer) clearTimeout(timer); resolve(); }, timeoutMs);
+            });
+        }
+        async function waitForPageLoad(timeoutMs = 10000, { networkIdle = false, domStable = false } = {}) {
             const deadline = Date.now() + timeoutMs;
             while (document.readyState !== 'complete' && Date.now() < deadline) {
                 await new Promise((r) => setTimeout(r, 100));
                 if (!isContextValid() || token !== runToken) return;
             }
             await new Promise((r) => setTimeout(r, 300));
+            if (networkIdle) await waitForNetworkIdle(500, 5000);
+            if (domStable) await waitForDomStable(300, 3000);
         }
         async function findElementByXPath(xpath, timeoutMs) {
             const deadline = Date.now() + Math.max(0, timeoutMs || 0);
@@ -273,7 +308,9 @@ function init() {
             if (i > 0 && stepDelayMs > 0) await new Promise((r) => setTimeout(r, stepDelayMs));
             const step = steps[i];
             const id = step?.id || null;
-            const retryCount = step?.params?.retryOnError ? 3 : 1;
+            const stepT0 = Date.now();
+            const retryCount = step?.params?.retryCount ?? (step?.params?.retryOnError ? 3 : 1);
+            const retryDelayMs = step?.params?.retryDelayMs ?? 300;
             sendExecutionProgress({ phase: 'start', stepId: id, index: i, total: steps.length });
             let lastErr = null;
             for (let attempt = 0; attempt < retryCount; attempt++) {
@@ -281,7 +318,7 @@ function init() {
                     if (step.action === 'wait') {
                     const delayMs = step.params?.delayMs ?? 500;
                     await new Promise((r) => setTimeout(r, Math.max(0, delayMs)));
-                    results.push({ id, ok: true });
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
                     break;
@@ -293,9 +330,9 @@ function init() {
                         elOpt.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         elOpt.click();
                         await new Promise((r) => setTimeout(r, 150));
-                        if (step.params?.waitForLoad !== false) await waitForPageLoad();
+                        if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
                     }
-                    results.push({ id, ok: true });
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
                     break;
@@ -304,16 +341,27 @@ function init() {
                 if (step.action === 'branch') {
                     const cond = step.params?.condition || 'element_exists';
                     const expected = (step.params?.expectedValue || '').trim();
-                    const elOpt = await findElementByXPath(step.xpath, 0);
+                    const attrName = (step.params?.attributeName || '').trim();
                     let conditionResult = false;
-                    if (cond === 'element_exists') {
-                        conditionResult = !!elOpt;
-                    } else if (elOpt) {
-                        const text = (elOpt.textContent || '').trim();
-                        if (cond === 'text_equals') conditionResult = text === expected;
-                        else if (cond === 'text_contains') conditionResult = text.includes(expected);
+                    if (cond === 'url_equals') conditionResult = window.location.href === expected;
+                    else if (cond === 'url_contains') conditionResult = window.location.href.includes(expected);
+                    else if (cond === 'url_matches') { try { conditionResult = new RegExp(expected).test(window.location.href); } catch (_) {} }
+                    else if (cond === 'count_equals') {
+                        try {
+                            const r = document.evaluate(step.xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                            conditionResult = r.snapshotLength === parseInt(expected, 10);
+                        } catch (_) {}
+                    } else {
+                        const elOpt = await findElementByXPath(step.xpath, 0);
+                        if (cond === 'element_exists') conditionResult = !!elOpt;
+                        else if (cond === 'attribute_equals' && elOpt) conditionResult = (elOpt.getAttribute(attrName) || '') === expected;
+                        else if (elOpt) {
+                            const text = (elOpt.textContent || '').trim();
+                            if (cond === 'text_equals') conditionResult = text === expected;
+                            else if (cond === 'text_contains') conditionResult = text.includes(expected);
+                        }
                     }
-                    results.push({ id, ok: true, conditionResult });
+                    results.push({ id, ok: true, conditionResult, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true, conditionResult });
                     lastErr = null;
                     break;
@@ -322,22 +370,64 @@ function init() {
                 if (step.action === 'assert') {
                     const cond = step.params?.condition || 'element_exists';
                     const expected = (step.params?.expectedValue || '').trim();
+                    const attrName = (step.params?.attributeName || '').trim();
                     const stepTimeout = step.params?.timeoutMs ?? baseTimeout;
-                    const elOpt = await findElementByXPath(step.xpath, stepTimeout);
+                    const waitMode = step.params?.waitMode === true;
+                    const softAssert = step.params?.softAssert === true;
                     let ok = false;
-                    if (cond === 'element_exists') {
-                        ok = !!elOpt;
-                    } else if (elOpt) {
-                        const text = (elOpt.textContent || '').trim();
-                        if (cond === 'text_equals') ok = text === expected;
-                        else if (cond === 'text_contains') ok = text.includes(expected);
+                    let msg = '';
+                    const check = () => {
+                        if (cond === 'url_equals') return window.location.href === expected;
+                        if (cond === 'url_contains') return window.location.href.includes(expected);
+                        if (cond === 'url_matches') { try { return new RegExp(expected).test(window.location.href); } catch (_) { return false; } }
+                        if (cond === 'count_equals') {
+                            try {
+                                const r = document.evaluate(step.xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                                return r.snapshotLength === parseInt(expected, 10);
+                            } catch (_) { return false; }
+                        }
+                        const elOpt = (() => { try { const r = document.evaluate(step.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null); return r.singleNodeValue; } catch (_) { return null; } })();
+                        if (cond === 'element_exists') return !!elOpt;
+                        if (cond === 'attribute_equals' && elOpt) return (elOpt.getAttribute(attrName) || '') === expected;
+                        if (elOpt) {
+                            const text = (elOpt.textContent || '').trim();
+                            if (cond === 'text_equals') return text === expected;
+                            if (cond === 'text_contains') return text.includes(expected);
+                        }
+                        return false;
+                    };
+                    if (waitMode) {
+                        const deadline = Date.now() + stepTimeout;
+                        while (Date.now() < deadline) {
+                            if (check()) { ok = true; break; }
+                            await new Promise((r) => setTimeout(r, 200));
+                            if (!isContextValid() || token !== runToken) break;
+                        }
+                    } else {
+                        if (['url_equals', 'url_contains', 'url_matches'].includes(cond)) ok = check();
+                        else if (cond === 'count_equals') ok = check();
+                        else {
+                            const elOpt = await findElementByXPath(step.xpath, stepTimeout);
+                            if (cond === 'element_exists') ok = !!elOpt;
+                            else if (cond === 'attribute_equals') ok = elOpt && (elOpt.getAttribute(attrName) || '') === expected;
+                            else if (elOpt) {
+                                const text = (elOpt.textContent || '').trim();
+                                if (cond === 'text_equals') ok = text === expected;
+                                else if (cond === 'text_contains') ok = text.includes(expected);
+                            }
+                        }
                     }
                     if (!ok) {
-                        const msg = cond === 'element_exists' ? 'Элемент не найден' : `Условие не выполнено: ${cond}`;
-                        results.push({ id, ok: false, error: msg });
-                        sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: msg });
+                        msg = cond === 'element_exists' ? 'Элемент не найден' : cond.startsWith('url_') ? `URL: ${window.location.href}` : `Условие не выполнено: ${cond}`;
+                        if (!softAssert) {
+                            results.push({ id, ok: false, error: msg, durationMs: Date.now() - stepT0 });
+                            sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: msg });
+                        } else {
+                            results.push({ id, ok: false, error: msg, durationMs: Date.now() - stepT0, soft: true });
+                            sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
+                        }
                     } else {
-                        results.push({ id, ok: true });
+                        results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                         sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     }
                     lastErr = null;
@@ -352,8 +442,8 @@ function init() {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     el.click();
                     await new Promise((r) => setTimeout(r, 150));
-                    if (step.params?.waitForLoad !== false) await waitForPageLoad();
-                    results.push({ id, ok: true });
+                    if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
                     break;
@@ -400,8 +490,8 @@ function init() {
                     fileInput.dispatchEvent(new Event('input', { bubbles: true }));
                     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
                     await new Promise((r) => setTimeout(r, 150));
-                    if (step.params?.waitForLoad !== false) await waitForPageLoad();
-                    results.push({ id, ok: true });
+                    if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
                     break;
@@ -427,15 +517,15 @@ function init() {
                         el.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                     await new Promise((r) => setTimeout(r, 100));
-                    if (step.params?.waitForLoad !== false) await waitForPageLoad();
-                    results.push({ id, ok: true });
+                    if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
                     break;
                 }
 
                 const err = 'Неизвестное действие: ' + String(step.action);
-                results.push({ id, ok: false, error: err });
+                results.push({ id, ok: false, error: err, durationMs: Date.now() - stepT0 });
                 sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: err });
                 if (!continueOnError) break;
                 lastErr = null;
@@ -443,12 +533,12 @@ function init() {
             } catch (e) {
                 if (isContextInvalidatedError(e)) break;
                 lastErr = e;
-                if (attempt < retryCount - 1) await new Promise((r) => setTimeout(r, 300));
+                if (attempt < retryCount - 1) await new Promise((r) => setTimeout(r, retryDelayMs));
             }
             }
             if (lastErr) {
                 const err = lastErr?.message || String(lastErr);
-                results.push({ id, ok: false, error: err });
+                results.push({ id, ok: false, error: err, durationMs: Date.now() - stepT0 });
                 sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: err });
                 if (!continueOnError) break;
             }

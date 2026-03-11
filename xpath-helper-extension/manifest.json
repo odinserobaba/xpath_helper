@@ -3,7 +3,7 @@
   "name": "XPath Helper Pro",
   "version": "3.0.0",
   "description": "Полная генерация XPath для Angular Material",
-  "permissions": ["sidePanel", "activeTab", "scripting", "clipboardWrite", "storage"],
+  "permissions": ["sidePanel", "activeTab", "tabs", "scripting", "clipboardWrite", "storage"],
   "host_permissions": ["<all_urls>"],
   "action": {"default_title": "XPath Helper"},
   "side_panel": {"default_path": "sidepanel/sidepanel.html"},

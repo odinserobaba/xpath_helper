@@ -220,9 +220,18 @@
                                 <option value="element_exists">Элемент есть</option>
                                 <option value="text_equals">Текст равен</option>
                                 <option value="text_contains">Текст содержит</option>
+                                <option value="url_equals">URL равен</option>
+                                <option value="url_contains">URL содержит</option>
+                                <option value="url_matches">URL совпадает (regex)</option>
+                                <option value="attribute_equals">Атрибут равен</option>
+                                <option value="count_equals">Количество элементов</option>
                             </select>
+                            <label for="editorAssertAttributeName">Имя атрибута</label>
+                            <input type="text" id="editorAssertAttributeName" placeholder="href" class="hidden">
                             <label for="editorAssertExpected">Ожидаемое значение</label>
-                            <input type="text" id="editorAssertExpected" placeholder="Текст для сравнения">
+                            <input type="text" id="editorAssertExpected" placeholder="Текст, URL или число">
+                            <label class="filter-check"><input type="checkbox" id="editorAssertWaitMode"><span>Режим ожидания</span></label>
+                            <label class="filter-check"><input type="checkbox" id="editorAssertSoft"><span>Soft</span></label>
                         </div>
                         <div id="editorParamsNavigate" class="form-row hidden">
                             <label for="editorNavigateUrl">URL</label>
@@ -234,9 +243,16 @@
                                 <option value="element_exists">Элемент есть</option>
                                 <option value="text_equals">Текст равен</option>
                                 <option value="text_contains">Текст содержит</option>
+                                <option value="url_equals">URL равен</option>
+                                <option value="url_contains">URL содержит</option>
+                                <option value="url_matches">URL совпадает (regex)</option>
+                                <option value="attribute_equals">Атрибут равен</option>
+                                <option value="count_equals">Количество элементов</option>
                             </select>
+                            <label for="editorBranchAttributeName">Имя атрибута</label>
+                            <input type="text" id="editorBranchAttributeName" placeholder="href" class="hidden">
                             <label for="editorBranchExpected">Ожидаемое значение</label>
-                            <input type="text" id="editorBranchExpected" placeholder="Текст для сравнения">
+                            <input type="text" id="editorBranchExpected" placeholder="Текст, URL или число">
                             <label for="editorBranchNextId">Если да → шаг</label>
                             <select id="editorBranchNextId" class="step-next-select"></select>
                             <label for="editorBranchNextElseId">Если нет → шаг</label>
@@ -299,6 +315,7 @@
                     <div class="log-tab-actions">
                         <button type="button" id="clearLogBtn" class="btn btn-sm">Очистить</button>
                         <button type="button" id="copyLogBtn" class="btn btn-sm">Копировать</button>
+                        <button type="button" id="exportReportBtn" class="btn btn-sm" title="Экспорт отчёта (HTML/JSON)">📤 Отчёт</button>
                     </div>
                 </div>
                 <div id="executionLog" class="execution-log"></div>
@@ -369,9 +386,24 @@
                         <option value="element_exists">Элемент есть</option>
                         <option value="text_equals">Текст равен</option>
                         <option value="text_contains">Текст содержит</option>
+                        <option value="url_equals">URL равен</option>
+                        <option value="url_contains">URL содержит</option>
+                        <option value="url_matches">URL совпадает (regex)</option>
+                        <option value="attribute_equals">Атрибут равен</option>
+                        <option value="count_equals">Количество элементов</option>
                     </select>
-                    <label for="stepAssertExpected" class="setting-hint">Ожидаемое значение (для текста)</label>
-                    <input type="text" id="stepAssertExpected" placeholder="Текст для сравнения">
+                    <label for="stepAssertAttributeName" class="setting-hint" id="stepAssertAttrLabel">Имя атрибута (для attribute_equals)</label>
+                    <input type="text" id="stepAssertAttributeName" placeholder="href" class="hidden">
+                    <label for="stepAssertExpected" class="setting-hint">Ожидаемое значение</label>
+                    <input type="text" id="stepAssertExpected" placeholder="Текст, URL или число">
+                    <label class="filter-check">
+                        <input type="checkbox" id="stepAssertWaitMode" title="Ждать выполнения условия">
+                        <span>Режим ожидания</span>
+                    </label>
+                    <label class="filter-check">
+                        <input type="checkbox" id="stepAssertSoft" title="Не останавливать при ошибке">
+                        <span>Soft assertion</span>
+                    </label>
                 </div>
                 <div id="stepParamsNavigate" class="form-row hidden">
                     <label for="stepNavigateUrl">URL</label>
@@ -383,9 +415,16 @@
                         <option value="element_exists">Элемент есть</option>
                         <option value="text_equals">Текст равен</option>
                         <option value="text_contains">Текст содержит</option>
+                        <option value="url_equals">URL равен</option>
+                        <option value="url_contains">URL содержит</option>
+                        <option value="url_matches">URL совпадает (regex)</option>
+                        <option value="attribute_equals">Атрибут равен</option>
+                        <option value="count_equals">Количество элементов</option>
                     </select>
-                    <label for="stepBranchExpected" class="setting-hint">Ожидаемое значение (для текста)</label>
-                    <input type="text" id="stepBranchExpected" placeholder="Текст для сравнения">
+                    <label for="stepBranchAttributeName" class="setting-hint" id="stepBranchAttrLabel">Имя атрибута</label>
+                    <input type="text" id="stepBranchAttributeName" placeholder="href" class="hidden">
+                    <label for="stepBranchExpected" class="setting-hint">Ожидаемое значение</label>
+                    <input type="text" id="stepBranchExpected" placeholder="Текст, URL или число">
                     <label for="stepBranchNextId" class="setting-hint">Если да → шаг</label>
                     <select id="stepBranchNextId" class="step-next-select">
                         <option value="">— Следующий по порядку —</option>
@@ -408,9 +447,13 @@
                 </div>
                 <div class="form-row">
                     <label class="filter-check">
-                        <input type="checkbox" id="stepRetryOnError" title="Повторить шаг до 3 раз при ошибке">
-                        <span>Повтор при ошибке (до 3 раз)</span>
+                        <input type="checkbox" id="stepRetryOnError" title="Повторить шаг при ошибке">
+                        <span>Повтор при ошибке</span>
                     </label>
+                    <label for="stepRetryCount" class="setting-hint">Кол-во попыток</label>
+                    <input type="number" id="stepRetryCount" min="1" max="10" value="3" style="width:60px">
+                    <label for="stepRetryDelayMs" class="setting-hint">Задержка (мс)</label>
+                    <input type="number" id="stepRetryDelayMs" min="0" max="5000" value="300" style="width:70px">
                 </div>
             </div>
             <div class="modal-actions">

@@ -20,7 +20,12 @@ const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Фа
 const BRANCH_CONDITIONS = [
     { value: 'element_exists', label: 'Элемент есть' },
     { value: 'text_equals', label: 'Текст равен' },
-    { value: 'text_contains', label: 'Текст содержит' }
+    { value: 'text_contains', label: 'Текст содержит' },
+    { value: 'url_equals', label: 'URL равен' },
+    { value: 'url_contains', label: 'URL содержит' },
+    { value: 'url_matches', label: 'URL совпадает (regex)' },
+    { value: 'attribute_equals', label: 'Атрибут равен' },
+    { value: 'count_equals', label: 'Количество элементов' }
 ];
 const SEPARATOR_COLORS = ['#00d4aa', '#667eea', '#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', '#e91e63'];
 
@@ -95,11 +100,15 @@ const editorParamsAssert = $('editorParamsAssert');
 const editorParamsNavigate = $('editorParamsNavigate');
 const editorAssertCondition = $('editorAssertCondition');
 const editorAssertExpected = $('editorAssertExpected');
+const editorAssertAttributeName = $('editorAssertAttributeName');
+const editorAssertWaitMode = $('editorAssertWaitMode');
+const editorAssertSoft = $('editorAssertSoft');
 const editorNavigateUrl = $('editorNavigateUrl');
 const editorTimeoutMs = $('editorTimeoutMs');
 const editorMandatory = $('editorMandatory');
 const editorBranchCondition = $('editorBranchCondition');
 const editorBranchExpected = $('editorBranchExpected');
+const editorBranchAttributeName = $('editorBranchAttributeName');
 const editorBranchNextId = $('editorBranchNextId');
 const editorBranchNextElseId = $('editorBranchNextElseId');
 const editorParamsWaitForLoad = $('editorParamsWaitForLoad');
@@ -136,10 +145,14 @@ const stepTimeoutMs = $('stepTimeoutMs');
 const stepMandatory = $('stepMandatory');
 const stepAssertCondition = $('stepAssertCondition');
 const stepAssertExpected = $('stepAssertExpected');
+const stepAssertAttributeName = $('stepAssertAttributeName');
+const stepAssertWaitMode = $('stepAssertWaitMode');
+const stepAssertSoft = $('stepAssertSoft');
 const stepNavigateUrl = $('stepNavigateUrl');
 const stepWaitMs = $('stepWaitMs');
 const stepBranchCondition = $('stepBranchCondition');
 const stepBranchExpected = $('stepBranchExpected');
+const stepBranchAttributeName = $('stepBranchAttributeName');
 const stepBranchNextId = $('stepBranchNextId');
 const stepBranchNextElseId = $('stepBranchNextElseId');
 const stepParamsFile = $('stepParamsFile');
@@ -161,6 +174,7 @@ const listSearch = $('listSearch');
 const stopExecuteBtn = $('stopExecuteBtn');
 const executionLog = $('executionLog');
 const copyLogBtn = $('copyLogBtn');
+const exportReportBtn = $('exportReportBtn');
 const historySection = $('historySection');
 const historyList = $('historyList');
 const historyCount = $('historyCount');
@@ -168,6 +182,8 @@ const copyAllXpathBtn = $('copyAllXpath');
 const onlyUniqueMode = $('onlyUniqueMode');
 const stepDelayMsEl = $('stepDelayMs');
 const stepRetryOnError = $('stepRetryOnError');
+const stepRetryCount = $('stepRetryCount');
+const stepRetryDelayMs = $('stepRetryDelayMs');
 const stepWaitForLoad = $('stepWaitForLoad');
 const importModal = $('importModal');
 const importPreview = $('importPreview');
@@ -256,6 +272,21 @@ function getTabErrorMessage(e) {
 function showBfcacheBanner() {
     const banner = $('bfcacheBanner');
     if (banner) { show(banner); banner.classList.remove('hidden'); }
+}
+
+let lastExecutionReport = [];
+
+async function captureScreenshotOnError(tabId) {
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        if (!tab?.windowId) return null;
+        await chrome.tabs.update(tabId, { active: true });
+        await new Promise((r) => setTimeout(r, 200));
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        return dataUrl;
+    } catch (_) {
+        return null;
+    }
 }
 
 function waitForUserAction(message) {
@@ -810,6 +841,9 @@ function selectEditorStep(stepId) {
     if (editorBranchCondition) editorBranchCondition.value = step.params?.condition || 'element_exists';
     if (editorAssertCondition) editorAssertCondition.value = step.params?.condition || 'element_exists';
     if (editorAssertExpected) editorAssertExpected.value = step.params?.expectedValue || '';
+    if (editorAssertAttributeName) editorAssertAttributeName.value = step.params?.attributeName || '';
+    if (editorAssertWaitMode) editorAssertWaitMode.checked = !!step.params?.waitMode;
+    if (editorAssertSoft) editorAssertSoft.checked = !!step.params?.softAssert;
     if (editorNavigateUrl) editorNavigateUrl.value = step.params?.url || '';
     if (editorUserActionMessage) editorUserActionMessage.value = step.params?.message || '';
     if (editorBranchExpected) editorBranchExpected.value = step.params?.expectedValue || '';
@@ -818,6 +852,7 @@ function selectEditorStep(stepId) {
     if (step.action === 'branch') {
         if (editorBranchNextId) editorBranchNextId.value = step.params?.nextId || '';
         if (editorBranchNextElseId) editorBranchNextElseId.value = step.params?.nextElseId || '';
+        if (editorBranchAttributeName) editorBranchAttributeName.value = step.params?.attributeName || '';
     }
 }
 
@@ -829,7 +864,9 @@ function toggleEditorParams() {
     if (editorParamsFile) { editorParamsFile.classList.toggle('hidden', action !== 'file_upload'); editorParamsFile.style.display = action === 'file_upload' ? '' : 'none'; }
     if (editorParamsSeparator) { editorParamsSeparator.classList.toggle('hidden', action !== 'separator'); editorParamsSeparator.style.display = action === 'separator' ? '' : 'none'; }
     if (editorParamsBranch) { editorParamsBranch.classList.toggle('hidden', action !== 'branch'); editorParamsBranch.style.display = action === 'branch' ? '' : 'none'; if (action === 'branch') populateEditorBranchSelects(); }
+    if (editorBranchAttributeName) { editorBranchAttributeName.classList.toggle('hidden', action !== 'branch' || editorBranchCondition?.value !== 'attribute_equals'); editorBranchAttributeName.style.display = (action === 'branch' && editorBranchCondition?.value === 'attribute_equals') ? '' : 'none'; }
     if (editorParamsAssert) { editorParamsAssert.classList.toggle('hidden', action !== 'assert'); editorParamsAssert.style.display = action === 'assert' ? '' : 'none'; }
+    if (editorAssertAttributeName) { editorAssertAttributeName.classList.toggle('hidden', action !== 'assert' || editorAssertCondition?.value !== 'attribute_equals'); editorAssertAttributeName.style.display = (action === 'assert' && editorAssertCondition?.value === 'attribute_equals') ? '' : 'none'; }
     if (editorParamsNavigate) { editorParamsNavigate.classList.toggle('hidden', action !== 'navigate'); editorParamsNavigate.style.display = action === 'navigate' ? '' : 'none'; }
     const hideEditorWaitForLoad = action === 'separator' || action === 'wait' || action === 'user_action' || action === 'branch' || action === 'navigate';
     if (editorParamsWaitForLoad) { editorParamsWaitForLoad.classList.toggle('hidden', hideEditorWaitForLoad); editorParamsWaitForLoad.style.display = hideEditorWaitForLoad ? 'none' : ''; }
@@ -871,11 +908,15 @@ function applyEditorStep() {
     if (action === 'assert') {
         step.params.condition = editorAssertCondition?.value || 'element_exists';
         step.params.expectedValue = (editorAssertExpected?.value || '').trim();
+        if (step.params.condition === 'attribute_equals') step.params.attributeName = (editorAssertAttributeName?.value || '').trim();
+        if (editorAssertWaitMode?.checked) step.params.waitMode = true;
+        if (editorAssertSoft?.checked) step.params.softAssert = true;
     }
     if (action === 'navigate') step.params.url = (editorNavigateUrl?.value || '').trim();
     if (action === 'branch') {
         step.params.condition = editorBranchCondition?.value || 'element_exists';
         step.params.expectedValue = (editorBranchExpected?.value || '').trim();
+        if (step.params.condition === 'attribute_equals') step.params.attributeName = (editorBranchAttributeName?.value || '').trim();
         if (editorBranchNextId?.value) step.params.nextId = editorBranchNextId.value;
         else delete step.params.nextId;
         if (editorBranchNextElseId?.value) step.params.nextElseId = editorBranchNextElseId.value;
@@ -1281,6 +1322,8 @@ function showStepModal(step, insertAt) {
         delete stepFileLabel.dataset.minimalPdf;
     }
     if (stepRetryOnError) stepRetryOnError.checked = !!step?.params?.retryOnError;
+    if (stepRetryCount) stepRetryCount.value = step?.params?.retryCount ?? 3;
+    if (stepRetryDelayMs) stepRetryDelayMs.value = step?.params?.retryDelayMs ?? 300;
     if (stepWaitForLoad) stepWaitForLoad.checked = step?.params?.waitForLoad !== false;
     if (stepMandatory) stepMandatory.checked = step?.params?.mandatory !== false;
     if (stepTimeoutMs) stepTimeoutMs.value = step?.params?.timeoutMs ?? 0;
@@ -1288,12 +1331,16 @@ function showStepModal(step, insertAt) {
     if (stepBranchExpected) stepBranchExpected.value = step?.params?.expectedValue || '';
     if (stepAssertCondition) stepAssertCondition.value = step?.params?.condition || 'element_exists';
     if (stepAssertExpected) stepAssertExpected.value = step?.params?.expectedValue || '';
+    if (stepAssertAttributeName) stepAssertAttributeName.value = step?.params?.attributeName || '';
+    if (stepAssertWaitMode) stepAssertWaitMode.checked = !!step?.params?.waitMode;
+    if (stepAssertSoft) stepAssertSoft.checked = !!step?.params?.softAssert;
     if (stepNavigateUrl) stepNavigateUrl.value = step?.params?.url || '';
     if (stepUserActionMessage) stepUserActionMessage.value = step?.params?.message || '';
     toggleStepParams();
     if (step?.action === 'branch') {
         if (stepBranchNextId) stepBranchNextId.value = step?.params?.nextId || '';
         if (stepBranchNextElseId) stepBranchNextElseId.value = step?.params?.nextElseId || '';
+        if (stepBranchAttributeName) stepBranchAttributeName.value = step?.params?.attributeName || '';
     }
     stepModal.classList.remove('hidden');
     stepModal.querySelector('.modal-title').textContent = step ? 'Редактировать шаг' : 'Добавить шаг';
@@ -1315,8 +1362,10 @@ function toggleStepParams() {
     if (stepParamsUserAction) { stepParamsUserAction.classList.toggle('hidden', action !== 'user_action'); stepParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
     stepParamsBranch.classList.toggle('hidden', action !== 'branch');
     stepParamsBranch.style.display = action === 'branch' ? '' : 'none';
+    if (stepBranchAttributeName) { stepBranchAttributeName.classList.toggle('hidden', action !== 'branch' || stepBranchCondition?.value !== 'attribute_equals'); stepBranchAttributeName.style.display = (action === 'branch' && stepBranchCondition?.value === 'attribute_equals') ? '' : 'none'; }
     if (action === 'branch') populateStepNextSelects();
     if (stepParamsAssert) { stepParamsAssert.classList.toggle('hidden', action !== 'assert'); stepParamsAssert.style.display = action === 'assert' ? '' : 'none'; }
+    if (stepAssertAttributeName) { stepAssertAttributeName.classList.toggle('hidden', action !== 'assert' || stepAssertCondition?.value !== 'attribute_equals'); stepAssertAttributeName.style.display = (action === 'assert' && stepAssertCondition?.value === 'attribute_equals') ? '' : 'none'; }
     if (stepParamsNavigate) { stepParamsNavigate.classList.toggle('hidden', action !== 'navigate'); stepParamsNavigate.style.display = action === 'navigate' ? '' : 'none'; }
     stepParamsFile.classList.toggle('hidden', action !== 'file_upload');
     stepParamsFile.style.display = action === 'file_upload' ? '' : 'none';
@@ -1356,6 +1405,8 @@ function populateEditorBranchSelects() {
 }
 
 stepAction.addEventListener('change', toggleStepParams);
+if (stepAssertCondition) stepAssertCondition.addEventListener('change', toggleStepParams);
+if (stepBranchCondition) stepBranchCondition.addEventListener('change', toggleStepParams);
 
 let selectedSeparatorColor = SEPARATOR_COLORS[0];
 
@@ -1424,16 +1475,24 @@ stepModalSave.addEventListener('click', () => {
     if (action === 'assert') {
         params.condition = stepAssertCondition?.value || 'element_exists';
         params.expectedValue = (stepAssertExpected?.value || '').trim();
+        if (params.condition === 'attribute_equals') params.attributeName = (stepAssertAttributeName?.value || '').trim();
+        if (stepAssertWaitMode?.checked) params.waitMode = true;
+        if (stepAssertSoft?.checked) params.softAssert = true;
     }
     if (action === 'navigate') params.url = navUrl;
     if (action === 'user_action') params.message = (stepUserActionMessage?.value || '').trim() || 'Выполните действие и нажмите Продолжить';
     if (action === 'branch') {
         params.condition = stepBranchCondition?.value || 'element_exists';
         params.expectedValue = (stepBranchExpected?.value || '').trim();
+        if (params.condition === 'attribute_equals') params.attributeName = (stepBranchAttributeName?.value || '').trim();
         if (stepBranchNextId?.value) params.nextId = stepBranchNextId.value;
         if (stepBranchNextElseId?.value) params.nextElseId = stepBranchNextElseId.value;
     }
-    if (stepRetryOnError?.checked) params.retryOnError = true;
+    if (stepRetryOnError?.checked) {
+        params.retryOnError = true;
+        params.retryCount = Math.max(1, parseInt(stepRetryCount?.value, 10) || 3);
+        params.retryDelayMs = Math.max(0, parseInt(stepRetryDelayMs?.value, 10) || 300);
+    }
     params.waitForLoad = !!stepWaitForLoad?.checked;
     if (editingStepId) {
         const idx = executionList.findIndex((s) => s.id === editingStepId);
@@ -1635,6 +1694,8 @@ if (flowSaveBtn) {
 
 // ——— Editor tab handlers ———
 if (editorAction) editorAction.addEventListener('change', toggleEditorParams);
+if (editorAssertCondition) editorAssertCondition.addEventListener('change', toggleEditorParams);
+if (editorBranchCondition) editorBranchCondition.addEventListener('change', toggleEditorParams);
 if (editorApplyBtn) editorApplyBtn.addEventListener('click', applyEditorStep);
 if (editorValidateBtn) editorValidateBtn.addEventListener('click', () => {
     const xpath = editorXpath?.value?.trim();
@@ -1937,6 +1998,60 @@ if (copyLogBtn) copyLogBtn.addEventListener('click', () => {
     });
 });
 
+function exportReport(format) {
+    const name = (scenarioName?.value || 'report').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'report';
+    const report = lastExecutionReport;
+    if (report.length === 0) {
+        if (exportReportBtn) exportReportBtn.textContent = 'Нет отчёта';
+        setTimeout(() => { if (exportReportBtn) exportReportBtn.textContent = '📤 Отчёт'; }, 2000);
+        return;
+    }
+    const okCount = report.filter((r) => r.ok).length;
+    const failCount = report.filter((r) => !r.ok).length;
+    const totalMs = report.reduce((s, r) => s + (r.durationMs || 0), 0);
+    if (format === 'json') {
+        const data = { scenario: name, okCount, failCount, totalMs, timestamp: new Date().toISOString(), steps: report.map((r) => ({ ...r, screenshotBase64: r.screenshotBase64 ? '[base64]' : undefined })) };
+        const blob = new Blob([JSON.stringify({ ...data, steps: report }, null, 2)], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report-${name}-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } else {
+        const rows = report.map((r) => {
+            const status = r.ok ? '✓' : '✗';
+            const err = r.error ? ` — ${escapeHtml(r.error)}` : '';
+            const screenshot = r.screenshotBase64 ? `<br><img src="${r.screenshotBase64}" alt="screenshot" style="max-width:100%;max-height:300px;border:1px solid #333;">` : '';
+            return `<tr class="${r.ok ? 'ok' : 'fail'}"><td>${status}</td><td>${escapeHtml(r.step?.id || '')}</td><td>${escapeHtml(r.step?.action || '')}</td><td>${escapeHtml((r.step?.xpath || r.step?.params?.url || '').substring(0, 60))}</td><td>${r.durationMs || 0}мс</td><td>${escapeHtml(r.error || '')}${screenshot}</td></tr>`;
+        }).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Отчёт ${escapeHtml(name)}</title><style>body{font-family:sans-serif;background:#1a1a2e;color:#eee;padding:20px;}.ok{color:#2ecc71}.fail{color:#e74c3c}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:8px;text-align:left}th{background:#16213e}</style></head><body><h1>Отчёт: ${escapeHtml(name)}</h1><p>Успешно: ${okCount} | Ошибок: ${failCount} | Время: ${totalMs}мс</p><table><thead><tr><th>Статус</th><th>ID</th><th>Действие</th><th>XPath/URL</th><th>Время</th><th>Ошибка</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report-${name}-${Date.now()}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+    if (exportReportBtn) {
+        exportReportBtn.textContent = '✓ Скачано';
+        setTimeout(() => { exportReportBtn.textContent = '📤 Отчёт'; }, 1500);
+    }
+}
+
+if (exportReportBtn) {
+    exportReportBtn.addEventListener('click', () => {
+        const report = lastExecutionReport;
+        if (report.length === 0) {
+            exportReportBtn.textContent = 'Нет отчёта';
+            setTimeout(() => { exportReportBtn.textContent = '📤 Отчёт'; }, 2000);
+            return;
+        }
+        exportReport('html');
+    });
+}
+
 const clearLogBtn = $('clearLogBtn');
 if (clearLogBtn) clearLogBtn.addEventListener('click', () => {
     if (executionLog) executionLog.textContent = '';
@@ -1971,6 +2086,8 @@ async function runExecutionWithBranching(tabId, fromStepId) {
     let okCount = 0;
     const visited = new Set();
     stopExecutionRequested = false;
+    lastExecutionReport = [];
+    const reportStart = Date.now();
 
     while (currentIdx >= 0 && currentIdx < executionList.length && !stopExecutionRequested) {
         const step = executionList[currentIdx];
@@ -1989,19 +2106,23 @@ async function runExecutionWithBranching(tabId, fromStepId) {
         if (stepDelay > 0 && okCount > 0) await new Promise((r) => setTimeout(r, stepDelay));
         try {
             if (step.action === 'user_action') {
+                const t0 = Date.now();
                 appendExecutionLog(`⏸ ${step.id}: ожидание действий пользователя`);
                 await waitForUserAction(step.params?.message || 'Выполните действие (подпись, выбор сертификата и т.д.) и нажмите Продолжить');
                 okCount++;
                 setStepStatus(step.id, 'ok', '');
-                appendExecutionLog(`✓ ${step.id}`);
+                appendExecutionLog(`✓ ${step.id} (${Date.now() - t0}мс)`);
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
                 currentIdx++;
                 continue;
             }
             if (step.action === 'navigate') {
+                const t0 = Date.now();
                 const url = (step.params?.url || '').trim();
                 if (!url) {
                     setStepStatus(step.id, 'error', 'URL не указан');
                     appendExecutionLog(`✗ ${step.id}: URL не указан`);
+                    lastExecutionReport.push({ stepId: step.id, step, ok: false, error: 'URL не указан', durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
                     if (step.params?.mandatory !== false && !continueOnError) break;
                     currentIdx++;
                     continue;
@@ -2025,20 +2146,25 @@ async function runExecutionWithBranching(tabId, fromStepId) {
                 });
                 okCount++;
                 setStepStatus(step.id, 'ok', '');
-                appendExecutionLog(`✓ ${step.id} → ${url}`);
+                appendExecutionLog(`✓ ${step.id} → ${url} (${Date.now() - t0}мс)`);
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
                 currentIdx++;
                 await new Promise((r) => setTimeout(r, 1500)); // даём content script загрузиться на новой странице
                 continue;
             }
             const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
+            const t0 = Date.now();
             const resp = await sendToContentAndWait(tabId, {
                 action: 'executeStep',
                 step,
                 selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout
             }, stepTimeout);
             if (!resp?.ok) {
-                setStepStatus(step.id, 'error', resp?.error || 'Ошибка');
-                appendExecutionLog(`✗ ${step.id}: ${resp?.error || 'Ошибка'}`);
+                const errMsg = resp?.error || 'Ошибка';
+                setStepStatus(step.id, 'error', errMsg);
+                appendExecutionLog(`✗ ${step.id}: ${errMsg} (${Date.now() - t0}мс)`);
+                const screenshot = await captureScreenshotOnError(tabId);
+                lastExecutionReport.push({ stepId: step.id, step, ok: false, error: errMsg, durationMs: Date.now() - t0, screenshotBase64: screenshot, timestamp: new Date().toISOString() });
                 const mandatory = step.params?.mandatory !== false;
                 if (mandatory && !continueOnError) break;
                 currentIdx++;
@@ -2046,7 +2172,8 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             }
             okCount++;
             setStepStatus(step.id, 'ok', '');
-            appendExecutionLog(`✓ ${step.id}`);
+            appendExecutionLog(`✓ ${step.id} (${Date.now() - t0}мс)`);
+            lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
             let nextId = null;
             if (step.action === 'branch' && (step.params?.nextId || step.params?.nextElseId)) {
                 nextId = resp.conditionResult ? step.params.nextId : step.params.nextElseId;
@@ -2059,8 +2186,11 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             }
         } catch (err) {
             const msg = getTabErrorMessage(err);
+            const durationMs = typeof t0 !== 'undefined' ? Date.now() - t0 : 0;
             setStepStatus(step.id, 'error', msg);
-            appendExecutionLog(`✗ ${step.id}: ${msg}`);
+            appendExecutionLog(`✗ ${step.id}: ${msg} (${durationMs}мс)`);
+            const screenshot = await captureScreenshotOnError(tabId);
+            lastExecutionReport.push({ stepId: step.id, step, ok: false, error: msg, durationMs, screenshotBase64: screenshot, timestamp: new Date().toISOString() });
             if (isBfcacheError(err)) showBfcacheBanner();
             if (!continueOnError) break;
             currentIdx++;
@@ -2069,7 +2199,8 @@ async function runExecutionWithBranching(tabId, fromStepId) {
     currentExecutingStepId = null;
     setExecutionUIRunning(false);
     renderExecutionList();
-    appendExecutionLog(stopExecutionRequested ? 'Остановлено' : `Готово: ${okCount} шагов`);
+    const totalDuration = Date.now() - reportStart;
+    appendExecutionLog(stopExecutionRequested ? 'Остановлено' : `Готово: ${okCount} шагов (всего ${totalDuration}мс)`);
     executeListBtn.textContent = `✓ ${okCount}`;
     setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
 }
@@ -2095,26 +2226,37 @@ function runExecutionFromStep(fromStepId) {
         currentExecutingStepId = stepsToRun[0]?.id || null;
         setExecutionUIRunning(true);
         renderExecutionList();
+        lastExecutionReport = [];
+        const batchStart = Date.now();
         sendToContentAndWait(tab.id, {
             action: 'executeList',
             steps: stepsToRun,
             continueOnError,
             stepDelayMs: stepDelay
-        }).then((resp) => {
+        }).then(async (resp) => {
             const results = resp?.results || [];
             let okCount = 0;
-            results.forEach((r) => {
-                if (!r?.id) return;
+            let firstFailedStep = null;
+            for (const r of results) {
+                if (!r?.id) continue;
+                const step = stepsToRun.find((s) => s.id === r.id);
+                lastExecutionReport.push({ stepId: r.id, step, ok: r.ok, error: r.error, durationMs: r.durationMs || 0, timestamp: new Date().toISOString() });
                 if (r.ok) {
                     okCount++;
                     setStepStatus(r.id, 'ok', '');
-                    appendExecutionLog(`✓ ${r.id}`);
+                    appendExecutionLog(`✓ ${r.id}${r.durationMs ? ` (${r.durationMs}мс)` : ''}`);
                 } else {
+                    if (!firstFailedStep) firstFailedStep = r;
                     setStepStatus(r.id, 'error', r.error || 'Ошибка');
-                    appendExecutionLog(`✗ ${r.id}: ${r.error || 'Ошибка'}`);
+                    appendExecutionLog(`✗ ${r.id}: ${r.error || 'Ошибка'}${r.durationMs ? ` (${r.durationMs}мс)` : ''}`);
                 }
-            });
-            appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length}`);
+            }
+            if (firstFailedStep) {
+                const screenshot = await captureScreenshotOnError(tab.id);
+                const entry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
+                if (entry) entry.screenshotBase64 = screenshot;
+            }
+            appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length} (всего ${Date.now() - batchStart}мс)`);
             renderExecutionList();
             setExecutionUIRunning(false);
             executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
@@ -2170,26 +2312,37 @@ executeListBtn.addEventListener('click', () => {
         currentExecutingStepId = stepsToRun[0]?.id || null;
         setExecutionUIRunning(true);
         renderExecutionList();
+        lastExecutionReport = [];
+        const batchStart = Date.now();
         sendToContentAndWait(tab.id, {
             action: 'executeList',
             steps: stepsToRun,
             continueOnError,
             stepDelayMs: stepDelay
-        }).then((resp) => {
+        }).then(async (resp) => {
             const results = resp?.results || [];
             let okCount = 0;
-            results.forEach((r) => {
-                if (!r?.id) return;
+            let firstFailedStep = null;
+            for (const r of results) {
+                if (!r?.id) continue;
+                const step = stepsToRun.find((s) => s.id === r.id);
+                lastExecutionReport.push({ stepId: r.id, step, ok: r.ok, error: r.error, durationMs: r.durationMs || 0, timestamp: new Date().toISOString() });
                 if (r.ok) {
                     okCount++;
                     setStepStatus(r.id, 'ok', '');
-                    appendExecutionLog(`✓ ${r.id}`);
+                    appendExecutionLog(`✓ ${r.id}${r.durationMs ? ` (${r.durationMs}мс)` : ''}`);
                 } else {
+                    if (!firstFailedStep) firstFailedStep = r;
                     setStepStatus(r.id, 'error', r.error || 'Ошибка');
-                    appendExecutionLog(`✗ ${r.id}: ${r.error || 'Ошибка'}`);
+                    appendExecutionLog(`✗ ${r.id}: ${r.error || 'Ошибка'}${r.durationMs ? ` (${r.durationMs}мс)` : ''}`);
                 }
-            });
-            appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length}`);
+            }
+            if (firstFailedStep) {
+                const screenshot = await captureScreenshotOnError(tab.id);
+                const entry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
+                if (entry) entry.screenshotBase64 = screenshot;
+            }
+            appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length} (всего ${Date.now() - batchStart}мс)`);
             renderExecutionList();
             setExecutionUIRunning(false);
             executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
