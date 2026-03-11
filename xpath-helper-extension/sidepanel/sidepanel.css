@@ -212,6 +212,18 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 .btn-save { background: var(--accent); color: #000; font-weight: bold; }
 
+.env-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.env-tab { padding: 6px 12px; background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 4px; color: var(--text2); cursor: pointer; font-size: 12px; }
+.env-tab:hover { background: #2a2a4a; color: var(--text); }
+.env-tab.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.env-vars-editor { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; max-height: 200px; overflow-y: auto; }
+.env-var-row { display: flex; gap: 8px; align-items: center; }
+.env-var-row input.env-var-key { flex: 0 0 100px; }
+.env-var-row input.env-var-val { flex: 1; min-width: 0; }
+.env-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.fragile-xpath-warn { color: var(--warning); font-size: 12px; margin-left: 4px; cursor: help; }
+.report-path-input { width: 120px; padding: 4px 8px; font-size: 11px; background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 4px; color: var(--text); }
+
 /* User action overlay (pause for user) */
 .user-action-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
 .user-action-overlay.hidden { display: none !important; }

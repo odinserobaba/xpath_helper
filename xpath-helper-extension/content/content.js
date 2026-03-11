@@ -185,6 +185,23 @@ function init() {
                 }
                 return false;
             }
+            if (request.action === 'highlightXpath') {
+                try {
+                    const r = document.evaluate(request.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                    const el = r.singleNodeValue;
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const orig = el.style.outline;
+                        el.style.outline = '4px solid #e74c3c';
+                        el.style.boxShadow = '0 0 20px rgba(231,76,60,0.6)';
+                        setTimeout(() => { el.style.outline = orig; el.style.boxShadow = ''; }, 5000);
+                    }
+                    sendResponse({ ok: true, found: !!el });
+                } catch (e) {
+                    sendResponse({ ok: false, error: e?.message });
+                }
+                return false;
+            }
         });
     } catch (e) {
         if (isContextInvalidatedError(e)) return;
@@ -318,6 +335,16 @@ function init() {
                     if (step.action === 'wait') {
                     const delayMs = step.params?.delayMs ?? 500;
                     await new Promise((r) => setTimeout(r, Math.max(0, delayMs)));
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
+                    sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
+                    lastErr = null;
+                    break;
+                }
+
+                if (step.action === 'wait_for_element') {
+                    const timeout = step.params?.timeoutMs ?? baseTimeout;
+                    const el = await findElementByXPath(step.xpath, timeout);
+                    if (!el) throw new Error('Элемент не появился за ' + timeout + 'мс: ' + (step.xpath || '').substring(0, 80));
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;

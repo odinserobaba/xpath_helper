@@ -7,10 +7,13 @@
 ## Возможности
 
 - **Инспектор** — наведение с зажатым **Ctrl** или **Alt+X**: генерация нескольких вариантов XPath, проверка уникальности, фильтр по типу (ID, атрибуты, классы, текст, Angular Material, контекст).
-- **Список на выполнение** — добавление шагов с действиями: клик, ввод текста, загрузка файла (в т.ч. с содержимым), пауза. Редактирование, удаление, изменение порядка. Выполнение всего списка или одного шага с подсветкой текущего.
-- **Экспорт в JSON** — сохранение сценария в формате для автотестов (обязательный номер шага `step`, xpath, action, params).
-- **Загрузка шагов** — импорт сохранённого JSON (поддержка порядка по полю `step`).
-- **Настройки** — задержка наведения (debounce), время ожидания появления селектора при выполнении.
+- **Список на выполнение** — добавление шагов с действиями: клик, ввод, загрузка файла, пауза, пауза до элемента, ветвление, assert, переход, действие пользователя. Редактирование, удаление, изменение порядка. Выполнение всего списка или одного шага с подсветкой текущего.
+- **Окружения и переменные** — dev/stage/prod с переменными `{{baseUrl}}`, `{{login}}` и т.п. в шагах.
+- **Data-driven** — импорт CSV/JSON с данными, прогон сценария для каждой строки.
+- **Экспорт в JSON** — сохранение сценария в формате для автотестов.
+- **Экспорт в Python Playwright** — тесты с pytest fixtures, conftest.py, `@pytest.mark.parametrize` и exit code 0/1.
+- **Отчёт** — экспорт HTML/JSON с именем файла из настроек.
+- **Настройки** — задержка наведения, ожидание селектора, пауза между шагами.
 
 ---
 
@@ -69,6 +72,242 @@
 
 ---
 
+## Data-driven: прогон по строкам данных
+
+Сценарий можно выполнить для каждой строки из CSV или JSON. Переменные `{{login}}`, `{{baseUrl}}` и т.п. подставляются из данных строки.
+
+### Кнопка «📊 Данные»
+
+Загружает файл с данными:
+
+- **CSV** — первая строка = заголовки (ключи переменных), остальные строки = данные.
+- **JSON** — массив объектов или объект с полями `data` / `rows`.
+
+**Пример CSV (`users.csv`):**
+
+```csv
+login,password,baseUrl
+alice,secret123,https://dev.example.com
+bob,pass456,https://dev.example.com
+admin,admin789,https://stage.example.com
+```
+
+**Пример JSON (`users.json`):**
+
+```json
+[
+  { "login": "alice", "password": "secret123", "baseUrl": "https://dev.example.com" },
+  { "login": "bob", "password": "pass456", "baseUrl": "https://dev.example.com" },
+  { "login": "admin", "password": "admin789", "baseUrl": "https://stage.example.com" }
+]
+```
+
+**Альтернативный формат JSON (с `data` или `rows`):**
+
+```json
+{
+  "data": [
+    { "login": "alice", "password": "secret123" },
+    { "login": "bob", "password": "pass456" }
+  ]
+}
+```
+
+### Кнопка «▶ Data-driven»
+
+Выполняет сценарий для каждой строки данных. Переменные берутся из строки и объединяются с переменными окружения (dev/stage/prod).
+
+**Пример:**
+
+1. Шаги: переход на `{{baseUrl}}/login`, ввод `{{login}}` в поле логина, ввод `{{password}}` в поле пароля, клик по кнопке.
+2. В «Данные» загружаете `users.csv` или `users.json`.
+3. Нажимаете «▶ Data-driven».
+
+Сценарий выполнится 3 раза (для alice, bob, admin) с подстановкой переменных из каждой строки.
+
+---
+
+## Окружения и переменные
+
+Переменные задаются в модалке «⚙ Переменные» для окружений **dev**, **stage**, **prod**.
+
+**Пример переменных для dev:**
+
+| Ключ | Значение |
+|------|----------|
+| baseUrl | https://dev.example.com |
+| login | test_user |
+| apiUrl | https://api-dev.example.com |
+
+В шагах: `{{baseUrl}}/login`, `{{login}}`, `{{apiUrl}}/v1`.
+
+При Data-driven переменные из строки данных перекрывают переменные окружения.
+
+---
+
+## Экспорт в Python Playwright (pytest)
+
+### Pytest fixtures и conftest.py
+
+При экспорте скачиваются два файла:
+
+- **conftest.py** — фикстура `page` с браузером и контекстом.
+- **test_&lt;name&gt;.py** — тест, использующий фикстуру `page`.
+
+**conftest.py:**
+
+```python
+"""
+XPath Helper Pro — conftest.py (pytest fixtures)
+Положите в ту же папку, что и тесты.
+"""
+
+import pytest
+from playwright.sync_api import sync_playwright
+
+
+@pytest.fixture(scope="function")
+def page():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path="/opt/chromium-gost/chromium-gost",
+            args=[
+                "--remote-debugging-port=9222",
+                "--user-data-dir=/home/nuanred/.config/chromium",
+            ],
+            headless=False,
+        )
+        context = browser.new_context()
+        pg = context.new_page()
+        try:
+            yield pg
+        finally:
+            browser.close()
+```
+
+**test_login.py (пример):**
+
+```python
+"""
+XPath Helper Pro — экспорт в Python Playwright
+Запуск: pytest test_login.py -v
+Или: python test_login.py
+Exit code: 0 при успехе, 1 при ошибке.
+"""
+
+import sys
+import pytest
+from playwright.sync_api import sync_playwright
+
+
+@pytest.fixture
+def page():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(...)
+        context = browser.new_context()
+        pg = context.new_page()
+        try:
+            yield pg
+        finally:
+            browser.close()
+
+
+def test_login(page):
+    page.goto("https://example.com/login")
+    page.locator("xpath=//input[@name='email']").fill("user@example.com")
+    page.locator("xpath=//input[@name='password']").fill("secret")
+    page.locator("xpath=//button[@type='submit']").click()
+
+
+if __name__ == "__main__":
+    exit_code = pytest.main([__file__, "-v", "--tb=short"])
+    sys.exit(exit_code)
+```
+
+### Параметризация @pytest.mark.parametrize (Data-driven)
+
+Если загружены данные (Data-driven), экспорт добавляет `@pytest.mark.parametrize` и функцию `_sub()` для подстановки `{{var}}`.
+
+**Пример:**
+
+```python
+import sys
+import pytest
+from playwright.sync_api import sync_playwright
+
+DATA_ROWS = [
+    {"login": "alice", "password": "secret123", "baseUrl": "https://dev.example.com"},
+    {"login": "bob", "password": "pass456", "baseUrl": "https://dev.example.com"},
+]
+
+def _sub(s, data):
+    if not s: return ""
+    for k, v in data.items():
+        s = s.replace("{{" + k + "}}", str(v))
+    return s
+
+@pytest.fixture
+def page():
+    # ... (как выше)
+
+@pytest.mark.parametrize("data", DATA_ROWS, ids=[f"row_{i+1}" for i in range(len(DATA_ROWS))])
+def test_login(page, data):
+    page.goto(_sub("{{baseUrl}}/login", data))
+    page.locator("xpath=//input[@name='email']").fill(_sub("{{login}}", data))
+    page.locator("xpath=//input[@name='password']").fill(_sub("{{password}}", data))
+    page.locator("xpath=//button[@type='submit']").click()
+
+
+if __name__ == "__main__":
+    exit_code = pytest.main([__file__, "-v", "--tb=short"])
+    sys.exit(exit_code)
+```
+
+### Exit code 0/1 в Python
+
+Запуск через `pytest.main()` возвращает код выхода:
+
+- **0** — все тесты пройдены.
+- **1** — есть ошибки или провалы.
+
+**Использование в CI:**
+
+```bash
+python test_login.py
+echo $?  # 0 или 1
+```
+
+```bash
+pytest test_login.py -v
+echo $?  # 0 или 1
+```
+
+```yaml
+# Пример для GitHub Actions
+- name: Run tests
+  run: pytest tests/ -v --tb=short
+  # При fail pipeline завершится с ошибкой
+```
+
+---
+
+## Отчёт в файл
+
+Вкладка **«Лог»** содержит поле «Имя файла отчёта» (по умолчанию `report.html`).
+
+- При экспорте отчёта (кнопка «📤 Отчёт») используется указанное имя.
+- Значение сохраняется в storage и восстанавливается при следующем открытии.
+
+**Примеры:**
+
+- `report.html` — HTML-отчёт с таблицей шагов.
+- `report-2024-03-06.html` — отчёт с датой.
+- `reports/smoke.html` — путь/имя (браузер скачает файл с этим именем).
+
+Для JSON-отчёта расширение заменяется на `.json` (например, `report.html` → `report.json`).
+
+---
+
 ## Структура проекта
 
 ```
@@ -92,9 +331,17 @@ xpath-helper-extension/
 
 ---
 
+## Дополнительные возможности
+
+- **Подсветка при ошибке** — при падении шага элемент подсвечивается красной рамкой.
+- **Копирование XPath при ошибке** — кнопка 📋 у упавших шагов для копирования XPath/URL.
+- **Предупреждение о хрупких XPath** — пометка XPath с `//div[1]`, `position()` и т.п.
+
+---
+
 ## Возможные улучшения
 
-Идеи по доработке (несколько сценариев, шаблоны для Playwright/Cypress, скриншоты, ограничение прав и др.) собраны в [IMPROVEMENTS.md](IMPROVEMENTS.md).
+Идеи по доработке (headless-режим, pytest-html отчёты, ограничение прав и др.) собраны в [IMPROVEMENTS.md](IMPROVEMENTS.md).
 
 ---
 

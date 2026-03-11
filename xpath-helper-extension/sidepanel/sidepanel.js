@@ -9,6 +9,11 @@ const STORAGE_KEY_ONLY_UNIQUE = 'xpath-helper-only-unique';
 const STORAGE_KEY_SCENARIOS = 'xpath-helper-scenarios';
 const STORAGE_KEY_HISTORY = 'xpath-helper-element-history';
 const STORAGE_KEY_STOP_ON_ERROR = 'xpath-helper-stop-on-error';
+const STORAGE_KEY_VARIABLES = 'xpath-helper-variables';
+const STORAGE_KEY_ENVIRONMENTS = 'xpath-helper-environments';
+const STORAGE_KEY_CURRENT_ENV = 'xpath-helper-current-env';
+const STORAGE_KEY_REPORT_PATH = 'xpath-helper-report-path';
+const STORAGE_KEY_DATA_ROWS = 'xpath-helper-data-rows';
 const DEBOUNCE_DEFAULT = 120;
 const SELECTOR_TIMEOUT_DEFAULT = 5000;
 const STEP_DELAY_DEFAULT = 100;
@@ -16,7 +21,7 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя' };
+const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя', wait_for_element: 'Ждать элемент' };
 const BRANCH_CONDITIONS = [
     { value: 'element_exists', label: 'Элемент есть' },
     { value: 'text_equals', label: 'Текст равен' },
@@ -175,6 +180,10 @@ const stopExecuteBtn = $('stopExecuteBtn');
 const executionLog = $('executionLog');
 const copyLogBtn = $('copyLogBtn');
 const exportReportBtn = $('exportReportBtn');
+const reportPathInput = $('reportPathInput');
+const importDataBtn = $('importDataBtn');
+const importDataInput = $('importDataInput');
+const executeDataDrivenBtn = $('executeDataDrivenBtn');
 const historySection = $('historySection');
 const historyList = $('historyList');
 const historyCount = $('historyCount');
@@ -192,6 +201,50 @@ const importAppend = $('importAppend');
 const importCancel = $('importCancel');
 const contextInvalidatedBanner = $('contextInvalidatedBanner');
 const reloadTabBtn = $('reloadTabBtn');
+const envSelect = $('envSelect');
+const envEditBtn = $('envEditBtn');
+const envModal = $('envModal');
+const envVarsEditor = $('envVarsEditor');
+const envAddVarBtn = $('envAddVarBtn');
+const envModalSave = $('envModalSave');
+const envModalCancel = $('envModalCancel');
+
+let environments = { dev: { baseUrl: '' }, stage: { baseUrl: '' }, prod: { baseUrl: '' } };
+let currentEnv = '';
+
+function replaceVariables(str, vars) {
+    if (typeof str !== 'string') return str;
+    return str.replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] != null ? String(vars[key]) : '{{' + key + '}}'));
+}
+
+function replaceVariablesInStep(step, vars) {
+    if (!step || !vars || Object.keys(vars).length === 0) return step;
+    const s = { ...step, xpath: replaceVariables(step.xpath, vars), params: step.params ? { ...step.params } : {} };
+    if (s.params.url) s.params.url = replaceVariables(s.params.url, vars);
+    if (s.params.value) s.params.value = replaceVariables(s.params.value, vars);
+    if (s.params.expectedValue) s.params.expectedValue = replaceVariables(s.params.expectedValue, vars);
+    if (s.params.message) s.params.message = replaceVariables(s.params.message, vars);
+    return s;
+}
+
+function getCurrentVariables(rowData = null) {
+    const envVars = currentEnv && environments[currentEnv] ? { ...environments[currentEnv] } : {};
+    return rowData ? { ...envVars, ...rowData } : envVars;
+}
+
+function isFragileXPath(xpath) {
+    if (!xpath || typeof xpath !== 'string') return false;
+    const s = xpath.trim();
+    return /\[\s*1\s*\]/.test(s) || /position\s*\(\s*\)\s*=\s*1/.test(s) || /position\s*\(\s*\)\s*<\s*2/.test(s) || /last\s*\(\s*\)\s*-\s*1/.test(s) || /\/\w+\[\d+\](\/\w+\[\d+\])+/.test(s);
+}
+
+function highlightElementOnError(tabId, step) {
+    const xpath = step?.xpath?.trim();
+    if (!xpath || step?.action === 'separator' || step?.action === 'navigate' || step?.action === 'user_action') return;
+    try {
+        chrome.tabs.sendMessage(tabId, { action: 'highlightXpath', xpath }, () => { if (chrome.runtime.lastError) {} });
+    } catch (_) {}
+}
 
 /** Группы типов для фильтра: ключ — префикс type, значение — подпись */
 const TYPE_GROUPS = [
@@ -235,6 +288,7 @@ let onlyUniqueModeVal = false;
 let stepDelayMsVal = STEP_DELAY_DEFAULT;
 /** Сценарии { id, name, steps } */
 let scenarios = [];
+let dataRows = [];
 let currentScenarioId = null;
 /** Ожидающий импорт (для модалки) */
 let pendingImportData = null;
@@ -252,8 +306,8 @@ function setStepStatus(id, state, message) {
 function show(el) { if (el) { el.classList.remove('hidden'); el.style.display = ''; } }
 function hide(el) { if (el) { el.classList.add('hidden'); el.style.display = 'none'; } }
 function setExecutionUIRunning(running) {
-    if (running) { hide(executeListBtn); show(stopExecuteBtn); hide(flowExecuteBtn); show(flowStopBtn); }
-    else { show(executeListBtn); hide(stopExecuteBtn); show(flowExecuteBtn); hide(flowStopBtn); }
+    if (running) { hide(executeListBtn); hide(executeDataDrivenBtn); show(stopExecuteBtn); hide(flowExecuteBtn); show(flowStopBtn); }
+    else { show(executeListBtn); show(executeDataDrivenBtn); hide(stopExecuteBtn); show(flowExecuteBtn); hide(flowStopBtn); }
 }
 
 /** Ошибка bfcache / закрытый канал: страница в кэше или навигация прервала ответ */
@@ -805,6 +859,7 @@ function renderEditorStepList() {
         let preview = step.xpath || '—';
         if (step.action === 'input' && step.params?.value) preview += ` → "${step.params.value.substring(0, 20)}${step.params.value.length > 20 ? '…' : ''}"`;
         else if (step.action === 'wait') preview += ` (${step.params?.delayMs ?? 500} мс)`;
+        else if (step.action === 'wait_for_element') preview += ` (до ${step.params?.timeoutMs ?? 5000}мс)`;
         else if (step.action === 'branch' || step.action === 'assert') preview += ` [${BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?'}]`;
         else if (step.action === 'navigate') preview = step.params?.url || '—';
         else if (step.action === 'user_action') preview = (step.params?.message || 'Ожидание действий').substring(0, 40);
@@ -956,11 +1011,106 @@ function highlightElementOnPage(xpath) {
     });
 }
 
+// ——— Environments & variables ———
+function loadEnvironments() {
+    chrome.storage.local.get([STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV], (data) => {
+        if (data[STORAGE_KEY_ENVIRONMENTS]) {
+            environments = { ...{ dev: {}, stage: {}, prod: {} }, ...data[STORAGE_KEY_ENVIRONMENTS] };
+        }
+        currentEnv = data[STORAGE_KEY_CURRENT_ENV] || '';
+        if (envSelect) {
+            envSelect.value = currentEnv;
+        }
+    });
+}
+
+function saveEnvironments() {
+    chrome.storage.local.set({
+        [STORAGE_KEY_ENVIRONMENTS]: environments,
+        [STORAGE_KEY_CURRENT_ENV]: currentEnv
+    });
+}
+
+let envModalActiveEnv = 'dev';
+function openEnvModal() {
+    if (!envModal) return;
+    envModalActiveEnv = currentEnv || 'dev';
+    envModal.querySelectorAll('.env-tab').forEach((t) => {
+        t.classList.toggle('active', t.dataset.env === envModalActiveEnv);
+    });
+    renderEnvVarsEditor(envModalActiveEnv);
+    envModal.classList.remove('hidden');
+}
+if (envModal) {
+    envModal.addEventListener('click', (e) => {
+        const t = e.target.closest('.env-tab');
+        if (!t) return;
+        envModalActiveEnv = t.dataset.env;
+        envModal.querySelectorAll('.env-tab').forEach((tb) => tb.classList.toggle('active', tb.dataset.env === envModalActiveEnv));
+        renderEnvVarsEditor(envModalActiveEnv);
+    });
+}
+
+function renderEnvVarsEditor(env) {
+    if (!envVarsEditor) return;
+    const vars = environments[env] || {};
+    const keys = Object.keys(vars);
+    envVarsEditor.innerHTML = keys.map((k) => `
+        <div class="env-var-row" data-key="${escapeHtml(k)}">
+            <input type="text" class="env-var-key" value="${escapeHtml(k)}" placeholder="baseUrl">
+            <input type="text" class="env-var-val" value="${escapeHtml(String(vars[k]))}" placeholder="https://dev.example.com">
+            <button type="button" class="btn btn-icon env-var-del" title="Удалить">✕</button>
+        </div>
+    `).join('');
+    envVarsEditor.querySelectorAll('.env-var-row').forEach((row) => {
+        const keyInp = row.querySelector('.env-var-key');
+        const valInp = row.querySelector('.env-var-val');
+        const delBtn = row.querySelector('.env-var-del');
+        keyInp.addEventListener('change', () => {
+            const old = row.dataset.key;
+            const n = keyInp.value.trim();
+            if (n && n !== old) {
+                delete vars[old];
+                vars[n] = valInp.value;
+                row.dataset.key = n;
+            }
+        });
+        valInp.addEventListener('change', () => { vars[row.dataset.key] = valInp.value; });
+        delBtn.addEventListener('click', () => {
+            delete vars[row.dataset.key];
+            row.remove();
+        });
+    });
+}
+
+function closeEnvModal(save) {
+    if (!envModal) return;
+    if (save) {
+        const env = envModalActiveEnv || envModal.querySelector('.env-tab.active')?.dataset.env || 'dev';
+        const vars = {};
+        envVarsEditor.querySelectorAll('.env-var-row').forEach((row) => {
+            const k = (row.querySelector('.env-var-key')?.value || '').trim();
+            const v = row.querySelector('.env-var-val')?.value ?? '';
+            if (k) vars[k] = v;
+        });
+        environments[env] = vars;
+        saveEnvironments();
+    }
+    envModal.classList.add('hidden');
+}
+
 // ——— Execution list: load, save, render ———
 function loadExecutionList() {
-    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS], (data) => {
+    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH], (data) => {
         executionList = Array.isArray(data[STORAGE_KEY_EXECUTION_LIST]) ? data[STORAGE_KEY_EXECUTION_LIST] : [];
         scenarios = Array.isArray(data[STORAGE_KEY_SCENARIOS]) ? data[STORAGE_KEY_SCENARIOS] : [];
+        if (data[STORAGE_KEY_ENVIRONMENTS]) {
+            environments = { ...{ dev: {}, stage: {}, prod: {} }, ...data[STORAGE_KEY_ENVIRONMENTS] };
+        }
+        currentEnv = data[STORAGE_KEY_CURRENT_ENV] || '';
+        dataRows = Array.isArray(data[STORAGE_KEY_DATA_ROWS]) ? data[STORAGE_KEY_DATA_ROWS] : [];
+        if (envSelect) envSelect.value = currentEnv;
+        if (reportPathInput) reportPathInput.value = data[STORAGE_KEY_REPORT_PATH] || 'report.html';
         renderScenarioSelect();
         renderExecutionList();
         renderEditorStepList();
@@ -989,6 +1139,27 @@ function saveExecutionList() {
         renderScenarioSelect();
     }
 }
+
+if (envSelect) {
+    envSelect.addEventListener('change', () => {
+        currentEnv = envSelect.value || '';
+        chrome.storage.local.set({ [STORAGE_KEY_CURRENT_ENV]: currentEnv });
+    });
+}
+if (envEditBtn) {
+    envEditBtn.addEventListener('click', openEnvModal);
+}
+if (envAddVarBtn) {
+    envAddVarBtn.addEventListener('click', () => {
+        const env = envModalActiveEnv || 'dev';
+        if (!environments[env]) environments[env] = {};
+        const k = 'var' + (Object.keys(environments[env]).length + 1);
+        environments[env][k] = '';
+        renderEnvVarsEditor(env);
+    });
+}
+if (envModalSave) envModalSave.addEventListener('click', () => closeEnvModal(true));
+if (envModalCancel) envModalCancel.addEventListener('click', () => closeEnvModal(false));
 
 if (scenarioSelect) {
     scenarioSelect.addEventListener('change', () => {
@@ -1089,11 +1260,12 @@ function renderExecutionList() {
         } else {
             const s = stepRunStatus[step.id];
             const statusBadge = s?.state
-                ? `<span class="execution-item-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>`
+                ? `<span class="execution-item-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>${s?.state === 'error' ? `<button type="button" class="btn-icon btn-copy-xpath" data-step-id="${escapeHtml(step.id)}" title="Копировать XPath/URL">📋</button>` : ''}`
                 : '';
             let paramsText = '';
             if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
             else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
+            else if (step.action === 'wait_for_element') paramsText = `до ${step.params?.timeoutMs ?? 5000}мс`;
             else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
             else if (step.action === 'branch' || step.action === 'assert') {
                 const c = BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?';
@@ -1102,11 +1274,12 @@ function renderExecutionList() {
             else if (step.action === 'navigate') paramsText = escapeHtml((step.params?.url || '').substring(0, 40));
             else if (step.action === 'user_action') paramsText = escapeHtml((step.params?.message || 'Ожидание действий').substring(0, 40));
             const listDisplayText = step.action === 'navigate' ? (step.params?.url || '—') : (step.action === 'user_action' ? (step.params?.message || '—') : step.xpath);
+            const fragileWarn = (step.action !== 'separator' && step.action !== 'navigate' && step.action !== 'user_action' && step.xpath && isFragileXPath(step.xpath)) ? '<span class="fragile-xpath-warn" title="Хрупкий XPath (//div[1], position() и т.п.)">⚠</span>' : '';
             li.innerHTML = `
                 <div class="execution-item-header">
                     ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
                     <span class="execution-item-idx">${displayIdx + 1}</span>
-                    <span class="execution-item-xpath" title="${escapeHtml(listDisplayText)}">${escapeHtml(truncate(listDisplayText, 50))}</span>
+                    <span class="execution-item-xpath" title="${escapeHtml(listDisplayText)}">${escapeHtml(truncate(listDisplayText, 50))}</span>${fragileWarn}
                     <span class="execution-item-badge ${step.action}">${ACTION_LABELS[step.action] || step.action}</span>
                     ${statusBadge}
                 </div>
@@ -1197,6 +1370,7 @@ function renderFlowCanvas() {
             let paramsText = '';
             if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 25))}${step.params.value.length > 25 ? '…' : ''}"`;
             else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
+            else if (step.action === 'wait_for_element') paramsText = `до ${step.params?.timeoutMs ?? 5000}мс`;
             else if (step.action === 'file_upload' && step.params?.fileName) paramsText = `📎 ${escapeHtml(step.params.fileName)}`;
             else if (step.action === 'branch' || step.action === 'assert') {
                 const c = BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?';
@@ -1344,6 +1518,7 @@ function showStepModal(step, insertAt) {
     }
     stepModal.classList.remove('hidden');
     stepModal.querySelector('.modal-title').textContent = step ? 'Редактировать шаг' : 'Добавить шаг';
+    setTimeout(updateFragileXpathWarn, 0);
 }
 
 function hideStepModal() {
@@ -1359,6 +1534,7 @@ function toggleStepParams() {
     stepParamsInput.style.display = action === 'input' ? '' : 'none';
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
+    const isWaitForElement = action === 'wait_for_element';
     if (stepParamsUserAction) { stepParamsUserAction.classList.toggle('hidden', action !== 'user_action'); stepParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
     stepParamsBranch.classList.toggle('hidden', action !== 'branch');
     stepParamsBranch.style.display = action === 'branch' ? '' : 'none';
@@ -1374,7 +1550,7 @@ function toggleStepParams() {
         stepParamsSeparator.style.display = isSeparator ? '' : 'none';
         if (isSeparator) renderSeparatorColorButtons(selectedSeparatorColor);
     }
-    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'user_action' || action === 'branch' || action === 'navigate';
+    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'wait_for_element' || action === 'user_action' || action === 'branch' || action === 'navigate';
     if (stepParamsWaitForLoad) {
         stepParamsWaitForLoad.classList.toggle('hidden', hideWaitForLoad);
         stepParamsWaitForLoad.style.display = hideWaitForLoad ? 'none' : '';
@@ -1405,6 +1581,16 @@ function populateEditorBranchSelects() {
 }
 
 stepAction.addEventListener('change', toggleStepParams);
+const stepXpathFragileWarn = $('stepXpathFragileWarn');
+function updateFragileXpathWarn() {
+    if (!stepXpathFragileWarn) return;
+    const action = stepAction?.value;
+    const xpath = stepXpath?.value?.trim() || '';
+    const show = action && action !== 'separator' && action !== 'navigate' && action !== 'user_action' && xpath && isFragileXPath(xpath);
+    stepXpathFragileWarn.classList.toggle('hidden', !show);
+}
+if (stepXpath) stepXpath.addEventListener('input', updateFragileXpathWarn);
+if (stepXpath) stepXpath.addEventListener('change', updateFragileXpathWarn);
 if (stepAssertCondition) stepAssertCondition.addEventListener('change', toggleStepParams);
 if (stepBranchCondition) stepBranchCondition.addEventListener('change', toggleStepParams);
 
@@ -1533,6 +1719,19 @@ document.addEventListener('click', (e) => {
         if (step) showStepModal(step);
     }
 
+    const copyXpathBtn = e.target.closest('.btn-copy-xpath');
+    if (copyXpathBtn) {
+        const step = executionList.find((s) => s.id === copyXpathBtn.dataset.stepId);
+        const text = step ? (step.action === 'navigate' ? step.params?.url : step.xpath) || '' : '';
+        if (text) {
+            copyToClipboard(text).then(() => {
+                const orig = copyXpathBtn.textContent;
+                copyXpathBtn.textContent = '✓';
+                setTimeout(() => { copyXpathBtn.textContent = orig; }, 1000);
+            });
+        }
+    }
+
     const runFromBtn = e.target.closest('.btn-run-from-step');
     if (runFromBtn) {
         const step = executionList.find((s) => s.id === runFromBtn.dataset.id);
@@ -1569,7 +1768,8 @@ document.addEventListener('click', (e) => {
                 });
                 return;
             }
-            sendToContentAndWait(tab.id, { action: 'executeList', steps: [step], continueOnError: true }).then((resp) => {
+            const stepWithVars = replaceVariablesInStep(step, getCurrentVariables());
+            sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true }).then((resp) => {
                 const r = resp?.results?.[0];
                 if (r?.ok) setStepStatus(step.id, 'ok', '');
                 else setStepStatus(step.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -1716,7 +1916,8 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
         setStepStatus(stepToRun.id, 'running', '');
         renderExecutionList();
         renderEditorStepList();
-        sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepToRun], continueOnError: true }).then((resp) => {
+        const stepWithVars = replaceVariablesInStep(stepToRun, getCurrentVariables());
+        sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true }).then((resp) => {
             const r = resp?.results?.[0];
             if (r?.ok) setStepStatus(stepToRun.id, 'ok', '');
             else setStepStatus(stepToRun.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -1791,7 +1992,7 @@ function parseImportFile(data) {
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
-        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
+        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
         params: s.params && typeof s.params === 'object' ? s.params : {}
     })).filter((s) => s.xpath || s.action === 'separator');
 }
@@ -1924,6 +2125,7 @@ function stepToPythonPlaywright(s) {
     if (s.action === 'click_if_exists') return `${pad}try:\n${pad}    page.locator("xpath=${esc(s.xpath)}").click(timeout=500)\n${pad}except Exception:\n${pad}    pass`;
     if (s.action === 'input') return `${pad}page.locator("xpath=${esc(s.xpath)}").fill("${esc(s.params?.value || '')}")`;
     if (s.action === 'wait') return `${pad}page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
+    if (s.action === 'wait_for_element') return `${pad}page.locator("xpath=${esc(s.xpath)}").wait_for(timeout=${s.params?.timeoutMs ?? 5000})`;
     if (s.action === 'navigate') return `${pad}page.goto("${esc(s.params?.url || '')}")`;
     if (s.action === 'file_upload') return `${pad}page.locator("xpath=${esc(s.xpath)}").set_input_files("${esc(s.params?.fileName || 'file')}")`;
     if (s.action === 'user_action') return `${pad}input("${esc(s.params?.message || 'Выполните действие и нажмите Enter')}")`;
@@ -1940,18 +2142,21 @@ function exportToPythonPlaywright() {
         setTimeout(() => { if (exportPythonPlaywrightBtn) exportPythonPlaywrightBtn.textContent = '📤 Python Playwright'; }, 2000);
         return;
     }
+    const rows = dataRows.length > 0 ? dataRows : null;
     const stepsCode = steps.map(stepToPythonPlaywright).join('\n');
-    const content = `"""
-XPath Helper Pro — экспорт в Python Playwright (chromium-gost)
-Запуск: python test_${name}.py
-Требуется: pip install playwright
-Используется системный chromium-gost с профилем пользователя.
+    const reportPath = (reportPathInput?.value || 'report.html').trim() || 'report.html';
+
+    const conftestContent = `"""
+XPath Helper Pro — conftest.py (pytest fixtures)
+Положите в ту же папку, что и тесты.
 """
 
+import pytest
 from playwright.sync_api import sync_playwright
 
 
-def test_${name}():
+@pytest.fixture(scope="function")
+def page():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             executable_path="/opt/chromium-gost/chromium-gost",
@@ -1962,24 +2167,125 @@ def test_${name}():
             headless=False,
         )
         context = browser.new_context()
-        page = context.new_page()
-
+        pg = context.new_page()
         try:
-${stepsCode}
+            yield pg
+        finally:
+            browser.close()
+`;
+
+    let testContent;
+    if (rows && rows.length > 0) {
+        const esc = (x) => (x || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const stepsCodeData = steps.map((s) => {
+            const pad = '    ';
+            if (s.action === 'click') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").click()`;
+            if (s.action === 'click_if_exists') return `${pad}try:\n${pad}    page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").click(timeout=500)\n${pad}except Exception:\n${pad}    pass`;
+            if (s.action === 'input') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").fill(_sub("${esc(s.params?.value || '')}", data))`;
+            if (s.action === 'wait') return `${pad}page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
+            if (s.action === 'wait_for_element') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").wait_for(timeout=${s.params?.timeoutMs ?? 5000})`;
+            if (s.action === 'navigate') return `${pad}page.goto(_sub("${esc(s.params?.url || '')}", data))`;
+            if (s.action === 'file_upload') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").set_input_files(_sub("${esc(s.params?.fileName || 'file')}", data))`;
+            if (s.action === 'user_action') return `${pad}input(_sub("${esc(s.params?.message || 'Выполните действие')}", data))`;
+            if (s.action === 'branch') return `${pad}# branch: ${s.params?.condition || '?'}`;
+            if (s.action === 'assert') return `${pad}# assert: ${s.params?.condition || '?'}`;
+            return pad + stepToPythonPlaywright(s).trim();
+        }).join('\n');
+        testContent = `"""
+XPath Helper Pro — экспорт в Python Playwright (data-driven)
+Запуск: pytest test_${name}.py -v
+Или: python test_${name}.py
+Exit code: 0 при успехе, 1 при ошибке.
+"""
+
+import sys
+import pytest
+from playwright.sync_api import sync_playwright
+
+DATA_ROWS = ${JSON.stringify(rows)}
+
+def _sub(s, data):
+    if not s: return ""
+    for k, v in data.items():
+        s = s.replace("{{" + k + "}}", str(v))
+    return s
+
+@pytest.fixture
+def page():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path="/opt/chromium-gost/chromium-gost",
+            args=["--remote-debugging-port=9222", "--user-data-dir=/home/nuanred/.config/chromium"],
+            headless=False,
+        )
+        context = browser.new_context()
+        pg = context.new_page()
+        try:
+            yield pg
         finally:
             browser.close()
 
 
+@pytest.mark.parametrize("data", DATA_ROWS, ids=[f"row_{i+1}" for i in range(len(DATA_ROWS))])
+def test_${name}(page, data):
+${stepsCodeData}
+
+
 if __name__ == "__main__":
-    test_${name}()
+    exit_code = pytest.main([__file__, "-v", "--tb=short"])
+    sys.exit(exit_code)
 `;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `test_${name}.py`;
-    a.click();
-    URL.revokeObjectURL(url);
+    } else {
+        testContent = `"""
+XPath Helper Pro — экспорт в Python Playwright (chromium-gost)
+Запуск: pytest test_${name}.py -v  (с conftest.py)
+Или: python test_${name}.py
+Exit code: 0 при успехе, 1 при ошибке.
+"""
+
+import sys
+import pytest
+from playwright.sync_api import sync_playwright
+
+
+@pytest.fixture
+def page():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path="/opt/chromium-gost/chromium-gost",
+            args=["--remote-debugging-port=9222", "--user-data-dir=/home/nuanred/.config/chromium"],
+            headless=False,
+        )
+        context = browser.new_context()
+        pg = context.new_page()
+        try:
+            yield pg
+        finally:
+            browser.close()
+
+
+def test_${name}(page):
+${stepsCode}
+
+
+if __name__ == "__main__":
+    exit_code = pytest.main([__file__, "-v", "--tb=short"])
+    sys.exit(exit_code)
+`;
+    }
+
+    const downloadFile = (content, filename) => {
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    downloadFile(testContent, `test_${name}.py`);
+    downloadFile(conftestContent, 'conftest.py');
     if (exportPythonPlaywrightBtn) {
         exportPythonPlaywrightBtn.textContent = '✓ Скачано';
         setTimeout(() => { exportPythonPlaywrightBtn.textContent = '📤 Python Playwright'; }, 1500);
@@ -2000,6 +2306,7 @@ if (copyLogBtn) copyLogBtn.addEventListener('click', () => {
 
 function exportReport(format) {
     const name = (scenarioName?.value || 'report').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'report';
+    const reportPath = (reportPathInput?.value || 'report.html').trim() || 'report.html';
     const report = lastExecutionReport;
     if (report.length === 0) {
         if (exportReportBtn) exportReportBtn.textContent = 'Нет отчёта';
@@ -2015,7 +2322,7 @@ function exportReport(format) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `report-${name}-${Date.now()}.json`;
+        a.download = (reportPath.replace(/\.html$/i, '') || 'report') + '.json';
         a.click();
         URL.revokeObjectURL(url);
     } else {
@@ -2030,7 +2337,7 @@ function exportReport(format) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `report-${name}-${Date.now()}.html`;
+        a.download = /\.html$/i.test(reportPath) ? reportPath : (reportPath || 'report') + (reportPath && reportPath.includes('.') ? '' : '.html');
         a.click();
         URL.revokeObjectURL(url);
     }
@@ -2040,6 +2347,10 @@ function exportReport(format) {
     }
 }
 
+if (reportPathInput) reportPathInput.addEventListener('change', () => {
+    const v = reportPathInput.value?.trim();
+    if (v) chrome.storage.local.set({ [STORAGE_KEY_REPORT_PATH]: v });
+});
 if (exportReportBtn) {
     exportReportBtn.addEventListener('click', () => {
         const report = lastExecutionReport;
@@ -2064,6 +2375,186 @@ if (importJsonInput) importJsonInput.addEventListener('change', () => {
     const f = importJsonInput.files?.[0];
     if (f) importFromJson(f);
     importJsonInput.value = '';
+});
+
+// ——— Data-driven: CSV/JSON ———
+function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map((h) => h.trim().replace(/^["']|["']$/g, ''));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(',').map((v) => v.trim().replace(/^["']|["']$/g, ''));
+        const obj = {};
+        headers.forEach((h, j) => { obj[h] = vals[j] ?? ''; });
+        rows.push(obj);
+    }
+    return rows;
+}
+
+function parseDataFile(data) {
+    if (Array.isArray(data)) return data;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    if (data?.rows && Array.isArray(data.rows)) return data.rows;
+    return [];
+}
+
+function importFromData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const text = reader.result;
+            let rows = [];
+            if (file.name.toLowerCase().endsWith('.csv')) {
+                rows = parseCSV(text);
+            } else {
+                const data = JSON.parse(text);
+                rows = parseDataFile(data);
+            }
+            if (rows.length === 0) {
+                if (importDataBtn) importDataBtn.textContent = 'Нет данных';
+                setTimeout(() => { if (importDataBtn) importDataBtn.textContent = '📊 Данные'; }, 2000);
+                return;
+            }
+            dataRows = rows;
+            chrome.storage.local.set({ [STORAGE_KEY_DATA_ROWS]: dataRows });
+            if (importDataBtn) importDataBtn.textContent = `✓ ${rows.length} строк`;
+            setTimeout(() => { if (importDataBtn) importDataBtn.textContent = '📊 Данные'; }, 2000);
+        } catch (e) {
+            if (importDataBtn) importDataBtn.textContent = 'Ошибка';
+            setTimeout(() => { if (importDataBtn) importDataBtn.textContent = '📊 Данные'; }, 2000);
+        }
+    };
+    reader.readAsText(file, 'UTF-8');
+}
+
+if (importDataBtn) importDataBtn.addEventListener('click', () => importDataInput?.click());
+if (importDataInput) importDataInput.addEventListener('change', () => {
+    const f = importDataInput.files?.[0];
+    if (f) importFromData(f);
+    importDataInput.value = '';
+});
+
+async function runDataDrivenExecution(tabId) {
+    const stepsToRun = executionList.filter((s) => s.action !== 'separator');
+    if (stepsToRun.length === 0) {
+        if (executeDataDrivenBtn) executeDataDrivenBtn.textContent = 'Нет шагов';
+        setTimeout(() => { if (executeDataDrivenBtn) executeDataDrivenBtn.textContent = '▶ Data-driven'; }, 2000);
+        return;
+    }
+    const rows = dataRows.length > 0 ? dataRows : [{}];
+    if (executionLog) executionLog.textContent = '';
+    appendExecutionLog(`Data-driven: ${rows.length} итераций`);
+    setExecutionUIRunning(true);
+    let totalOk = 0;
+    let totalFail = 0;
+    const allReports = [];
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        appendExecutionLog(`——— Итерация ${i + 1}/${rows.length} ———`);
+        const vars = getCurrentVariables(row);
+        const stepsWithVars = stepsToRun.map((s) => replaceVariablesInStep(s, vars));
+        if (needsStepByStepExecution()) {
+            lastExecutionReport = [];
+            await runExecutionWithBranchingForDataRow(tabId, stepsWithVars, stepsToRun);
+            allReports.push(...lastExecutionReport.map((r) => ({ ...r, iteration: i + 1, row })));
+            const ok = lastExecutionReport.filter((r) => r.ok).length;
+            const fail = lastExecutionReport.filter((r) => !r.ok).length;
+            totalOk += ok;
+            totalFail += fail;
+        } else {
+            const resp = await sendToContentAndWait(tabId, {
+                action: 'executeList',
+                steps: stepsWithVars,
+                continueOnError: !stopOnErrorEl?.checked,
+                stepDelayMs: Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT)
+            });
+            const results = resp?.results || [];
+            results.forEach((r) => {
+                const step = stepsToRun.find((s) => s.id === r.id);
+                allReports.push({ stepId: r.id, step, ok: r.ok, error: r.error, durationMs: r.durationMs, iteration: i + 1, row });
+            });
+            const ok = results.filter((r) => r.ok).length;
+            const fail = results.filter((r) => !r.ok).length;
+            totalOk += ok;
+            totalFail += fail;
+            results.forEach((r) => appendExecutionLog(r.ok ? `✓ ${r.id}` : `✗ ${r.id}: ${r.error || ''}`));
+        }
+    }
+    lastExecutionReport = allReports;
+    setExecutionUIRunning(false);
+    appendExecutionLog(`Готово: ${totalOk} ок, ${totalFail} ошибок`);
+    if (executeDataDrivenBtn) {
+        executeDataDrivenBtn.textContent = `✓ ${totalOk}`;
+        setTimeout(() => { executeDataDrivenBtn.textContent = '▶ Data-driven'; }, 2500);
+    }
+}
+
+async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, originalSteps) {
+    const continueOnError = !stopOnErrorEl?.checked;
+    const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
+    const selectorTimeout = parseInt(selectorTimeoutMsEl?.value, 10) || 5000;
+    let currentIdx = 0;
+    const visited = new Set();
+    while (currentIdx >= 0 && currentIdx < stepsWithVars.length && !stopExecutionRequested) {
+        const step = stepsWithVars[currentIdx];
+        if (step.action === 'separator') { currentIdx++; continue; }
+        if (visited.has(step.id)) break;
+        visited.add(step.id);
+        setStepStatus(step.id, 'running', '');
+        currentExecutingStepId = step.id;
+        renderExecutionList();
+        if (stepDelay > 0 && currentIdx > 0) await new Promise((r) => setTimeout(r, stepDelay));
+        try {
+            if (step.action === 'user_action') {
+                await waitForUserAction(step.params?.message || 'Выполните действие');
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
+                currentIdx++;
+                continue;
+            }
+            if (step.action === 'navigate') {
+                const url = (step.params?.url || '').trim();
+                if (!url) { currentIdx++; continue; }
+                await new Promise((resolve) => {
+                    const listener = (id, info) => { if (id === tabId && info.status === 'complete') { chrome.tabs.onUpdated.removeListener(listener); resolve(); } };
+                    chrome.tabs.onUpdated.addListener(listener);
+                    chrome.tabs.update(tabId, { url: url.startsWith('http') ? url : 'https://' + url });
+                    setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 30000);
+                });
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
+                currentIdx++;
+                await new Promise((r) => setTimeout(r, 1500));
+                continue;
+            }
+            const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
+            const resp = await sendToContentAndWait(tabId, { action: 'executeStep', step, selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout }, stepTimeout);
+            if (!resp?.ok) {
+                lastExecutionReport.push({ stepId: step.id, step, ok: false, error: resp?.error, durationMs: 0, timestamp: new Date().toISOString() });
+                highlightElementOnError(tabId, step);
+                if (step.params?.mandatory !== false && !continueOnError) break;
+            } else {
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
+                let nextId = null;
+                if (step.action === 'branch' && (step.params?.nextId || step.params?.nextElseId)) nextId = resp.conditionResult ? step.params.nextId : step.params.nextElseId;
+                if (nextId) {
+                    const nextIdx = stepsWithVars.findIndex((s) => s.id === nextId);
+                    currentIdx = nextIdx >= 0 ? nextIdx : currentIdx + 1;
+                } else currentIdx++;
+            }
+        } catch (err) {
+            lastExecutionReport.push({ stepId: step.id, step, ok: false, error: getTabErrorMessage(err), durationMs: 0, timestamp: new Date().toISOString() });
+            if (!continueOnError) break;
+            currentIdx++;
+        }
+    }
+    currentExecutingStepId = null;
+}
+
+if (executeDataDrivenBtn) executeDataDrivenBtn.addEventListener('click', () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (!tab?.id) return;
+        runDataDrivenExecution(tab.id);
+    });
 });
 
 // ——— Execute list ———
@@ -2118,7 +2609,8 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             }
             if (step.action === 'navigate') {
                 const t0 = Date.now();
-                const url = (step.params?.url || '').trim();
+                const stepWithVars = replaceVariablesInStep(step, getCurrentVariables());
+                const url = (stepWithVars.params?.url || '').trim();
                 if (!url) {
                     setStepStatus(step.id, 'error', 'URL не указан');
                     appendExecutionLog(`✗ ${step.id}: URL не указан`);
@@ -2154,15 +2646,17 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             }
             const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
             const t0 = Date.now();
+            const stepWithVars = replaceVariablesInStep(step, getCurrentVariables());
             const resp = await sendToContentAndWait(tabId, {
                 action: 'executeStep',
-                step,
-                selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout
+                step: stepWithVars,
+                selectorTimeoutMs: stepWithVars.params?.timeoutMs ?? selectorTimeout
             }, stepTimeout);
             if (!resp?.ok) {
                 const errMsg = resp?.error || 'Ошибка';
                 setStepStatus(step.id, 'error', errMsg);
                 appendExecutionLog(`✗ ${step.id}: ${errMsg} (${Date.now() - t0}мс)`);
+                highlightElementOnError(tabId, step);
                 const screenshot = await captureScreenshotOnError(tabId);
                 lastExecutionReport.push({ stepId: step.id, step, ok: false, error: errMsg, durationMs: Date.now() - t0, screenshotBase64: screenshot, timestamp: new Date().toISOString() });
                 const mandatory = step.params?.mandatory !== false;
@@ -2189,6 +2683,7 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             const durationMs = typeof t0 !== 'undefined' ? Date.now() - t0 : 0;
             setStepStatus(step.id, 'error', msg);
             appendExecutionLog(`✗ ${step.id}: ${msg} (${durationMs}мс)`);
+            highlightElementOnError(tabId, step);
             const screenshot = await captureScreenshotOnError(tabId);
             lastExecutionReport.push({ stepId: step.id, step, ok: false, error: msg, durationMs, screenshotBase64: screenshot, timestamp: new Date().toISOString() });
             if (isBfcacheError(err)) showBfcacheBanner();
@@ -2228,9 +2723,10 @@ function runExecutionFromStep(fromStepId) {
         renderExecutionList();
         lastExecutionReport = [];
         const batchStart = Date.now();
+        const stepsWithVars = stepsToRun.map((s) => replaceVariablesInStep(s, getCurrentVariables()));
         sendToContentAndWait(tab.id, {
             action: 'executeList',
-            steps: stepsToRun,
+            steps: stepsWithVars,
             continueOnError,
             stepDelayMs: stepDelay
         }).then(async (resp) => {
@@ -2252,6 +2748,9 @@ function runExecutionFromStep(fromStepId) {
                 }
             }
             if (firstFailedStep) {
+                const failedEntry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
+                const step = failedEntry?.step || stepsToRun.find((s) => s.id === firstFailedStep.id);
+                if (step) highlightElementOnError(tab.id, step);
                 const screenshot = await captureScreenshotOnError(tab.id);
                 const entry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
                 if (entry) entry.screenshotBase64 = screenshot;
@@ -2314,9 +2813,10 @@ executeListBtn.addEventListener('click', () => {
         renderExecutionList();
         lastExecutionReport = [];
         const batchStart = Date.now();
+        const stepsWithVars = stepsToRun.map((s) => replaceVariablesInStep(s, getCurrentVariables()));
         sendToContentAndWait(tab.id, {
             action: 'executeList',
-            steps: stepsToRun,
+            steps: stepsWithVars,
             continueOnError,
             stepDelayMs: stepDelay
         }).then(async (resp) => {
@@ -2338,6 +2838,9 @@ executeListBtn.addEventListener('click', () => {
                 }
             }
             if (firstFailedStep) {
+                const failedEntry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
+                const step = failedEntry?.step || stepsToRun.find((s) => s.id === firstFailedStep.id);
+                if (step) highlightElementOnError(tab.id, step);
                 const screenshot = await captureScreenshotOnError(tab.id);
                 const entry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
                 if (entry) entry.screenshotBase64 = screenshot;

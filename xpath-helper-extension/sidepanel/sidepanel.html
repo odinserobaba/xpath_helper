@@ -124,6 +124,15 @@
                         <option value="">— Сценарий —</option>
                     </select>
                 </div>
+                <div class="env-row">
+                    <select id="envSelect" title="Окружение (переменные {{baseUrl}}, {{login}} и т.д.)">
+                        <option value="">— Окружение —</option>
+                        <option value="dev">dev</option>
+                        <option value="stage">stage</option>
+                        <option value="prod">prod</option>
+                    </select>
+                    <button type="button" id="envEditBtn" class="btn btn-sm" title="Редактировать переменные окружений">⚙ Переменные</button>
+                </div>
                 <div class="list-buttons">
                     <button type="button" id="addStepBtn" class="btn btn-primary-list" title="Добавить XPath текущего элемента">+ Добавить текущий</button>
                     <button type="button" id="addStepManualBtn" class="btn" title="Добавить шаг с вводом XPath вручную">+ Вручную</button>
@@ -136,8 +145,11 @@
                     <button type="button" id="exportTemplatesBtn" class="btn" title="Экспорт в Playwright/Cypress/Selenium">📤 Шаблоны</button>
                     <button type="button" id="exportPythonPlaywrightBtn" class="btn" title="Экспорт в Python Playwright (chromium-gost)">📤 Python Playwright</button>
                     <button type="button" id="importJsonBtn" class="btn" title="Загрузить шаги из JSON">📥 Загрузить</button>
+                    <button type="button" id="importDataBtn" class="btn" title="Data-driven: CSV/JSON с данными для прогона по строкам">📊 Данные</button>
+                    <button type="button" id="executeDataDrivenBtn" class="btn btn-execute" title="Выполнить сценарий для каждой строки данных">▶ Data-driven</button>
                 </div>
                 <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
+                <input type="file" id="importDataInput" accept=".json,.csv,application/json,text/csv" hidden>
                 <div class="search-row">
                     <input type="text" id="listSearch" placeholder="Поиск по XPath или действию..." title="Фильтр списка шагов">
                 </div>
@@ -179,6 +191,7 @@
                                 <option value="input">Ввод текста</option>
                                 <option value="file_upload">Загрузка файла</option>
                                 <option value="wait">Пауза</option>
+                                <option value="wait_for_element">Пауза до элемента</option>
                                 <option value="user_action">Действие пользователя</option>
                                 <option value="assert">Assert</option>
                                 <option value="branch">Ветвление</option>
@@ -316,6 +329,7 @@
                         <button type="button" id="clearLogBtn" class="btn btn-sm">Очистить</button>
                         <button type="button" id="copyLogBtn" class="btn btn-sm">Копировать</button>
                         <button type="button" id="exportReportBtn" class="btn btn-sm" title="Экспорт отчёта (HTML/JSON)">📤 Отчёт</button>
+                        <input type="text" id="reportPathInput" placeholder="report.html" class="report-path-input" title="Имя файла отчёта при экспорте">
                     </div>
                 </div>
                 <div id="executionLog" class="execution-log"></div>
@@ -330,6 +344,7 @@
                 <div class="form-row">
                     <label for="stepXpath">XPath</label>
                     <textarea id="stepXpath" rows="2" placeholder="//button[@id='submit']"></textarea>
+                    <span id="stepXpathFragileWarn" class="fragile-xpath-warn hidden" title="Хрупкий XPath: //div[1], position() и т.п. могут сломаться при изменении DOM">⚠ Хрупкий XPath</span>
                 </div>
                 <div class="form-row">
                     <label for="stepAction">Действие</label>
@@ -339,6 +354,7 @@
                         <option value="input">Ввод текста</option>
                         <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
+                        <option value="wait_for_element">Пауза до элемента</option>
                         <option value="user_action">Действие пользователя</option>
                         <option value="assert">Assert</option>
                         <option value="branch">Ветвление</option>
@@ -463,6 +479,25 @@
         </div>
     </div>
 
+    <div id="envModal" class="modal hidden" role="dialog">
+        <div class="modal-content">
+            <h3 class="modal-title">Переменные окружений</h3>
+            <div class="modal-body">
+                <p class="setting-hint">Используйте {{baseUrl}}, {{login}} и т.д. в шагах (XPath, URL, текст).</p>
+                <div id="envTabs" class="env-tabs">
+                    <button type="button" class="env-tab active" data-env="dev">dev</button>
+                    <button type="button" class="env-tab" data-env="stage">stage</button>
+                    <button type="button" class="env-tab" data-env="prod">prod</button>
+                </div>
+                <div id="envVarsEditor" class="env-vars-editor"></div>
+                <button type="button" id="envAddVarBtn" class="btn btn-sm">+ Добавить переменную</button>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="envModalSave" class="btn btn-save">Сохранить</button>
+                <button type="button" id="envModalCancel" class="btn">Отмена</button>
+            </div>
+        </div>
+    </div>
     <div id="importModal" class="modal hidden" role="dialog">
         <div class="modal-content">
             <h3 class="modal-title">Загрузить шаги</h3>
