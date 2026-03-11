@@ -14,6 +14,13 @@ const STORAGE_KEY_ENVIRONMENTS = 'xpath-helper-environments';
 const STORAGE_KEY_CURRENT_ENV = 'xpath-helper-current-env';
 const STORAGE_KEY_REPORT_PATH = 'xpath-helper-report-path';
 const STORAGE_KEY_DATA_ROWS = 'xpath-helper-data-rows';
+const STORAGE_KEY_PYTHON_SETTINGS = 'xpath-helper-python-settings';
+const PYTHON_DEFAULTS = {
+    executablePath: '/opt/chromium-gost/chromium-gost',
+    userDataDir: '/home/nuanred/.config/chromium',
+    debugPort: 9222,
+    headless: false
+};
 const DEBOUNCE_DEFAULT = 120;
 const SELECTOR_TIMEOUT_DEFAULT = 5000;
 const STEP_DELAY_DEFAULT = 100;
@@ -184,6 +191,14 @@ const reportPathInput = $('reportPathInput');
 const importDataBtn = $('importDataBtn');
 const importDataInput = $('importDataInput');
 const executeDataDrivenBtn = $('executeDataDrivenBtn');
+const pythonSettingsBtn = $('pythonSettingsBtn');
+const pythonSettingsModal = $('pythonSettingsModal');
+const pythonExecutablePath = $('pythonExecutablePath');
+const pythonUserDataDir = $('pythonUserDataDir');
+const pythonDebugPort = $('pythonDebugPort');
+const pythonHeadless = $('pythonHeadless');
+const pythonSettingsSave = $('pythonSettingsSave');
+const pythonSettingsCancel = $('pythonSettingsCancel');
 const historySection = $('historySection');
 const historyList = $('historyList');
 const historyCount = $('historyCount');
@@ -289,6 +304,7 @@ let stepDelayMsVal = STEP_DELAY_DEFAULT;
 /** Сценарии { id, name, steps } */
 let scenarios = [];
 let dataRows = [];
+let pythonSettings = { ...PYTHON_DEFAULTS };
 let currentScenarioId = null;
 /** Ожидающий импорт (для модалки) */
 let pendingImportData = null;
@@ -1101,7 +1117,7 @@ function closeEnvModal(save) {
 
 // ——— Execution list: load, save, render ———
 function loadExecutionList() {
-    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH], (data) => {
+    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH, STORAGE_KEY_PYTHON_SETTINGS], (data) => {
         executionList = Array.isArray(data[STORAGE_KEY_EXECUTION_LIST]) ? data[STORAGE_KEY_EXECUTION_LIST] : [];
         scenarios = Array.isArray(data[STORAGE_KEY_SCENARIOS]) ? data[STORAGE_KEY_SCENARIOS] : [];
         if (data[STORAGE_KEY_ENVIRONMENTS]) {
@@ -1111,6 +1127,9 @@ function loadExecutionList() {
         dataRows = Array.isArray(data[STORAGE_KEY_DATA_ROWS]) ? data[STORAGE_KEY_DATA_ROWS] : [];
         if (envSelect) envSelect.value = currentEnv;
         if (reportPathInput) reportPathInput.value = data[STORAGE_KEY_REPORT_PATH] || 'report.html';
+        if (data[STORAGE_KEY_PYTHON_SETTINGS]) {
+            pythonSettings = { ...PYTHON_DEFAULTS, ...data[STORAGE_KEY_PYTHON_SETTINGS] };
+        }
         renderScenarioSelect();
         renderExecutionList();
         renderEditorStepList();
@@ -2117,6 +2136,49 @@ function exportToTemplates() {
 
 if (exportTemplatesBtn) exportTemplatesBtn.addEventListener('click', exportToTemplates);
 
+// ——— Python Playwright settings ———
+function savePythonSettings() {
+    pythonSettings = {
+        executablePath: (pythonExecutablePath?.value || '').trim() || PYTHON_DEFAULTS.executablePath,
+        userDataDir: (pythonUserDataDir?.value || '').trim() || PYTHON_DEFAULTS.userDataDir,
+        debugPort: parseInt(pythonDebugPort?.value, 10) || PYTHON_DEFAULTS.debugPort,
+        headless: !!pythonHeadless?.checked
+    };
+    chrome.storage.local.set({ [STORAGE_KEY_PYTHON_SETTINGS]: pythonSettings });
+}
+
+function getPythonLaunchCode() {
+    const esc = (s) => (s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const ep = esc(pythonSettings.executablePath || PYTHON_DEFAULTS.executablePath);
+    const ud = esc(pythonSettings.userDataDir || PYTHON_DEFAULTS.userDataDir);
+    const port = pythonSettings.debugPort ?? PYTHON_DEFAULTS.debugPort;
+    const headless = pythonSettings.headless ? 'True' : 'False';
+    const pad = '        ';
+    return `${pad}browser = p.chromium.launch(
+${pad}    executable_path="${ep}",
+${pad}    args=[
+${pad}        "--remote-debugging-port=${port}",
+${pad}        "--user-data-dir=${ud}",
+${pad}    ],
+${pad}    headless=${headless},
+${pad})`;
+}
+
+if (pythonSettingsBtn) pythonSettingsBtn.addEventListener('click', () => {
+    if (pythonExecutablePath) pythonExecutablePath.value = pythonSettings.executablePath || PYTHON_DEFAULTS.executablePath;
+    if (pythonUserDataDir) pythonUserDataDir.value = pythonSettings.userDataDir || PYTHON_DEFAULTS.userDataDir;
+    if (pythonDebugPort) pythonDebugPort.value = pythonSettings.debugPort ?? PYTHON_DEFAULTS.debugPort;
+    if (pythonHeadless) pythonHeadless.checked = !!pythonSettings.headless;
+    if (pythonSettingsModal) pythonSettingsModal.classList.remove('hidden');
+});
+if (pythonSettingsSave) pythonSettingsSave.addEventListener('click', () => {
+    savePythonSettings();
+    if (pythonSettingsModal) pythonSettingsModal.classList.add('hidden');
+});
+if (pythonSettingsCancel) pythonSettingsCancel.addEventListener('click', () => {
+    if (pythonSettingsModal) pythonSettingsModal.classList.add('hidden');
+});
+
 // ——— Export Python Playwright (chromium-gost) ———
 function stepToPythonPlaywright(s) {
     const esc = (str) => (str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -2144,11 +2206,12 @@ function exportToPythonPlaywright() {
     }
     const rows = dataRows.length > 0 ? dataRows : null;
     const stepsCode = steps.map(stepToPythonPlaywright).join('\n');
-    const reportPath = (reportPathInput?.value || 'report.html').trim() || 'report.html';
+    const launchCode = getPythonLaunchCode();
 
     const conftestContent = `"""
 XPath Helper Pro — conftest.py (pytest fixtures)
 Положите в ту же папку, что и тесты.
+Настройки: кнопка ⚙ Python в панели.
 """
 
 import pytest
@@ -2158,14 +2221,7 @@ from playwright.sync_api import sync_playwright
 @pytest.fixture(scope="function")
 def page():
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            executable_path="/opt/chromium-gost/chromium-gost",
-            args=[
-                "--remote-debugging-port=9222",
-                "--user-data-dir=/home/nuanred/.config/chromium",
-            ],
-            headless=False,
-        )
+        ${launchCode}
         context = browser.new_context()
         pg = context.new_page()
         try:
@@ -2213,11 +2269,7 @@ def _sub(s, data):
 @pytest.fixture
 def page():
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            executable_path="/opt/chromium-gost/chromium-gost",
-            args=["--remote-debugging-port=9222", "--user-data-dir=/home/nuanred/.config/chromium"],
-            headless=False,
-        )
+        ${launchCode}
         context = browser.new_context()
         pg = context.new_page()
         try:
@@ -2251,11 +2303,7 @@ from playwright.sync_api import sync_playwright
 @pytest.fixture
 def page():
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            executable_path="/opt/chromium-gost/chromium-gost",
-            args=["--remote-debugging-port=9222", "--user-data-dir=/home/nuanred/.config/chromium"],
-            headless=False,
-        )
+        ${launchCode}
         context = browser.new_context()
         pg = context.new_page()
         try:

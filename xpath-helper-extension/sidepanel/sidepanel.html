@@ -144,6 +144,7 @@
                     <button type="button" id="exportJsonBtn" class="btn" title="Экспорт в JSON для автотестов">📤 JSON</button>
                     <button type="button" id="exportTemplatesBtn" class="btn" title="Экспорт в Playwright/Cypress/Selenium">📤 Шаблоны</button>
                     <button type="button" id="exportPythonPlaywrightBtn" class="btn" title="Экспорт в Python Playwright (chromium-gost)">📤 Python Playwright</button>
+                    <button type="button" id="pythonSettingsBtn" class="btn btn-sm" title="Настройки для экспорта Python">⚙ Python</button>
                     <button type="button" id="importJsonBtn" class="btn" title="Загрузить шаги из JSON">📥 Загрузить</button>
                     <button type="button" id="importDataBtn" class="btn" title="Data-driven: CSV/JSON с данными для прогона по строкам">📊 Данные</button>
                     <button type="button" id="executeDataDrivenBtn" class="btn btn-execute" title="Выполнить сценарий для каждой строки данных">▶ Data-driven</button>
@@ -479,6 +480,36 @@
         </div>
     </div>
 
+    <div id="pythonSettingsModal" class="modal hidden" role="dialog">
+        <div class="modal-content">
+            <h3 class="modal-title">Настройки Python Playwright</h3>
+            <div class="modal-body">
+                <p class="setting-hint">Используются при экспорте test_*.py и conftest.py</p>
+                <div class="form-row">
+                    <label for="pythonExecutablePath">executable_path (путь к chromium)</label>
+                    <input type="text" id="pythonExecutablePath" placeholder="/opt/chromium-gost/chromium-gost">
+                </div>
+                <div class="form-row">
+                    <label for="pythonUserDataDir">user-data-dir (профиль браузера)</label>
+                    <input type="text" id="pythonUserDataDir" placeholder="/home/user/.config/chromium">
+                </div>
+                <div class="form-row">
+                    <label for="pythonDebugPort">remote-debugging-port</label>
+                    <input type="number" id="pythonDebugPort" min="1024" max="65535" value="9222">
+                </div>
+                <div class="form-row">
+                    <label class="filter-check">
+                        <input type="checkbox" id="pythonHeadless">
+                        <span>headless (без окна браузера)</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="pythonSettingsSave" class="btn btn-save">Сохранить</button>
+                <button type="button" id="pythonSettingsCancel" class="btn">Отмена</button>
+            </div>
+        </div>
+    </div>
     <div id="envModal" class="modal hidden" role="dialog">
         <div class="modal-content">
             <h3 class="modal-title">Переменные окружений</h3>

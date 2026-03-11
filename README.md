@@ -147,6 +147,19 @@ admin,admin789,https://stage.example.com
 
 ## Экспорт в Python Playwright (pytest)
 
+### Настройки Python Playwright
+
+Перед экспортом нажмите **⚙ Python** и укажите:
+
+| Поле | Описание | По умолчанию |
+|------|----------|--------------|
+| executable_path | Путь к chromium (chromium-gost) | `/opt/chromium-gost/chromium-gost` |
+| user-data-dir | Профиль браузера | `/home/nuanred/.config/chromium` |
+| remote-debugging-port | Порт отладки | 9222 |
+| headless | Запуск без окна браузера | выкл |
+
+Настройки сохраняются и подставляются в `test_*.py` и `conftest.py` при экспорте.
+
 ### Pytest fixtures и conftest.py
 
 При экспорте скачиваются два файла:
