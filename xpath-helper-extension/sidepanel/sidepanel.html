@@ -18,6 +18,7 @@
             <button type="button" class="tab active" data-tab="inspect" aria-selected="true">Инспектор</button>
             <button type="button" class="tab" data-tab="list" aria-selected="false">Список</button>
             <button type="button" class="tab" data-tab="editor" aria-selected="false">Редактор</button>
+            <button type="button" class="tab" data-tab="flow" aria-selected="false">Flow</button>
             <button type="button" class="tab" data-tab="log" aria-selected="false">Лог</button>
         </nav>
 
@@ -176,6 +177,9 @@
                                 <option value="input">Ввод текста</option>
                                 <option value="file_upload">Загрузка файла</option>
                                 <option value="wait">Пауза</option>
+                                <option value="assert">Assert</option>
+                                <option value="branch">Ветвление</option>
+                                <option value="navigate">Переход</option>
                                 <option value="separator">Разделитель</option>
                             </select>
                         </div>
@@ -203,6 +207,44 @@
                             <label class="setting-hint">Цвет</label>
                             <div id="editorSeparatorColors" class="separator-colors"></div>
                         </div>
+                        <div id="editorParamsAssert" class="form-row hidden">
+                            <label for="editorAssertCondition">Условие</label>
+                            <select id="editorAssertCondition">
+                                <option value="element_exists">Элемент есть</option>
+                                <option value="text_equals">Текст равен</option>
+                                <option value="text_contains">Текст содержит</option>
+                            </select>
+                            <label for="editorAssertExpected">Ожидаемое значение</label>
+                            <input type="text" id="editorAssertExpected" placeholder="Текст для сравнения">
+                        </div>
+                        <div id="editorParamsNavigate" class="form-row hidden">
+                            <label for="editorNavigateUrl">URL</label>
+                            <input type="text" id="editorNavigateUrl" placeholder="https://example.com">
+                        </div>
+                        <div id="editorParamsBranch" class="form-row hidden">
+                            <label for="editorBranchCondition">Условие</label>
+                            <select id="editorBranchCondition">
+                                <option value="element_exists">Элемент есть</option>
+                                <option value="text_equals">Текст равен</option>
+                                <option value="text_contains">Текст содержит</option>
+                            </select>
+                            <label for="editorBranchExpected">Ожидаемое значение</label>
+                            <input type="text" id="editorBranchExpected" placeholder="Текст для сравнения">
+                            <label for="editorBranchNextId">Если да → шаг</label>
+                            <select id="editorBranchNextId" class="step-next-select"></select>
+                            <label for="editorBranchNextElseId">Если нет → шаг</label>
+                            <select id="editorBranchNextElseId" class="step-next-select"></select>
+                        </div>
+                        <div class="form-row">
+                            <label for="editorTimeoutMs" class="setting-hint">Таймаут (мс), 0 = по умолчанию</label>
+                            <input type="number" id="editorTimeoutMs" min="0" max="120000" value="0">
+                        </div>
+                        <div class="form-row">
+                            <label class="filter-check">
+                                <input type="checkbox" id="editorMandatory" checked>
+                                <span>Обязательный шаг</span>
+                            </label>
+                        </div>
                         <div class="form-row">
                             <label class="filter-check">
                                 <input type="checkbox" id="editorRetryOnError">
@@ -221,6 +263,24 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div id="tabFlow" class="tab-panel tab-editor" role="tabpanel" hidden>
+            <section class="flow-toolbar">
+                <div class="flow-toolbar-buttons">
+                    <button type="button" id="flowAddStepBtn" class="btn btn-primary-list" title="Добавить XPath текущего элемента">+ Добавить текущий</button>
+                    <button type="button" id="flowAddManualBtn" class="btn" title="Добавить шаг с вводом XPath вручную">+ Вручную</button>
+                    <button type="button" id="flowAddSeparatorBtn" class="btn" title="Добавить разделитель">— Разделитель</button>
+                    <button type="button" id="flowExecuteBtn" class="btn btn-execute" title="Выполнить все шаги">▶ Выполнить</button>
+                    <button type="button" id="flowStopBtn" class="btn btn-stop hidden" title="Остановить">⏹ Стоп</button>
+                    <button type="button" id="flowSaveBtn" class="btn" title="Сохранить">💾 Сохранить</button>
+                </div>
+            </section>
+            <div class="flow-container">
+                <h3 class="editor-pane-title">Flow-схема</h3>
+                <p class="flow-hint">Клик по стрелке — вставить шаг между карточками</p>
+                <div id="flowCanvas" class="flow-canvas"></div>
             </div>
         </div>
 
@@ -254,8 +314,21 @@
                         <option value="input">Ввод текста</option>
                         <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
+                        <option value="assert">Assert</option>
+                        <option value="branch">Ветвление</option>
+                        <option value="navigate">Переход на страницу</option>
                         <option value="separator">Разделитель</option>
                     </select>
+                </div>
+                <div id="stepParamsCommon" class="form-row">
+                    <label for="stepTimeoutMs" class="setting-hint">Таймаут ожидания (мс), 0 = по умолчанию</label>
+                    <input type="number" id="stepTimeoutMs" min="0" max="120000" value="0" placeholder="0 = по умолчанию">
+                </div>
+                <div id="stepParamsMandatory" class="form-row">
+                    <label class="filter-check">
+                        <input type="checkbox" id="stepMandatory" checked title="Обязательный шаг — при ошибке остановить выполнение">
+                        <span>Обязательный шаг</span>
+                    </label>
                 </div>
                 <div id="stepParamsWaitForLoad" class="form-row">
                     <label class="filter-check">
@@ -276,6 +349,38 @@
                 <div id="stepParamsWait" class="form-row hidden">
                     <label for="stepWaitMs">Задержка (мс)</label>
                     <input type="number" id="stepWaitMs" min="0" max="60000" value="500" placeholder="500">
+                </div>
+                <div id="stepParamsAssert" class="form-row hidden">
+                    <label for="stepAssertCondition">Условие</label>
+                    <select id="stepAssertCondition">
+                        <option value="element_exists">Элемент есть</option>
+                        <option value="text_equals">Текст равен</option>
+                        <option value="text_contains">Текст содержит</option>
+                    </select>
+                    <label for="stepAssertExpected" class="setting-hint">Ожидаемое значение (для текста)</label>
+                    <input type="text" id="stepAssertExpected" placeholder="Текст для сравнения">
+                </div>
+                <div id="stepParamsNavigate" class="form-row hidden">
+                    <label for="stepNavigateUrl">URL</label>
+                    <input type="text" id="stepNavigateUrl" placeholder="https://example.com">
+                </div>
+                <div id="stepParamsBranch" class="form-row hidden">
+                    <label for="stepBranchCondition">Условие</label>
+                    <select id="stepBranchCondition">
+                        <option value="element_exists">Элемент есть</option>
+                        <option value="text_equals">Текст равен</option>
+                        <option value="text_contains">Текст содержит</option>
+                    </select>
+                    <label for="stepBranchExpected" class="setting-hint">Ожидаемое значение (для текста)</label>
+                    <input type="text" id="stepBranchExpected" placeholder="Текст для сравнения">
+                    <label for="stepBranchNextId" class="setting-hint">Если да → шаг</label>
+                    <select id="stepBranchNextId" class="step-next-select">
+                        <option value="">— Следующий по порядку —</option>
+                    </select>
+                    <label for="stepBranchNextElseId" class="setting-hint">Если нет → шаг</label>
+                    <select id="stepBranchNextElseId" class="step-next-select">
+                        <option value="">— Следующий по порядку —</option>
+                    </select>
                 </div>
                 <div id="stepParamsFile" class="form-row hidden">
                     <label for="stepFileName">Имя файла</label>

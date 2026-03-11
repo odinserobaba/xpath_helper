@@ -145,6 +145,18 @@ function init() {
                     .catch((e) => sendResponse({ ok: false, error: e?.message || 'Unknown error' }));
                 return true;
             }
+            if (request.action === 'executeStep') {
+                const step = request.step;
+                const token = ++runToken;
+                const selectorTimeoutMs = Math.max(0, request.selectorTimeoutMs ?? SELECTOR_TIMEOUT_DEFAULT);
+                runExecutionList([step], token, { continueOnError: false, stepDelayMs: 0, selectorTimeoutMs: selectorTimeout })
+                    .then((results) => {
+                        const r = results[0];
+                        sendResponse(r ? { ok: r.ok, error: r.error, conditionResult: r.conditionResult } : { ok: false, error: 'No result' });
+                    })
+                    .catch((e) => sendResponse({ ok: false, error: e?.message || 'Unknown error' }));
+                return true;
+            }
             if (request.action === 'stopExecution') {
                 runToken++;
                 sendResponse({ ok: true });
@@ -214,7 +226,8 @@ function init() {
     }, true);
 
     /** Выполняет список шагов на странице по очереди и возвращает результаты по каждому шагу */
-    async function runExecutionList(steps, token, { continueOnError, stepDelayMs = 100 } = { continueOnError: true }) {
+    async function runExecutionList(steps, token, { continueOnError, stepDelayMs = 100, selectorTimeoutMs: defaultTimeout } = { continueOnError: true }) {
+        const baseTimeout = defaultTimeout ?? selectorTimeoutMs;
         const results = [];
         async function waitForPageLoad(timeoutMs = 10000) {
             const deadline = Date.now() + timeoutMs;
@@ -274,8 +287,52 @@ function init() {
                     break;
                 }
 
-                const el = await findElementByXPath(step.xpath, selectorTimeoutMs);
-                if (!el) throw new Error('Элемент не найден (таймаут ' + selectorTimeoutMs + 'мс): ' + (step.xpath || '').substring(0, 80));
+                if (step.action === 'branch') {
+                    const cond = step.params?.condition || 'element_exists';
+                    const expected = (step.params?.expectedValue || '').trim();
+                    const elOpt = await findElementByXPath(step.xpath, 0);
+                    let conditionResult = false;
+                    if (cond === 'element_exists') {
+                        conditionResult = !!elOpt;
+                    } else if (elOpt) {
+                        const text = (elOpt.textContent || '').trim();
+                        if (cond === 'text_equals') conditionResult = text === expected;
+                        else if (cond === 'text_contains') conditionResult = text.includes(expected);
+                    }
+                    results.push({ id, ok: true, conditionResult });
+                    sendExecutionProgress({ phase: 'end', stepId: id, ok: true, conditionResult });
+                    lastErr = null;
+                    break;
+                }
+
+                if (step.action === 'assert') {
+                    const cond = step.params?.condition || 'element_exists';
+                    const expected = (step.params?.expectedValue || '').trim();
+                    const stepTimeout = step.params?.timeoutMs ?? baseTimeout;
+                    const elOpt = await findElementByXPath(step.xpath, stepTimeout);
+                    let ok = false;
+                    if (cond === 'element_exists') {
+                        ok = !!elOpt;
+                    } else if (elOpt) {
+                        const text = (elOpt.textContent || '').trim();
+                        if (cond === 'text_equals') ok = text === expected;
+                        else if (cond === 'text_contains') ok = text.includes(expected);
+                    }
+                    if (!ok) {
+                        const msg = cond === 'element_exists' ? 'Элемент не найден' : `Условие не выполнено: ${cond}`;
+                        results.push({ id, ok: false, error: msg });
+                        sendExecutionProgress({ phase: 'end', stepId: id, ok: false, error: msg });
+                    } else {
+                        results.push({ id, ok: true });
+                        sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
+                    }
+                    lastErr = null;
+                    break;
+                }
+
+                const stepTimeout = step.params?.timeoutMs ?? baseTimeout;
+                const el = await findElementByXPath(step.xpath, stepTimeout);
+                if (!el) throw new Error('Элемент не найден (таймаут ' + stepTimeout + 'мс): ' + (step.xpath || '').substring(0, 80));
 
                 if (step.action === 'click') {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });

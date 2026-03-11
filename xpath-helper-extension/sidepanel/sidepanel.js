@@ -16,7 +16,12 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть' };
+const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход' };
+const BRANCH_CONDITIONS = [
+    { value: 'element_exists', label: 'Элемент есть' },
+    { value: 'text_equals', label: 'Текст равен' },
+    { value: 'text_contains', label: 'Текст содержит' }
+];
 const SEPARATOR_COLORS = ['#00d4aa', '#667eea', '#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', '#e91e63'];
 
 // Минимальный валидный PDF (~400 байт) для тестирования загрузки файлов
@@ -55,7 +60,15 @@ const exportFileBtn = $('exportFile');
 const tabInspect = $('tabInspect');
 const tabList = $('tabList');
 const tabEditor = $('tabEditor');
+const tabFlow = $('tabFlow');
 const tabLog = $('tabLog');
+const flowCanvas = $('flowCanvas');
+const flowAddStepBtn = $('flowAddStepBtn');
+const flowAddManualBtn = $('flowAddManualBtn');
+const flowAddSeparatorBtn = $('flowAddSeparatorBtn');
+const flowExecuteBtn = $('flowExecuteBtn');
+const flowStopBtn = $('flowStopBtn');
+const flowSaveBtn = $('flowSaveBtn');
 const editorStepList = $('editorStepList');
 const editorEmpty = $('editorEmpty');
 const editorDetail = $('editorDetail');
@@ -74,6 +87,18 @@ const editorParamsInput = $('editorParamsInput');
 const editorParamsWait = $('editorParamsWait');
 const editorParamsFile = $('editorParamsFile');
 const editorParamsSeparator = $('editorParamsSeparator');
+const editorParamsBranch = $('editorParamsBranch');
+const editorParamsAssert = $('editorParamsAssert');
+const editorParamsNavigate = $('editorParamsNavigate');
+const editorAssertCondition = $('editorAssertCondition');
+const editorAssertExpected = $('editorAssertExpected');
+const editorNavigateUrl = $('editorNavigateUrl');
+const editorTimeoutMs = $('editorTimeoutMs');
+const editorMandatory = $('editorMandatory');
+const editorBranchCondition = $('editorBranchCondition');
+const editorBranchExpected = $('editorBranchExpected');
+const editorBranchNextId = $('editorBranchNextId');
+const editorBranchNextElseId = $('editorBranchNextElseId');
 const editorParamsWaitForLoad = $('editorParamsWaitForLoad');
 const editorRetryOnError = $('editorRetryOnError');
 const editorWaitForLoad = $('editorWaitForLoad');
@@ -98,7 +123,19 @@ const stepAction = $('stepAction');
 const stepParamsInput = $('stepParamsInput');
 const stepInputValue = $('stepInputValue');
 const stepParamsWait = $('stepParamsWait');
+const stepParamsBranch = $('stepParamsBranch');
+const stepParamsAssert = $('stepParamsAssert');
+const stepParamsNavigate = $('stepParamsNavigate');
+const stepTimeoutMs = $('stepTimeoutMs');
+const stepMandatory = $('stepMandatory');
+const stepAssertCondition = $('stepAssertCondition');
+const stepAssertExpected = $('stepAssertExpected');
+const stepNavigateUrl = $('stepNavigateUrl');
 const stepWaitMs = $('stepWaitMs');
+const stepBranchCondition = $('stepBranchCondition');
+const stepBranchExpected = $('stepBranchExpected');
+const stepBranchNextId = $('stepBranchNextId');
+const stepBranchNextElseId = $('stepBranchNextElseId');
 const stepParamsFile = $('stepParamsFile');
 const stepFileName = $('stepFileName');
 const stepChooseFileBtn = $('stepChooseFileBtn');
@@ -180,6 +217,8 @@ let currentScenarioId = null;
 let pendingImportData = null;
 /** Выбранный шаг в редакторе */
 let selectedEditorStepId = null;
+/** Индекс для вставки шага (null = в конец) */
+let insertStepAtIndex = null;
 /** Файл в редакторе (base64) */
 let editorFileBase64 = null;
 
@@ -187,8 +226,12 @@ function setStepStatus(id, state, message) {
     stepRunStatus[id] = { state, message: message || '' };
 }
 
-function show(el) { el.classList.remove('hidden'); el.style.display = ''; }
-function hide(el) { el.classList.add('hidden'); el.style.display = 'none'; }
+function show(el) { if (el) { el.classList.remove('hidden'); el.style.display = ''; } }
+function hide(el) { if (el) { el.classList.add('hidden'); el.style.display = 'none'; } }
+function setExecutionUIRunning(running) {
+    if (running) { hide(executeListBtn); show(stopExecuteBtn); hide(flowExecuteBtn); show(flowStopBtn); }
+    else { show(executeListBtn); hide(stopExecuteBtn); show(flowExecuteBtn); hide(flowStopBtn); }
+}
 
 function escapeHtml(str) {
     const d = document.createElement('div');
@@ -629,6 +672,8 @@ document.querySelectorAll('.tab').forEach((tab) => {
             if (tabInspect) { tabInspect.classList.add('active'); tabInspect.hidden = false; }
         } else if (t === 'editor') {
             if (tabEditor) { tabEditor.classList.add('active'); tabEditor.hidden = false; renderEditorStepList(); }
+        } else if (t === 'flow') {
+            if (tabFlow) { tabFlow.classList.add('active'); tabFlow.hidden = false; renderFlowCanvas(); }
         } else if (t === 'log') {
             if (tabLog) { tabLog.classList.add('active'); tabLog.hidden = false; }
         } else {
@@ -649,6 +694,8 @@ function renderEditorStepList() {
         let preview = step.xpath || '—';
         if (step.action === 'input' && step.params?.value) preview += ` → "${step.params.value.substring(0, 20)}${step.params.value.length > 20 ? '…' : ''}"`;
         else if (step.action === 'wait') preview += ` (${step.params?.delayMs ?? 500} мс)`;
+        else if (step.action === 'branch' || step.action === 'assert') preview += ` [${BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?'}]`;
+        else if (step.action === 'navigate') preview = step.params?.url || '—';
         else if (step.action === 'separator' && step.params?.label) preview = step.params.label;
         li.innerHTML = `<span class="step-badge">${i + 1}. ${badge}</span><div class="step-preview" title="${escapeHtml(step.xpath || '')}">${escapeHtml(preview)}</div>`;
         li.addEventListener('click', () => selectEditorStep(step.id));
@@ -677,8 +724,19 @@ function selectEditorStep(stepId) {
     editorSeparatorLabel.value = step.params?.label || '';
     editorRetryOnError.checked = !!step.params?.retryOnError;
     editorWaitForLoad.checked = step.params?.waitForLoad !== false;
+    if (editorMandatory) editorMandatory.checked = step.params?.mandatory !== false;
+    if (editorTimeoutMs) editorTimeoutMs.value = step.params?.timeoutMs ?? 0;
+    if (editorBranchCondition) editorBranchCondition.value = step.params?.condition || 'element_exists';
+    if (editorAssertCondition) editorAssertCondition.value = step.params?.condition || 'element_exists';
+    if (editorAssertExpected) editorAssertExpected.value = step.params?.expectedValue || '';
+    if (editorNavigateUrl) editorNavigateUrl.value = step.params?.url || '';
+    if (editorBranchExpected) editorBranchExpected.value = step.params?.expectedValue || '';
     renderEditorSeparatorColors(step.params?.color || SEPARATOR_COLORS[0]);
     toggleEditorParams();
+    if (step.action === 'branch') {
+        if (editorBranchNextId) editorBranchNextId.value = step.params?.nextId || '';
+        if (editorBranchNextElseId) editorBranchNextElseId.value = step.params?.nextElseId || '';
+    }
 }
 
 function toggleEditorParams() {
@@ -687,10 +745,13 @@ function toggleEditorParams() {
     if (editorParamsWait) { editorParamsWait.classList.toggle('hidden', action !== 'wait'); editorParamsWait.style.display = action === 'wait' ? '' : 'none'; }
     if (editorParamsFile) { editorParamsFile.classList.toggle('hidden', action !== 'file_upload'); editorParamsFile.style.display = action === 'file_upload' ? '' : 'none'; }
     if (editorParamsSeparator) { editorParamsSeparator.classList.toggle('hidden', action !== 'separator'); editorParamsSeparator.style.display = action === 'separator' ? '' : 'none'; }
-    const hideEditorWaitForLoad = action === 'separator' || action === 'wait';
+    if (editorParamsBranch) { editorParamsBranch.classList.toggle('hidden', action !== 'branch'); editorParamsBranch.style.display = action === 'branch' ? '' : 'none'; if (action === 'branch') populateEditorBranchSelects(); }
+    if (editorParamsAssert) { editorParamsAssert.classList.toggle('hidden', action !== 'assert'); editorParamsAssert.style.display = action === 'assert' ? '' : 'none'; }
+    if (editorParamsNavigate) { editorParamsNavigate.classList.toggle('hidden', action !== 'navigate'); editorParamsNavigate.style.display = action === 'navigate' ? '' : 'none'; }
+    const hideEditorWaitForLoad = action === 'separator' || action === 'wait' || action === 'branch' || action === 'navigate';
     if (editorParamsWaitForLoad) { editorParamsWaitForLoad.classList.toggle('hidden', hideEditorWaitForLoad); editorParamsWaitForLoad.style.display = hideEditorWaitForLoad ? 'none' : ''; }
     const xpathRow = editorDetail?.querySelector('.form-row:first-child');
-    if (xpathRow) xpathRow.style.display = action === 'separator' ? 'none' : '';
+    if (xpathRow) xpathRow.style.display = (action === 'separator' || action === 'navigate') ? 'none' : '';
 }
 
 function renderEditorSeparatorColors(selected) {
@@ -710,7 +771,7 @@ function applyEditorStep() {
     const step = executionList.find((s) => s.id === selectedEditorStepId);
     if (!step) return;
     const action = editorAction.value;
-    step.xpath = action === 'separator' ? '—' : (editorXpath.value || '').trim();
+    step.xpath = action === 'separator' ? '—' : (action === 'navigate' ? '—' : (editorXpath.value || '').trim());
     step.action = action;
     step.params = step.params || {};
     if (action === 'input') step.params.value = editorInputValue.value;
@@ -723,6 +784,23 @@ function applyEditorStep() {
         step.params.label = (editorSeparatorLabel.value || '').trim();
         step.params.color = editorSeparatorColors?.querySelector('.separator-color-btn.selected')?.dataset.color || SEPARATOR_COLORS[0];
     }
+    if (action === 'assert') {
+        step.params.condition = editorAssertCondition?.value || 'element_exists';
+        step.params.expectedValue = (editorAssertExpected?.value || '').trim();
+    }
+    if (action === 'navigate') step.params.url = (editorNavigateUrl?.value || '').trim();
+    if (action === 'branch') {
+        step.params.condition = editorBranchCondition?.value || 'element_exists';
+        step.params.expectedValue = (editorBranchExpected?.value || '').trim();
+        if (editorBranchNextId?.value) step.params.nextId = editorBranchNextId.value;
+        else delete step.params.nextId;
+        if (editorBranchNextElseId?.value) step.params.nextElseId = editorBranchNextElseId.value;
+        else delete step.params.nextElseId;
+    }
+    const toVal = parseInt(editorTimeoutMs?.value, 10);
+    if (toVal > 0) step.params.timeoutMs = toVal;
+    else delete step.params.timeoutMs;
+    step.params.mandatory = editorMandatory?.checked !== false;
     if (editorRetryOnError?.checked) step.params.retryOnError = true;
     else delete step.params.retryOnError;
     step.params.waitForLoad = !!editorWaitForLoad?.checked;
@@ -892,11 +970,17 @@ function renderExecutionList() {
             if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
             else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
             else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
+            else if (step.action === 'branch' || step.action === 'assert') {
+                const c = BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?';
+                paramsText = step.params?.expectedValue ? `${c}: "${escapeHtml(step.params.expectedValue.substring(0, 15))}…"` : c;
+            }
+            else if (step.action === 'navigate') paramsText = escapeHtml((step.params?.url || '').substring(0, 40));
+            const listDisplayText = step.action === 'navigate' ? (step.params?.url || '—') : step.xpath;
             li.innerHTML = `
                 <div class="execution-item-header">
                     ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
                     <span class="execution-item-idx">${displayIdx + 1}</span>
-                    <span class="execution-item-xpath" title="${escapeHtml(step.xpath)}">${escapeHtml(truncate(step.xpath, 50))}</span>
+                    <span class="execution-item-xpath" title="${escapeHtml(listDisplayText)}">${escapeHtml(truncate(listDisplayText, 50))}</span>
                     <span class="execution-item-badge ${step.action}">${ACTION_LABELS[step.action] || step.action}</span>
                     ${statusBadge}
                 </div>
@@ -927,6 +1011,157 @@ function renderExecutionList() {
         const activeRow = executionListEl.querySelector(`[data-step-id="${CSS.escape(currentExecutingStepId)}"]`);
         if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
     }
+    if (tabFlow?.classList.contains('active')) renderFlowCanvas();
+}
+
+function renderFlowCanvas() {
+    if (!flowCanvas) return;
+    flowCanvas.innerHTML = '';
+    if (executionList.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'editor-empty';
+        empty.style.padding = '24px';
+        empty.textContent = 'Нет шагов. Используйте кнопки выше или «+ Вручную» для добавления.';
+        flowCanvas.appendChild(empty);
+        return;
+    }
+    const stepsWrap = document.createElement('div');
+    stepsWrap.className = 'flow-steps';
+    executionList.forEach((step, idx) => {
+        const arrow = document.createElement('div');
+        arrow.className = 'flow-arrow';
+        arrow.title = 'Вставить шаг между карточками';
+        arrow.dataset.insertAt = String(idx);
+        arrow.innerHTML = '<svg width="12" height="24" viewBox="0 0 12 24"><path d="M6 0 L6 18 L2 14 M6 18 L10 14" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        if (idx > 0) {
+            arrow.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const at = parseInt(arrow.dataset.insertAt, 10);
+                showStepModal(null, at);
+            });
+            stepsWrap.appendChild(arrow);
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flow-step-wrapper';
+        wrapper.dataset.idx = String(idx);
+
+        const card = document.createElement('div');
+        card.className = 'flow-card' + (step.action === 'separator' ? ' separator-card' : '') + (step.id === currentExecutingStepId ? ' current' : '');
+        card.dataset.stepId = step.id;
+        card.dataset.idx = String(idx);
+        card.draggable = true;
+
+        if (step.action === 'separator') {
+            const color = step.params?.color || SEPARATOR_COLORS[0];
+            const label = (step.params?.label || '').trim();
+            card.innerHTML = `
+                <div class="flow-separator-line" style="--sep-color: ${escapeHtml(color)}"></div>
+                ${label ? `<span class="flow-separator-label" style="color: ${escapeHtml(color)}">${escapeHtml(label)}</span>` : ''}
+                <div class="flow-card-actions">
+                    <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать">✏</button>
+                    <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
+                    <button type="button" class="btn-icon btn-move-up" data-idx="${idx}" title="Вверх" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                    <button type="button" class="btn-icon btn-move-down" data-idx="${idx}" title="Вниз" ${idx === executionList.length - 1 ? 'disabled' : ''}>↓</button>
+                </div>
+            `;
+        } else {
+            const s = stepRunStatus[step.id];
+            const statusBadge = s?.state ? `<span class="flow-card-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>` : '';
+            let paramsText = '';
+            if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 25))}${step.params.value.length > 25 ? '…' : ''}"`;
+            else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
+            else if (step.action === 'file_upload' && step.params?.fileName) paramsText = `📎 ${escapeHtml(step.params.fileName)}`;
+            else if (step.action === 'branch' || step.action === 'assert') {
+                const c = BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?';
+                paramsText = step.params?.expectedValue ? `${c}: "${escapeHtml(step.params.expectedValue.substring(0, 15))}…"` : c;
+            }
+            else if (step.action === 'navigate') paramsText = escapeHtml((step.params?.url || '').substring(0, 35));
+            const displayText = step.action === 'navigate' ? (step.params?.url || '—') : step.xpath;
+            card.innerHTML = `
+                <div class="flow-card-header">
+                    <span class="flow-card-drag" title="Перетащить">⋮⋮</span>
+                    <span class="flow-card-idx">${idx + 1}</span>
+                    <span class="flow-card-xpath" title="${escapeHtml(displayText)}">${escapeHtml(truncate(displayText, 45))}</span>
+                    <span class="flow-card-badge ${step.action}">${ACTION_LABELS[step.action] || step.action}</span>
+                    ${statusBadge}
+                </div>
+                ${paramsText ? `<div class="flow-card-params">${paramsText}</div>` : ''}
+                <div class="flow-card-actions">
+                    <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить">▶</button>
+                    <button type="button" class="btn-icon btn-run-from-step" data-id="${escapeHtml(step.id)}" title="С этого шага">▶▶</button>
+                    <button type="button" class="btn-icon btn-clone-step" data-id="${escapeHtml(step.id)}" title="Клонировать">⧉</button>
+                    <button type="button" class="btn-icon btn-edit-step" data-id="${escapeHtml(step.id)}" title="Редактировать">✏</button>
+                    <button type="button" class="btn-icon btn-delete-step" data-id="${escapeHtml(step.id)}" title="Удалить">🗑</button>
+                    <button type="button" class="btn-icon btn-move-up" data-idx="${idx}" title="Вверх" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                    <button type="button" class="btn-icon btn-move-down" data-idx="${idx}" title="Вниз" ${idx === executionList.length - 1 ? 'disabled' : ''}>↓</button>
+                </div>
+            `;
+        }
+
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-icon')) return;
+            const step = executionList.find((s) => s.id === card.dataset.stepId);
+            if (step && step.action !== 'separator') showStepModal(step);
+        });
+        card.addEventListener('dragstart', onFlowCardDragStart);
+        card.addEventListener('dragover', onFlowCardDragOver);
+        card.addEventListener('drop', onFlowCardDrop);
+        card.addEventListener('dragend', onFlowCardDragEnd);
+
+        wrapper.appendChild(card);
+        stepsWrap.appendChild(wrapper);
+    });
+    const endArrow = document.createElement('div');
+    endArrow.className = 'flow-arrow';
+    endArrow.title = 'Добавить шаг в конец';
+    endArrow.dataset.insertAt = String(executionList.length);
+    endArrow.innerHTML = '<svg width="12" height="24" viewBox="0 0 12 24"><path d="M6 0 L6 18 L2 14 M6 18 L10 14" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    endArrow.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showStepModal(null, executionList.length);
+    });
+    stepsWrap.appendChild(endArrow);
+    flowCanvas.appendChild(stepsWrap);
+}
+
+let flowDraggedIdx = null;
+
+function onFlowCardDragStart(e) {
+    const card = e.target.closest('.flow-card');
+    if (!card || card.dataset.idx === undefined) return;
+    flowDraggedIdx = parseInt(card.dataset.idx, 10);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(flowDraggedIdx));
+    card.classList.add('dragging');
+}
+
+function onFlowCardDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    flowCanvas.querySelectorAll('.flow-card').forEach((el) => el.classList.remove('drag-over'));
+    const card = e.target.closest('.flow-card');
+    if (card && card.dataset.idx !== undefined) card.classList.add('drag-over');
+}
+
+function onFlowCardDrop(e) {
+    e.preventDefault();
+    flowCanvas.querySelectorAll('.flow-card').forEach((el) => el.classList.remove('drag-over'));
+    const card = e.target.closest('.flow-card');
+    if (!card || card.dataset.idx === undefined || flowDraggedIdx == null) return;
+    const dropIdx = parseInt(card.dataset.idx, 10);
+    if (dropIdx === flowDraggedIdx) return;
+    const step = executionList[flowDraggedIdx];
+    executionList.splice(flowDraggedIdx, 1);
+    const newIdx = dropIdx > flowDraggedIdx ? dropIdx - 1 : dropIdx;
+    executionList.splice(newIdx, 0, step);
+    saveExecutionList();
+    renderExecutionList();
+}
+
+function onFlowCardDragEnd(e) {
+    flowCanvas.querySelectorAll('.flow-card').forEach((el) => el.classList.remove('dragging', 'drag-over'));
+    flowDraggedIdx = null;
 }
 
 function truncate(str, len) {
@@ -942,8 +1177,9 @@ function openListTab() {
 // ——— Step modal ———
 let stepFileBase64 = null;
 
-function showStepModal(step) {
+function showStepModal(step, insertAt) {
     editingStepId = step ? step.id : null;
+    insertStepAtIndex = insertAt ?? null;
     stepXpath.value = step ? step.xpath : (primaryXpathEl ? primaryXpathEl.textContent : '') || '';
     stepAction.value = step ? step.action : 'click';
     const sepColor = step?.params?.color || SEPARATOR_COLORS[0];
@@ -960,7 +1196,18 @@ function showStepModal(step) {
     }
     if (stepRetryOnError) stepRetryOnError.checked = !!step?.params?.retryOnError;
     if (stepWaitForLoad) stepWaitForLoad.checked = step?.params?.waitForLoad !== false;
+    if (stepMandatory) stepMandatory.checked = step?.params?.mandatory !== false;
+    if (stepTimeoutMs) stepTimeoutMs.value = step?.params?.timeoutMs ?? 0;
+    if (stepBranchCondition) stepBranchCondition.value = step?.params?.condition || 'element_exists';
+    if (stepBranchExpected) stepBranchExpected.value = step?.params?.expectedValue || '';
+    if (stepAssertCondition) stepAssertCondition.value = step?.params?.condition || 'element_exists';
+    if (stepAssertExpected) stepAssertExpected.value = step?.params?.expectedValue || '';
+    if (stepNavigateUrl) stepNavigateUrl.value = step?.params?.url || '';
     toggleStepParams();
+    if (step?.action === 'branch') {
+        if (stepBranchNextId) stepBranchNextId.value = step?.params?.nextId || '';
+        if (stepBranchNextElseId) stepBranchNextElseId.value = step?.params?.nextElseId || '';
+    }
     stepModal.classList.remove('hidden');
     stepModal.querySelector('.modal-title').textContent = step ? 'Редактировать шаг' : 'Добавить шаг';
 }
@@ -968,6 +1215,7 @@ function showStepModal(step) {
 function hideStepModal() {
     stepModal.classList.add('hidden');
     editingStepId = null;
+    insertStepAtIndex = null;
 }
 
 function toggleStepParams() {
@@ -977,6 +1225,11 @@ function toggleStepParams() {
     stepParamsInput.style.display = action === 'input' ? '' : 'none';
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
+    stepParamsBranch.classList.toggle('hidden', action !== 'branch');
+    stepParamsBranch.style.display = action === 'branch' ? '' : 'none';
+    if (action === 'branch') populateStepNextSelects();
+    if (stepParamsAssert) { stepParamsAssert.classList.toggle('hidden', action !== 'assert'); stepParamsAssert.style.display = action === 'assert' ? '' : 'none'; }
+    if (stepParamsNavigate) { stepParamsNavigate.classList.toggle('hidden', action !== 'navigate'); stepParamsNavigate.style.display = action === 'navigate' ? '' : 'none'; }
     stepParamsFile.classList.toggle('hidden', action !== 'file_upload');
     stepParamsFile.style.display = action === 'file_upload' ? '' : 'none';
     if (stepParamsSeparator) {
@@ -984,13 +1237,34 @@ function toggleStepParams() {
         stepParamsSeparator.style.display = isSeparator ? '' : 'none';
         if (isSeparator) renderSeparatorColorButtons(selectedSeparatorColor);
     }
-    const hideWaitForLoad = action === 'separator' || action === 'wait';
+    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'branch' || action === 'navigate';
     if (stepParamsWaitForLoad) {
         stepParamsWaitForLoad.classList.toggle('hidden', hideWaitForLoad);
         stepParamsWaitForLoad.style.display = hideWaitForLoad ? 'none' : '';
     }
     const xpathRow = stepModal?.querySelector('.form-row:first-child');
-    if (xpathRow) xpathRow.style.display = isSeparator ? 'none' : '';
+    if (xpathRow) xpathRow.style.display = (isSeparator || action === 'navigate') ? 'none' : '';
+    const hideCommon = isSeparator;
+    const commonRow = stepModal?.querySelector('#stepParamsCommon');
+    const mandatoryRow = stepModal?.querySelector('#stepParamsMandatory');
+    if (commonRow) { commonRow.classList.toggle('hidden', hideCommon); commonRow.style.display = hideCommon ? 'none' : ''; }
+    if (mandatoryRow) { mandatoryRow.classList.toggle('hidden', hideCommon); mandatoryRow.style.display = hideCommon ? 'none' : ''; }
+}
+
+function populateStepNextSelects() {
+    const steps = executionList.filter((s) => s.action !== 'separator');
+    const opts = steps.map((s, i) => `<option value="${escapeHtml(s.id)}">${i + 1}. ${escapeHtml(truncate(s.xpath || s.action, 30))}</option>`).join('');
+    const def = '<option value="">— Следующий по порядку —</option>';
+    if (stepBranchNextId) stepBranchNextId.innerHTML = def + opts;
+    if (stepBranchNextElseId) stepBranchNextElseId.innerHTML = def + opts;
+}
+
+function populateEditorBranchSelects() {
+    const steps = executionList.filter((s) => s.action !== 'separator');
+    const opts = steps.map((s, i) => `<option value="${escapeHtml(s.id)}">${i + 1}. ${escapeHtml(truncate(s.xpath || s.action, 30))}</option>`).join('');
+    const def = '<option value="">— Следующий по порядку —</option>';
+    if (editorBranchNextId) editorBranchNextId.innerHTML = def + opts;
+    if (editorBranchNextElseId) editorBranchNextElseId.innerHTML = def + opts;
 }
 
 stepAction.addEventListener('change', toggleStepParams);
@@ -1035,9 +1309,16 @@ stepFileInput.addEventListener('change', () => {
 stepModalCancel.addEventListener('click', hideStepModal);
 stepModalSave.addEventListener('click', () => {
     const action = stepAction.value;
-    const xpath = action === 'separator' ? '—' : stepXpath.value.trim();
-    if (!xpath && action !== 'separator') return;
+    const navUrl = (stepNavigateUrl?.value || '').trim();
+    let xpath = action === 'separator' ? '—' : (action === 'navigate' ? navUrl : stepXpath.value.trim());
+    if (action === 'navigate') {
+        if (!navUrl) return;
+        xpath = '—';
+    } else if (!xpath && action !== 'separator') return;
     const params = {};
+    const timeoutVal = parseInt(stepTimeoutMs?.value, 10);
+    if (timeoutVal > 0) params.timeoutMs = timeoutVal;
+    params.mandatory = stepMandatory?.checked !== false;
     if (action === 'input') params.value = stepInputValue.value;
     if (action === 'wait') params.delayMs = Math.max(0, parseInt(stepWaitMs.value, 10) || 500);
     if (action === 'separator') {
@@ -1050,6 +1331,17 @@ stepModalSave.addEventListener('click', () => {
         const fileB64 = stepFileBase64 || (hasMinimalPdf ? MINIMAL_PDF_BASE64 : null);
         if (fileB64) params.fileContentBase64 = fileB64;
     }
+    if (action === 'assert') {
+        params.condition = stepAssertCondition?.value || 'element_exists';
+        params.expectedValue = (stepAssertExpected?.value || '').trim();
+    }
+    if (action === 'navigate') params.url = navUrl;
+    if (action === 'branch') {
+        params.condition = stepBranchCondition?.value || 'element_exists';
+        params.expectedValue = (stepBranchExpected?.value || '').trim();
+        if (stepBranchNextId?.value) params.nextId = stepBranchNextId.value;
+        if (stepBranchNextElseId?.value) params.nextElseId = stepBranchNextElseId.value;
+    }
     if (stepRetryOnError?.checked) params.retryOnError = true;
     params.waitForLoad = !!stepWaitForLoad?.checked;
     if (editingStepId) {
@@ -1058,7 +1350,12 @@ stepModalSave.addEventListener('click', () => {
             executionList[idx] = { ...executionList[idx], xpath, action, params };
         }
     } else {
-        executionList.push({ id: 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2), xpath, action, params });
+        const newStep = { id: 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2), xpath, action, params };
+        if (insertStepAtIndex != null && insertStepAtIndex >= 0 && insertStepAtIndex <= executionList.length) {
+            executionList.splice(insertStepAtIndex, 0, newStep);
+        } else {
+            executionList.push(newStep);
+        }
     }
     saveExecutionList();
     hideStepModal();
@@ -1103,6 +1400,25 @@ document.addEventListener('click', (e) => {
         renderExecutionList();
         chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
             if (!tab?.id) return;
+            if (step.action === 'navigate') {
+                const url = (step.params?.url || '').trim();
+                if (!url) {
+                    setStepStatus(step.id, 'error', 'URL не указан');
+                    currentExecutingStepId = null;
+                    renderExecutionList();
+                    return;
+                }
+                chrome.tabs.update(tab.id, { url: url.startsWith('http') ? url : 'https://' + url }).then(() => {
+                    setStepStatus(step.id, 'ok', '');
+                    currentExecutingStepId = null;
+                    renderExecutionList();
+                }).catch((e) => {
+                    setStepStatus(step.id, 'error', e?.message || 'Ошибка перехода');
+                    currentExecutingStepId = null;
+                    renderExecutionList();
+                });
+                return;
+            }
             chrome.tabs.sendMessage(tab.id, { action: 'executeList', steps: [step], continueOnError: true }).then((resp) => {
                 const r = resp?.results?.[0];
                 if (r?.ok) setStepStatus(step.id, 'ok', '');
@@ -1182,6 +1498,34 @@ if (addSeparatorBtn) {
     addSeparatorBtn.addEventListener('click', () => {
         openListTab();
         showStepModal({ xpath: '—', action: 'separator', params: { color: SEPARATOR_COLORS[0] } });
+    });
+}
+
+// ——— Flow tab toolbar ———
+if (flowAddStepBtn) {
+    flowAddStepBtn.addEventListener('click', () => {
+        const xpath = (currentResult?.primary?.xpath || (primaryXpathEl && primaryXpathEl.textContent) || '').trim();
+        if (!xpath) {
+            flowAddStepBtn.textContent = 'Сначала выберите элемент';
+            setTimeout(() => { flowAddStepBtn.textContent = '+ Добавить текущий'; }, 2000);
+            return;
+        }
+        showStepModal({ xpath, action: 'click', params: {} });
+    });
+}
+if (flowAddManualBtn) flowAddManualBtn.addEventListener('click', () => showStepModal(null));
+if (flowAddSeparatorBtn) {
+    flowAddSeparatorBtn.addEventListener('click', () => {
+        showStepModal({ xpath: '—', action: 'separator', params: { color: SEPARATOR_COLORS[0] } });
+    });
+}
+if (flowExecuteBtn) flowExecuteBtn.addEventListener('click', () => executeListBtn?.click());
+if (flowStopBtn) flowStopBtn.addEventListener('click', () => stopExecuteBtn?.click());
+if (flowSaveBtn) {
+    flowSaveBtn.addEventListener('click', () => {
+        saveExecutionList();
+        flowSaveBtn.textContent = '✓ Сохранено';
+        setTimeout(() => { flowSaveBtn.textContent = '💾 Сохранить'; }, 1500);
     });
 }
 
@@ -1280,7 +1624,7 @@ function parseImportFile(data) {
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
-        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'separator'].includes(s.action) ? s.action : 'click',
+        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
         params: s.params && typeof s.params === 'object' ? s.params : {}
     })).filter((s) => s.xpath || s.action === 'separator');
 }
@@ -1359,6 +1703,9 @@ function exportToTemplates() {
             : `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').click();`;
         if (s.action === 'input') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').fill('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'wait') return `  await page.waitForTimeout(${s.params?.delayMs ?? 500});`;
+        if (s.action === 'branch') return `  // branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+        if (s.action === 'assert') return `  // assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+        if (s.action === 'navigate') return `  await page.goto('${(s.params?.url || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'file_upload') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').setInputFiles({ path: '${(s.params?.fileName || 'file').replace(/'/g, "\\'")}' });`;
         return `  // ${s.action}: ${s.xpath}`;
     }).join('\n');
@@ -1368,6 +1715,9 @@ function exportToTemplates() {
             : `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').click();`;
         if (s.action === 'input') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').type('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'wait') return `  cy.wait(${s.params?.delayMs ?? 500});`;
+        if (s.action === 'branch') return `  // branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+        if (s.action === 'assert') return `  // assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+        if (s.action === 'navigate') return `  cy.visit('${(s.params?.url || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'file_upload') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').attachFile('${(s.params?.fileName || 'file').replace(/'/g, "\\'")}');`;
         return `  // ${s.action}: ${s.xpath}`;
     }).join('\n');
@@ -1377,6 +1727,9 @@ function exportToTemplates() {
             : `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).click();`;
         if (s.action === 'input') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).sendKeys("${(s.params?.value || '').replace(/"/g, '\\"')}");`;
         if (s.action === 'wait') return `  Thread.sleep(${s.params?.delayMs ?? 500});`;
+        if (s.action === 'branch') return `  // branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+        if (s.action === 'assert') return `  // assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+        if (s.action === 'navigate') return `  driver.get("${(s.params?.url || '').replace(/"/g, '\\"')}");`;
         if (s.action === 'file_upload') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).sendKeys("${(s.params?.fileName || 'file').replace(/"/g, '\\"')}");`;
         return `  // ${s.action}: ${s.xpath}`;
     }).join('\n');
@@ -1421,6 +1774,115 @@ if (importJsonInput) importJsonInput.addEventListener('change', () => {
 });
 
 // ——— Execute list ———
+function hasBranching() {
+    return executionList.some((s) => s.params?.nextId || s.params?.nextElseId);
+}
+
+function needsStepByStepExecution() {
+    return hasBranching() || executionList.some((s) => s.action === 'navigate') || executionList.some((s) => s.params?.mandatory === false);
+}
+
+async function runExecutionWithBranching(tabId, fromStepId) {
+    const stepsToRun = executionList.filter((s) => s.action !== 'separator');
+    if (stepsToRun.length === 0) return;
+    let currentIdx = fromStepId ? executionList.findIndex((s) => s.id === fromStepId) : 0;
+    if (currentIdx < 0) currentIdx = 0;
+    const continueOnError = !stopOnErrorEl?.checked;
+    const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
+    const selectorTimeout = parseInt(selectorTimeoutMsEl?.value, 10) || 5000;
+    let okCount = 0;
+    const visited = new Set();
+    stopExecutionRequested = false;
+
+    while (currentIdx >= 0 && currentIdx < executionList.length && !stopExecutionRequested) {
+        const step = executionList[currentIdx];
+        if (step.action === 'separator') {
+            currentIdx++;
+            continue;
+        }
+        if (visited.has(step.id)) {
+            appendExecutionLog('Предупреждение: цикл в ветвлении, выход');
+            break;
+        }
+        visited.add(step.id);
+        setStepStatus(step.id, 'running', '');
+        currentExecutingStepId = step.id;
+        renderExecutionList();
+        if (stepDelay > 0 && okCount > 0) await new Promise((r) => setTimeout(r, stepDelay));
+        try {
+            if (step.action === 'navigate') {
+                const url = (step.params?.url || '').trim();
+                if (!url) {
+                    setStepStatus(step.id, 'error', 'URL не указан');
+                    appendExecutionLog(`✗ ${step.id}: URL не указан`);
+                    if (step.params?.mandatory !== false && !continueOnError) break;
+                    currentIdx++;
+                    continue;
+                }
+                await new Promise((resolve, reject) => {
+                    const listener = (id, info) => {
+                        if (id === tabId && info.status === 'complete') {
+                            chrome.tabs.onUpdated.removeListener(listener);
+                            resolve();
+                        }
+                    };
+                    chrome.tabs.onUpdated.addListener(listener);
+                    chrome.tabs.update(tabId, { url: url.startsWith('http') ? url : 'https://' + url }).catch((e) => {
+                        chrome.tabs.onUpdated.removeListener(listener);
+                        reject(e);
+                    });
+                    setTimeout(() => {
+                        chrome.tabs.onUpdated.removeListener(listener);
+                        resolve();
+                    }, 30000);
+                });
+                okCount++;
+                setStepStatus(step.id, 'ok', '');
+                appendExecutionLog(`✓ ${step.id} → ${url}`);
+                currentIdx++;
+                continue;
+            }
+            const resp = await chrome.tabs.sendMessage(tabId, {
+                action: 'executeStep',
+                step,
+                selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout
+            });
+            if (!resp?.ok) {
+                setStepStatus(step.id, 'error', resp?.error || 'Ошибка');
+                appendExecutionLog(`✗ ${step.id}: ${resp?.error || 'Ошибка'}`);
+                const mandatory = step.params?.mandatory !== false;
+                if (mandatory && !continueOnError) break;
+                currentIdx++;
+                continue;
+            }
+            okCount++;
+            setStepStatus(step.id, 'ok', '');
+            appendExecutionLog(`✓ ${step.id}`);
+            let nextId = null;
+            if (step.action === 'branch' && (step.params?.nextId || step.params?.nextElseId)) {
+                nextId = resp.conditionResult ? step.params.nextId : step.params.nextElseId;
+            }
+            if (nextId) {
+                const nextIdx = executionList.findIndex((s) => s.id === nextId);
+                currentIdx = nextIdx >= 0 ? nextIdx : currentIdx + 1;
+            } else {
+                currentIdx++;
+            }
+        } catch (err) {
+            setStepStatus(step.id, 'error', err?.message || 'нет связи');
+            appendExecutionLog(`✗ ${step.id}: ${err?.message || 'нет связи'}`);
+            if (!continueOnError) break;
+            currentIdx++;
+        }
+    }
+    currentExecutingStepId = null;
+    setExecutionUIRunning(false);
+    renderExecutionList();
+    appendExecutionLog(stopExecutionRequested ? 'Остановлено' : `Готово: ${okCount} шагов`);
+    executeListBtn.textContent = `✓ ${okCount}`;
+    setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
+}
+
 function runExecutionFromStep(fromStepId) {
     const idx = executionList.findIndex((s) => s.id === fromStepId);
     if (idx < 0) return;
@@ -1428,14 +1890,19 @@ function runExecutionFromStep(fromStepId) {
     if (stepsToRun.length === 0) return;
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
         if (!tab?.id) return;
+        if (needsStepByStepExecution()) {
+            if (executionLog) executionLog.textContent = '';
+            setExecutionUIRunning(true);
+            runExecutionWithBranching(tab.id, fromStepId);
+            return;
+        }
         const continueOnError = !stopOnErrorEl?.checked;
         const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
         if (executionLog) executionLog.textContent = '';
         appendExecutionLog(`Старт с шага ${idx + 1}: ${stepsToRun.length} шагов`);
         stepsToRun.forEach((s) => setStepStatus(s.id, 'running', ''));
         currentExecutingStepId = stepsToRun[0]?.id || null;
-        show(stopExecuteBtn);
-        hide(executeListBtn);
+        setExecutionUIRunning(true);
         renderExecutionList();
         chrome.tabs.sendMessage(tab.id, {
             action: 'executeList',
@@ -1458,14 +1925,12 @@ function runExecutionFromStep(fromStepId) {
             });
             appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length}`);
             renderExecutionList();
-            hide(stopExecuteBtn);
-            show(executeListBtn);
+            setExecutionUIRunning(false);
             executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
         }).catch((err) => {
             appendExecutionLog(`Ошибка: ${err?.message || 'нет связи'}`);
-            hide(stopExecuteBtn);
-            show(executeListBtn);
+            setExecutionUIRunning(false);
             executeListBtn.textContent = 'Ошибка: ' + (err?.message || 'нет связи');
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
         });
@@ -1497,14 +1962,20 @@ executeListBtn.addEventListener('click', () => {
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2000);
             return;
         }
+        if (needsStepByStepExecution()) {
+            if (executionLog) executionLog.textContent = '';
+            appendExecutionLog(`Старт (пошагово): ${stepsToRun.length} шагов`);
+            setExecutionUIRunning(true);
+            runExecutionWithBranching(tab.id, null);
+            return;
+        }
         const continueOnError = !stopOnErrorEl?.checked;
         const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
         if (executionLog) executionLog.textContent = '';
         appendExecutionLog(`Старт: ${stepsToRun.length} шагов`);
         stepsToRun.forEach((s) => setStepStatus(s.id, 'running', ''));
         currentExecutingStepId = stepsToRun[0]?.id || null;
-        show(stopExecuteBtn);
-        hide(executeListBtn);
+        setExecutionUIRunning(true);
         renderExecutionList();
         chrome.tabs.sendMessage(tab.id, {
             action: 'executeList',
@@ -1527,14 +1998,12 @@ executeListBtn.addEventListener('click', () => {
             });
             appendExecutionLog(`Готово: ${okCount}/${stepsToRun.length}`);
             renderExecutionList();
-            hide(stopExecuteBtn);
-            show(executeListBtn);
+            setExecutionUIRunning(false);
             executeListBtn.textContent = `✓ ${okCount}/${stepsToRun.length}`;
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
         }).catch((err) => {
             appendExecutionLog(`Ошибка: ${err?.message || 'нет связи'}`);
-            hide(stopExecuteBtn);
-            show(executeListBtn);
+            setExecutionUIRunning(false);
             executeListBtn.textContent = 'Ошибка: ' + (err?.message || 'нет связи');
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
         });
@@ -1543,11 +2012,10 @@ executeListBtn.addEventListener('click', () => {
 
 if (stopExecuteBtn) {
     stopExecuteBtn.addEventListener('click', () => {
+        stopExecutionRequested = true;
         chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
             if (tab?.id) chrome.tabs.sendMessage(tab.id, { action: 'stopExecution' });
-            appendExecutionLog('Остановлено пользователем');
-            hide(stopExecuteBtn);
-            show(executeListBtn);
+            setExecutionUIRunning(false);
             currentExecutingStepId = null;
             renderExecutionList();
         });
