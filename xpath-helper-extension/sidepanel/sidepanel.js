@@ -16,7 +16,7 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход' };
+const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя' };
 const BRANCH_CONDITIONS = [
     { value: 'element_exists', label: 'Элемент есть' },
     { value: 'text_equals', label: 'Текст равен' },
@@ -66,6 +66,7 @@ const flowCanvas = $('flowCanvas');
 const flowAddStepBtn = $('flowAddStepBtn');
 const flowAddManualBtn = $('flowAddManualBtn');
 const flowAddSeparatorBtn = $('flowAddSeparatorBtn');
+const flowAddUserActionBtn = $('flowAddUserActionBtn');
 const flowExecuteBtn = $('flowExecuteBtn');
 const flowStopBtn = $('flowStopBtn');
 const flowSaveBtn = $('flowSaveBtn');
@@ -85,6 +86,8 @@ const editorSeparatorLabel = $('editorSeparatorLabel');
 const editorSeparatorColors = $('editorSeparatorColors');
 const editorParamsInput = $('editorParamsInput');
 const editorParamsWait = $('editorParamsWait');
+const editorParamsUserAction = $('editorParamsUserAction');
+const editorUserActionMessage = $('editorUserActionMessage');
 const editorParamsFile = $('editorParamsFile');
 const editorParamsSeparator = $('editorParamsSeparator');
 const editorParamsBranch = $('editorParamsBranch');
@@ -108,6 +111,7 @@ const editorValidateBtn = $('editorValidateBtn');
 const addStepBtn = $('addStepBtn');
 const addStepManualBtn = $('addStepManualBtn');
 const addSeparatorBtn = $('addSeparatorBtn');
+const addUserActionBtn = $('addUserActionBtn');
 const stopOnErrorEl = $('stopOnError');
 const stepParamsSeparator = $('stepParamsSeparator');
 const stepParamsWaitForLoad = $('stepParamsWaitForLoad');
@@ -123,6 +127,8 @@ const stepAction = $('stepAction');
 const stepParamsInput = $('stepParamsInput');
 const stepInputValue = $('stepInputValue');
 const stepParamsWait = $('stepParamsWait');
+const stepParamsUserAction = $('stepParamsUserAction');
+const stepUserActionMessage = $('stepUserActionMessage');
 const stepParamsBranch = $('stepParamsBranch');
 const stepParamsAssert = $('stepParamsAssert');
 const stepParamsNavigate = $('stepParamsNavigate');
@@ -146,6 +152,7 @@ const stepModalCancel = $('stepModalCancel');
 const stepModalSave = $('stepModalSave');
 const exportJsonBtn = $('exportJsonBtn');
 const exportTemplatesBtn = $('exportTemplatesBtn');
+const exportPythonPlaywrightBtn = $('exportPythonPlaywrightBtn');
 const importJsonBtn = $('importJsonBtn');
 const importJsonInput = $('importJsonInput');
 const scenarioName = $('scenarioName');
@@ -233,21 +240,73 @@ function setExecutionUIRunning(running) {
     else { show(executeListBtn); hide(stopExecuteBtn); show(flowExecuteBtn); hide(flowStopBtn); }
 }
 
-/** Ошибка bfcache: страница в кэше, канал закрыт */
+/** Ошибка bfcache / закрытый канал: страница в кэше или навигация прервала ответ */
 function isBfcacheError(e) {
     const msg = String(e?.message || e || '').toLowerCase();
-    return msg.includes('back/forward cache') || msg.includes('message channel is closed') || msg.includes('receiving end does not');
+    return msg.includes('back/forward cache') || msg.includes('message channel') || msg.includes('receiving end does not') || msg.includes('asynchronous response');
 }
 
 function getTabErrorMessage(e) {
-    if (isBfcacheError(e)) return 'Страница в кэше. Обновите вкладку (F5) и попробуйте снова.';
-    return e?.message || e || 'Нет связи';
+    if (isBfcacheError(e)) return 'Связь с вкладкой потеряна. Обновите страницу (F5) и попробуйте снова.';
+    const msg = e?.message || e || 'Нет связи';
+    if (String(msg).includes('Таймаут') || String(msg).includes('timeout')) return 'Связь с вкладкой потеряна (таймаут). Обновите страницу и попробуйте снова.';
+    return msg;
 }
 
 function showBfcacheBanner() {
     const banner = $('bfcacheBanner');
     if (banner) { show(banner); banner.classList.remove('hidden'); }
 }
+
+function waitForUserAction(message) {
+    return new Promise((resolve) => {
+        const overlay = $('userActionOverlay');
+        const msgEl = $('userActionMessage');
+        const btn = $('userActionContinueBtn');
+        if (!overlay || !msgEl || !btn) { resolve(); return; }
+        msgEl.textContent = message || 'Выполните действие и нажмите Продолжить';
+        overlay.classList.remove('hidden');
+        const done = () => {
+            overlay.classList.add('hidden');
+            btn.removeEventListener('click', done);
+            resolve();
+        };
+        btn.addEventListener('click', done);
+    });
+}
+
+/** Отправка в content script без ожидания sendResponse — результат приходит через executionResult.
+ *  Устраняет ошибку "message channel closed" при навигации/bfcache. */
+const executionPending = new Map();
+function sendToContentAndWait(tabId, msg, timeoutMs = 120000) {
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            executionPending.delete(requestId);
+            reject(new Error('Таймаут: страница не ответила'));
+        }, timeoutMs);
+        const finish = (r) => { clearTimeout(timer); executionPending.delete(requestId); resolve(r); };
+        executionPending.set(requestId, { resolve: finish, reject: (e) => { clearTimeout(timer); executionPending.delete(requestId); reject(e); } });
+        chrome.tabs.sendMessage(tabId, { ...msg, requestId }).catch((e) => {
+            executionPending.delete(requestId);
+            clearTimeout(timer);
+            reject(e);
+        });
+    });
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'session') return;
+    for (const key of Object.keys(changes || {})) {
+        if (!key.startsWith('exec_result_')) continue;
+        const requestId = key.slice('exec_result_'.length);
+        const p = executionPending.get(requestId);
+        if (p) {
+            const v = changes[key]?.newValue;
+            if (v !== undefined) p.resolve(v);
+            chrome.storage.session.remove(key).catch(() => {});
+        }
+    }
+});
 
 function escapeHtml(str) {
     const d = document.createElement('div');
@@ -561,6 +620,11 @@ exportFileBtn.addEventListener('click', () => {
 
 // ——— Messages ———
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'executionResult') {
+        const p = executionPending.get(request.requestId);
+        if (p) p.resolve(request.result);
+        return false;
+    }
     if (request.action === 'elementHovered') {
         const el = request.element;
         const result = request.xpathResult;
@@ -712,6 +776,7 @@ function renderEditorStepList() {
         else if (step.action === 'wait') preview += ` (${step.params?.delayMs ?? 500} мс)`;
         else if (step.action === 'branch' || step.action === 'assert') preview += ` [${BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?'}]`;
         else if (step.action === 'navigate') preview = step.params?.url || '—';
+        else if (step.action === 'user_action') preview = (step.params?.message || 'Ожидание действий').substring(0, 40);
         else if (step.action === 'separator' && step.params?.label) preview = step.params.label;
         li.innerHTML = `<span class="step-badge">${i + 1}. ${badge}</span><div class="step-preview" title="${escapeHtml(step.xpath || '')}">${escapeHtml(preview)}</div>`;
         li.addEventListener('click', () => selectEditorStep(step.id));
@@ -746,6 +811,7 @@ function selectEditorStep(stepId) {
     if (editorAssertCondition) editorAssertCondition.value = step.params?.condition || 'element_exists';
     if (editorAssertExpected) editorAssertExpected.value = step.params?.expectedValue || '';
     if (editorNavigateUrl) editorNavigateUrl.value = step.params?.url || '';
+    if (editorUserActionMessage) editorUserActionMessage.value = step.params?.message || '';
     if (editorBranchExpected) editorBranchExpected.value = step.params?.expectedValue || '';
     renderEditorSeparatorColors(step.params?.color || SEPARATOR_COLORS[0]);
     toggleEditorParams();
@@ -759,15 +825,16 @@ function toggleEditorParams() {
     const action = editorAction.value;
     if (editorParamsInput) { editorParamsInput.classList.toggle('hidden', action !== 'input'); editorParamsInput.style.display = action === 'input' ? '' : 'none'; }
     if (editorParamsWait) { editorParamsWait.classList.toggle('hidden', action !== 'wait'); editorParamsWait.style.display = action === 'wait' ? '' : 'none'; }
+    if (editorParamsUserAction) { editorParamsUserAction.classList.toggle('hidden', action !== 'user_action'); editorParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
     if (editorParamsFile) { editorParamsFile.classList.toggle('hidden', action !== 'file_upload'); editorParamsFile.style.display = action === 'file_upload' ? '' : 'none'; }
     if (editorParamsSeparator) { editorParamsSeparator.classList.toggle('hidden', action !== 'separator'); editorParamsSeparator.style.display = action === 'separator' ? '' : 'none'; }
     if (editorParamsBranch) { editorParamsBranch.classList.toggle('hidden', action !== 'branch'); editorParamsBranch.style.display = action === 'branch' ? '' : 'none'; if (action === 'branch') populateEditorBranchSelects(); }
     if (editorParamsAssert) { editorParamsAssert.classList.toggle('hidden', action !== 'assert'); editorParamsAssert.style.display = action === 'assert' ? '' : 'none'; }
     if (editorParamsNavigate) { editorParamsNavigate.classList.toggle('hidden', action !== 'navigate'); editorParamsNavigate.style.display = action === 'navigate' ? '' : 'none'; }
-    const hideEditorWaitForLoad = action === 'separator' || action === 'wait' || action === 'branch' || action === 'navigate';
+    const hideEditorWaitForLoad = action === 'separator' || action === 'wait' || action === 'user_action' || action === 'branch' || action === 'navigate';
     if (editorParamsWaitForLoad) { editorParamsWaitForLoad.classList.toggle('hidden', hideEditorWaitForLoad); editorParamsWaitForLoad.style.display = hideEditorWaitForLoad ? 'none' : ''; }
     const xpathRow = editorDetail?.querySelector('.form-row:first-child');
-    if (xpathRow) xpathRow.style.display = (action === 'separator' || action === 'navigate') ? 'none' : '';
+    if (xpathRow) xpathRow.style.display = (action === 'separator' || action === 'navigate' || action === 'user_action') ? 'none' : '';
 }
 
 function renderEditorSeparatorColors(selected) {
@@ -787,11 +854,12 @@ function applyEditorStep() {
     const step = executionList.find((s) => s.id === selectedEditorStepId);
     if (!step) return;
     const action = editorAction.value;
-    step.xpath = action === 'separator' ? '—' : (action === 'navigate' ? '—' : (editorXpath.value || '').trim());
+    step.xpath = action === 'separator' || action === 'user_action' ? '—' : (action === 'navigate' ? '—' : (editorXpath.value || '').trim());
     step.action = action;
     step.params = step.params || {};
     if (action === 'input') step.params.value = editorInputValue.value;
     if (action === 'wait') step.params.delayMs = Math.max(0, parseInt(editorWaitMs.value, 10) || 500);
+    if (action === 'user_action') step.params.message = (editorUserActionMessage?.value || '').trim() || 'Выполните действие и нажмите Продолжить';
     if (action === 'file_upload') {
         step.params.fileName = editorFileName.value.trim() || 'file';
         if (editorFileBase64) step.params.fileContentBase64 = editorFileBase64;
@@ -991,7 +1059,8 @@ function renderExecutionList() {
                 paramsText = step.params?.expectedValue ? `${c}: "${escapeHtml(step.params.expectedValue.substring(0, 15))}…"` : c;
             }
             else if (step.action === 'navigate') paramsText = escapeHtml((step.params?.url || '').substring(0, 40));
-            const listDisplayText = step.action === 'navigate' ? (step.params?.url || '—') : step.xpath;
+            else if (step.action === 'user_action') paramsText = escapeHtml((step.params?.message || 'Ожидание действий').substring(0, 40));
+            const listDisplayText = step.action === 'navigate' ? (step.params?.url || '—') : (step.action === 'user_action' ? (step.params?.message || '—') : step.xpath);
             li.innerHTML = `
                 <div class="execution-item-header">
                     ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
@@ -1093,7 +1162,8 @@ function renderFlowCanvas() {
                 paramsText = step.params?.expectedValue ? `${c}: "${escapeHtml(step.params.expectedValue.substring(0, 15))}…"` : c;
             }
             else if (step.action === 'navigate') paramsText = escapeHtml((step.params?.url || '').substring(0, 35));
-            const displayText = step.action === 'navigate' ? (step.params?.url || '—') : step.xpath;
+            else if (step.action === 'user_action') paramsText = escapeHtml((step.params?.message || 'Ожидание действий').substring(0, 35));
+            const displayText = step.action === 'navigate' ? (step.params?.url || '—') : (step.action === 'user_action' ? (step.params?.message || '—') : step.xpath);
             card.innerHTML = `
                 <div class="flow-card-header">
                     <span class="flow-card-drag" title="Перетащить">⋮⋮</span>
@@ -1219,6 +1289,7 @@ function showStepModal(step, insertAt) {
     if (stepAssertCondition) stepAssertCondition.value = step?.params?.condition || 'element_exists';
     if (stepAssertExpected) stepAssertExpected.value = step?.params?.expectedValue || '';
     if (stepNavigateUrl) stepNavigateUrl.value = step?.params?.url || '';
+    if (stepUserActionMessage) stepUserActionMessage.value = step?.params?.message || '';
     toggleStepParams();
     if (step?.action === 'branch') {
         if (stepBranchNextId) stepBranchNextId.value = step?.params?.nextId || '';
@@ -1241,6 +1312,7 @@ function toggleStepParams() {
     stepParamsInput.style.display = action === 'input' ? '' : 'none';
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
+    if (stepParamsUserAction) { stepParamsUserAction.classList.toggle('hidden', action !== 'user_action'); stepParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
     stepParamsBranch.classList.toggle('hidden', action !== 'branch');
     stepParamsBranch.style.display = action === 'branch' ? '' : 'none';
     if (action === 'branch') populateStepNextSelects();
@@ -1253,13 +1325,13 @@ function toggleStepParams() {
         stepParamsSeparator.style.display = isSeparator ? '' : 'none';
         if (isSeparator) renderSeparatorColorButtons(selectedSeparatorColor);
     }
-    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'branch' || action === 'navigate';
+    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'user_action' || action === 'branch' || action === 'navigate';
     if (stepParamsWaitForLoad) {
         stepParamsWaitForLoad.classList.toggle('hidden', hideWaitForLoad);
         stepParamsWaitForLoad.style.display = hideWaitForLoad ? 'none' : '';
     }
     const xpathRow = stepModal?.querySelector('.form-row:first-child');
-    if (xpathRow) xpathRow.style.display = (isSeparator || action === 'navigate') ? 'none' : '';
+    if (xpathRow) xpathRow.style.display = (isSeparator || action === 'navigate' || action === 'user_action') ? 'none' : '';
     const hideCommon = isSeparator;
     const commonRow = stepModal?.querySelector('#stepParamsCommon');
     const mandatoryRow = stepModal?.querySelector('#stepParamsMandatory');
@@ -1326,9 +1398,11 @@ stepModalCancel.addEventListener('click', hideStepModal);
 stepModalSave.addEventListener('click', () => {
     const action = stepAction.value;
     const navUrl = (stepNavigateUrl?.value || '').trim();
-    let xpath = action === 'separator' ? '—' : (action === 'navigate' ? navUrl : stepXpath.value.trim());
+    let xpath = action === 'separator' || action === 'user_action' ? '—' : (action === 'navigate' ? navUrl : stepXpath.value.trim());
     if (action === 'navigate') {
         if (!navUrl) return;
+        xpath = '—';
+    } else if (action === 'user_action') {
         xpath = '—';
     } else if (!xpath && action !== 'separator') return;
     const params = {};
@@ -1352,6 +1426,7 @@ stepModalSave.addEventListener('click', () => {
         params.expectedValue = (stepAssertExpected?.value || '').trim();
     }
     if (action === 'navigate') params.url = navUrl;
+    if (action === 'user_action') params.message = (stepUserActionMessage?.value || '').trim() || 'Выполните действие и нажмите Продолжить';
     if (action === 'branch') {
         params.condition = stepBranchCondition?.value || 'element_exists';
         params.expectedValue = (stepBranchExpected?.value || '').trim();
@@ -1435,7 +1510,7 @@ document.addEventListener('click', (e) => {
                 });
                 return;
             }
-            chrome.tabs.sendMessage(tab.id, { action: 'executeList', steps: [step], continueOnError: true }).then((resp) => {
+            sendToContentAndWait(tab.id, { action: 'executeList', steps: [step], continueOnError: true }).then((resp) => {
                 const r = resp?.results?.[0];
                 if (r?.ok) setStepStatus(step.id, 'ok', '');
                 else setStepStatus(step.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -1518,6 +1593,12 @@ if (addSeparatorBtn) {
         showStepModal({ xpath: '—', action: 'separator', params: { color: SEPARATOR_COLORS[0] } });
     });
 }
+if (addUserActionBtn) {
+    addUserActionBtn.addEventListener('click', () => {
+        openListTab();
+        showStepModal({ xpath: '—', action: 'user_action', params: { message: 'Подпишите документ ключом в открывшемся окне, затем нажмите Продолжить' } });
+    });
+}
 
 // ——— Flow tab toolbar ———
 if (flowAddStepBtn) {
@@ -1535,6 +1616,11 @@ if (flowAddManualBtn) flowAddManualBtn.addEventListener('click', () => showStepM
 if (flowAddSeparatorBtn) {
     flowAddSeparatorBtn.addEventListener('click', () => {
         showStepModal({ xpath: '—', action: 'separator', params: { color: SEPARATOR_COLORS[0] } });
+    });
+}
+if (flowAddUserActionBtn) {
+    flowAddUserActionBtn.addEventListener('click', () => {
+        showStepModal({ xpath: '—', action: 'user_action', params: { message: 'Подпишите документ ключом в открывшемся окне, затем нажмите Продолжить' } });
     });
 }
 if (flowExecuteBtn) flowExecuteBtn.addEventListener('click', () => executeListBtn?.click());
@@ -1569,7 +1655,7 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
         setStepStatus(stepToRun.id, 'running', '');
         renderExecutionList();
         renderEditorStepList();
-        chrome.tabs.sendMessage(tab.id, { action: 'executeList', steps: [stepToRun], continueOnError: true }).then((resp) => {
+        sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepToRun], continueOnError: true }).then((resp) => {
             const r = resp?.results?.[0];
             if (r?.ok) setStepStatus(stepToRun.id, 'ok', '');
             else setStepStatus(stepToRun.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -1644,7 +1730,7 @@ function parseImportFile(data) {
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
-        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
+        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
         params: s.params && typeof s.params === 'object' ? s.params : {}
     })).filter((s) => s.xpath || s.action === 'separator');
 }
@@ -1769,6 +1855,78 @@ function exportToTemplates() {
 
 if (exportTemplatesBtn) exportTemplatesBtn.addEventListener('click', exportToTemplates);
 
+// ——— Export Python Playwright (chromium-gost) ———
+function stepToPythonPlaywright(s) {
+    const esc = (str) => (str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const pad = '            ';
+    if (s.action === 'click') return `${pad}page.locator("xpath=${esc(s.xpath)}").click()`;
+    if (s.action === 'click_if_exists') return `${pad}try:\n${pad}    page.locator("xpath=${esc(s.xpath)}").click(timeout=500)\n${pad}except Exception:\n${pad}    pass`;
+    if (s.action === 'input') return `${pad}page.locator("xpath=${esc(s.xpath)}").fill("${esc(s.params?.value || '')}")`;
+    if (s.action === 'wait') return `${pad}page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
+    if (s.action === 'navigate') return `${pad}page.goto("${esc(s.params?.url || '')}")`;
+    if (s.action === 'file_upload') return `${pad}page.locator("xpath=${esc(s.xpath)}").set_input_files("${esc(s.params?.fileName || 'file')}")`;
+    if (s.action === 'user_action') return `${pad}input("${esc(s.params?.message || 'Выполните действие и нажмите Enter')}")`;
+    if (s.action === 'branch') return `${pad}# branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+    if (s.action === 'assert') return `${pad}# assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
+    return `${pad}# ${s.action}: ${s.xpath}`;
+}
+
+function exportToPythonPlaywright() {
+    const name = (scenarioName?.value || 'scenario').trim().replace(/[^a-zA-Z0-9_]/g, '_') || 'scenario';
+    const steps = executionList.filter((s) => s.action !== 'separator');
+    if (steps.length === 0) {
+        if (exportPythonPlaywrightBtn) exportPythonPlaywrightBtn.textContent = 'Список пуст';
+        setTimeout(() => { if (exportPythonPlaywrightBtn) exportPythonPlaywrightBtn.textContent = '📤 Python Playwright'; }, 2000);
+        return;
+    }
+    const stepsCode = steps.map(stepToPythonPlaywright).join('\n');
+    const content = `"""
+XPath Helper Pro — экспорт в Python Playwright (chromium-gost)
+Запуск: python test_${name}.py
+Требуется: pip install playwright
+Используется системный chromium-gost с профилем пользователя.
+"""
+
+from playwright.sync_api import sync_playwright
+
+
+def test_${name}():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path="/opt/chromium-gost/chromium-gost",
+            args=[
+                "--remote-debugging-port=9222",
+                "--user-data-dir=/home/nuanred/.config/chromium",
+            ],
+            headless=False,
+        )
+        context = browser.new_context()
+        page = context.new_page()
+
+        try:
+${stepsCode}
+        finally:
+            browser.close()
+
+
+if __name__ == "__main__":
+    test_${name}()
+`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `test_${name}.py`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (exportPythonPlaywrightBtn) {
+        exportPythonPlaywrightBtn.textContent = '✓ Скачано';
+        setTimeout(() => { exportPythonPlaywrightBtn.textContent = '📤 Python Playwright'; }, 1500);
+    }
+}
+
+if (exportPythonPlaywrightBtn) exportPythonPlaywrightBtn.addEventListener('click', exportToPythonPlaywright);
+
 // ——— Copy log ———
 if (copyLogBtn) copyLogBtn.addEventListener('click', () => {
     const text = executionLog?.textContent || '';
@@ -1799,7 +1957,7 @@ function hasBranching() {
 }
 
 function needsStepByStepExecution() {
-    return hasBranching() || executionList.some((s) => s.action === 'navigate') || executionList.some((s) => s.params?.mandatory === false);
+    return hasBranching() || executionList.some((s) => s.action === 'navigate') || executionList.some((s) => s.action === 'user_action') || executionList.some((s) => s.params?.mandatory === false);
 }
 
 async function runExecutionWithBranching(tabId, fromStepId) {
@@ -1830,6 +1988,15 @@ async function runExecutionWithBranching(tabId, fromStepId) {
         renderExecutionList();
         if (stepDelay > 0 && okCount > 0) await new Promise((r) => setTimeout(r, stepDelay));
         try {
+            if (step.action === 'user_action') {
+                appendExecutionLog(`⏸ ${step.id}: ожидание действий пользователя`);
+                await waitForUserAction(step.params?.message || 'Выполните действие (подпись, выбор сертификата и т.д.) и нажмите Продолжить');
+                okCount++;
+                setStepStatus(step.id, 'ok', '');
+                appendExecutionLog(`✓ ${step.id}`);
+                currentIdx++;
+                continue;
+            }
             if (step.action === 'navigate') {
                 const url = (step.params?.url || '').trim();
                 if (!url) {
@@ -1860,13 +2027,15 @@ async function runExecutionWithBranching(tabId, fromStepId) {
                 setStepStatus(step.id, 'ok', '');
                 appendExecutionLog(`✓ ${step.id} → ${url}`);
                 currentIdx++;
+                await new Promise((r) => setTimeout(r, 1500)); // даём content script загрузиться на новой странице
                 continue;
             }
-            const resp = await chrome.tabs.sendMessage(tabId, {
+            const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
+            const resp = await sendToContentAndWait(tabId, {
                 action: 'executeStep',
                 step,
                 selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout
-            });
+            }, stepTimeout);
             if (!resp?.ok) {
                 setStepStatus(step.id, 'error', resp?.error || 'Ошибка');
                 appendExecutionLog(`✗ ${step.id}: ${resp?.error || 'Ошибка'}`);
@@ -1926,7 +2095,7 @@ function runExecutionFromStep(fromStepId) {
         currentExecutingStepId = stepsToRun[0]?.id || null;
         setExecutionUIRunning(true);
         renderExecutionList();
-        chrome.tabs.sendMessage(tab.id, {
+        sendToContentAndWait(tab.id, {
             action: 'executeList',
             steps: stepsToRun,
             continueOnError,
@@ -2001,7 +2170,7 @@ executeListBtn.addEventListener('click', () => {
         currentExecutingStepId = stepsToRun[0]?.id || null;
         setExecutionUIRunning(true);
         renderExecutionList();
-        chrome.tabs.sendMessage(tab.id, {
+        sendToContentAndWait(tab.id, {
             action: 'executeList',
             steps: stepsToRun,
             continueOnError,

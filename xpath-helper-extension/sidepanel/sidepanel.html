@@ -128,11 +128,13 @@
                     <button type="button" id="addStepBtn" class="btn btn-primary-list" title="Добавить XPath текущего элемента">+ Добавить текущий</button>
                     <button type="button" id="addStepManualBtn" class="btn" title="Добавить шаг с вводом XPath вручную">+ Вручную</button>
                     <button type="button" id="addSeparatorBtn" class="btn" title="Добавить разделитель между группами шагов">— Разделитель</button>
+                    <button type="button" id="addUserActionBtn" class="btn" title="Пауза для действий пользователя (подпись, выбор сертификата)">⏸ Действие пользователя</button>
                     <button type="button" id="executeListBtn" class="btn btn-execute" title="Выполнить все шаги">▶ Выполнить</button>
                     <button type="button" id="stopExecuteBtn" class="btn btn-stop hidden" title="Остановить выполнение">⏹ Стоп</button>
                     <button type="button" id="saveListBtn" class="btn" title="Сохранить в storage">💾 Сохранить</button>
                     <button type="button" id="exportJsonBtn" class="btn" title="Экспорт в JSON для автотестов">📤 JSON</button>
                     <button type="button" id="exportTemplatesBtn" class="btn" title="Экспорт в Playwright/Cypress/Selenium">📤 Шаблоны</button>
+                    <button type="button" id="exportPythonPlaywrightBtn" class="btn" title="Экспорт в Python Playwright (chromium-gost)">📤 Python Playwright</button>
                     <button type="button" id="importJsonBtn" class="btn" title="Загрузить шаги из JSON">📥 Загрузить</button>
                 </div>
                 <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
@@ -177,6 +179,7 @@
                                 <option value="input">Ввод текста</option>
                                 <option value="file_upload">Загрузка файла</option>
                                 <option value="wait">Пауза</option>
+                                <option value="user_action">Действие пользователя</option>
                                 <option value="assert">Assert</option>
                                 <option value="branch">Ветвление</option>
                                 <option value="navigate">Переход</option>
@@ -190,6 +193,10 @@
                         <div id="editorParamsWait" class="form-row hidden">
                             <label for="editorWaitMs">Задержка (мс)</label>
                             <input type="number" id="editorWaitMs" min="0" max="60000" value="500">
+                        </div>
+                        <div id="editorParamsUserAction" class="form-row hidden">
+                            <label for="editorUserActionMessage">Подсказка (что сделать)</label>
+                            <textarea id="editorUserActionMessage" rows="2" placeholder="Подпишите документ ключом в открывшемся окне"></textarea>
                         </div>
                         <div id="editorParamsFile" class="form-row hidden">
                             <label for="editorFileName">Имя файла</label>
@@ -272,6 +279,7 @@
                     <button type="button" id="flowAddStepBtn" class="btn btn-primary-list" title="Добавить XPath текущего элемента">+ Добавить текущий</button>
                     <button type="button" id="flowAddManualBtn" class="btn" title="Добавить шаг с вводом XPath вручную">+ Вручную</button>
                     <button type="button" id="flowAddSeparatorBtn" class="btn" title="Добавить разделитель">— Разделитель</button>
+                    <button type="button" id="flowAddUserActionBtn" class="btn" title="Пауза для действий пользователя">⏸ Действие пользователя</button>
                     <button type="button" id="flowExecuteBtn" class="btn btn-execute" title="Выполнить все шаги">▶ Выполнить</button>
                     <button type="button" id="flowStopBtn" class="btn btn-stop hidden" title="Остановить">⏹ Стоп</button>
                     <button type="button" id="flowSaveBtn" class="btn" title="Сохранить">💾 Сохранить</button>
@@ -314,6 +322,7 @@
                         <option value="input">Ввод текста</option>
                         <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
+                        <option value="user_action">Действие пользователя</option>
                         <option value="assert">Assert</option>
                         <option value="branch">Ветвление</option>
                         <option value="navigate">Переход на страницу</option>
@@ -349,6 +358,10 @@
                 <div id="stepParamsWait" class="form-row hidden">
                     <label for="stepWaitMs">Задержка (мс)</label>
                     <input type="number" id="stepWaitMs" min="0" max="60000" value="500" placeholder="500">
+                </div>
+                <div id="stepParamsUserAction" class="form-row hidden">
+                    <label for="stepUserActionMessage">Подсказка (что сделать)</label>
+                    <textarea id="stepUserActionMessage" rows="2" placeholder="Подпишите документ ключом в открывшемся окне, затем нажмите Продолжить"></textarea>
                 </div>
                 <div id="stepParamsAssert" class="form-row hidden">
                     <label for="stepAssertCondition">Условие</label>
@@ -419,6 +432,12 @@
         </div>
     </div>
 
+    <div id="userActionOverlay" class="user-action-overlay hidden" role="alert">
+        <div class="user-action-box">
+            <p id="userActionMessage">Выполните действие и нажмите Продолжить</p>
+            <button type="button" id="userActionContinueBtn" class="btn btn-save">Продолжить</button>
+        </div>
+    </div>
     <div id="contextInvalidatedBanner" class="banner hidden" role="alert">
         Расширение обновлено. <button type="button" id="reloadTabBtn" class="btn btn-sm">Обновить вкладку</button>
     </div>

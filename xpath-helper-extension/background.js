@@ -26,5 +26,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         return true;
     }
+    if (request.action === 'executionResult' && request.requestId != null) {
+        chrome.storage.session.set({ ['exec_result_' + request.requestId]: request.result }).catch(() => {});
+        return false;
+    }
     return true;
 });

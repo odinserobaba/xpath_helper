@@ -141,26 +141,35 @@ function init() {
                 return;
             }
             if (request.action === 'executeList') {
+                const requestId = request.requestId;
                 const token = ++runToken;
                 const steps = Array.isArray(request.steps) ? request.steps : [];
                 const continueOnError = request.continueOnError !== false;
                 const stepDelayMs = request.stepDelayMs ?? 100;
                 runExecutionList(steps, token, { continueOnError, stepDelayMs })
-                    .then((results) => sendResponse({ ok: true, results }))
-                    .catch((e) => sendResponse({ ok: false, error: e?.message || 'Unknown error' }));
-                return true;
+                    .then((results) => {
+                        try { chrome.runtime.sendMessage({ action: 'executionResult', requestId, result: { ok: true, results } }); } catch (_) {}
+                    })
+                    .catch((e) => {
+                        try { chrome.runtime.sendMessage({ action: 'executionResult', requestId, result: { ok: false, error: e?.message || 'Unknown error' } }); } catch (_) {}
+                    });
+                return false;
             }
             if (request.action === 'executeStep') {
+                const requestId = request.requestId;
                 const step = request.step;
                 const token = ++runToken;
                 const selectorTimeoutMs = Math.max(0, request.selectorTimeoutMs ?? SELECTOR_TIMEOUT_DEFAULT);
-                runExecutionList([step], token, { continueOnError: false, stepDelayMs: 0, selectorTimeoutMs: selectorTimeout })
+                runExecutionList([step], token, { continueOnError: false, stepDelayMs: 0, selectorTimeoutMs })
                     .then((results) => {
                         const r = results[0];
-                        sendResponse(r ? { ok: r.ok, error: r.error, conditionResult: r.conditionResult } : { ok: false, error: 'No result' });
+                        const res = r ? { ok: r.ok, error: r.error, conditionResult: r.conditionResult } : { ok: false, error: 'No result' };
+                        try { chrome.runtime.sendMessage({ action: 'executionResult', requestId, result: res }); } catch (_) {}
                     })
-                    .catch((e) => sendResponse({ ok: false, error: e?.message || 'Unknown error' }));
-                return true;
+                    .catch((e) => {
+                        try { chrome.runtime.sendMessage({ action: 'executionResult', requestId, result: { ok: false, error: e?.message || 'Unknown error' } }); } catch (_) {}
+                    });
+                return false;
             }
             if (request.action === 'stopExecution') {
                 runToken++;

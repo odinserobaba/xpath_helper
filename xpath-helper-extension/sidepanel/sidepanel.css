@@ -212,6 +212,16 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 .btn-save { background: var(--accent); color: #000; font-weight: bold; }
 
+/* User action overlay (pause for user) */
+.user-action-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
+.user-action-overlay.hidden { display: none !important; }
+.user-action-box { background: var(--bg2); border: 2px solid var(--accent); border-radius: 12px; padding: 24px; max-width: 320px; text-align: center; }
+.user-action-box p { margin-bottom: 16px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.user-action-box .btn { padding: 12px 24px; font-size: 14px; }
+
+.flow-card .flow-card-badge.user_action { background: rgba(243, 156, 18, 0.3); color: var(--warning); }
+.execution-item-badge.user_action { background: rgba(243, 156, 18, 0.3); color: var(--warning); }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
