@@ -178,6 +178,7 @@ const stepModalSave = $('stepModalSave');
 const exportJsonBtn = $('exportJsonBtn');
 const exportTemplatesBtn = $('exportTemplatesBtn');
 const exportPythonPlaywrightBtn = $('exportPythonPlaywrightBtn');
+const exportPomTemplateBtn = $('exportPomTemplateBtn');
 const importJsonBtn = $('importJsonBtn');
 const importJsonInput = $('importJsonInput');
 const scenarioName = $('scenarioName');
@@ -2341,6 +2342,331 @@ if __name__ == "__main__":
 }
 
 if (exportPythonPlaywrightBtn) exportPythonPlaywrightBtn.addEventListener('click', exportToPythonPlaywright);
+
+// ——— Export full POM template ———
+function b64EncodeUtf8(str) {
+    const bytes = new TextEncoder().encode(str);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+}
+
+function stepToPomAction(s) {
+    const esc = (x) => (x || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const pad = '        ';
+    if (s.action === 'click') return `${pad}self.click_with_wait("xpath=${esc(s.xpath)}", "${esc((s.xpath || '').substring(0, 40))}")`;
+    if (s.action === 'click_if_exists') return `${pad}self.click_if_exists("xpath=${esc(s.xpath)}")`;
+    if (s.action === 'input') return `${pad}self.fill_with_validation("xpath=${esc(s.xpath)}", "${esc(s.params?.value || '')}")`;
+    if (s.action === 'wait') return `${pad}self.page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
+    if (s.action === 'wait_for_element') return `${pad}self.wait_for_element("xpath=${esc(s.xpath)}", ${s.params?.timeoutMs ?? 5000})`;
+    if (s.action === 'navigate') return `${pad}self.page.goto("${esc(s.params?.url || '')}")`;
+    if (s.action === 'file_upload') return `${pad}self.page.locator("xpath=${esc(s.xpath)}").set_input_files("${esc(s.params?.fileName || 'file')}")`;
+    if (s.action === 'user_action') return `${pad}input("${esc(s.params?.message || 'Выполните действие')}")`;
+    if (s.action === 'branch') return `${pad}# branch: ${s.params?.condition || '?'}`;
+    if (s.action === 'assert') return `${pad}# assert: ${s.params?.condition || '?'}`;
+    return `${pad}# ${s.action}`;
+}
+
+function exportToPomTemplate() {
+    const name = (scenarioName?.value || 'scenario').trim().replace(/[^a-zA-Z0-9_]/g, '_') || 'scenario';
+    const steps = executionList.filter((s) => s.action !== 'separator');
+    const launchCode = getPythonLaunchCode();
+    const esc = (x) => (x || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const ep = esc(pythonSettings.executablePath || PYTHON_DEFAULTS.executablePath);
+    const ud = esc(pythonSettings.userDataDir || PYTHON_DEFAULTS.userDataDir);
+    const port = pythonSettings.debugPort ?? PYTHON_DEFAULTS.debugPort;
+    const rows = dataRows.length > 0 ? dataRows : [];
+    const hasData = rows.length > 0;
+
+    const stepsCode = steps.map(stepToPomAction).join('\n');
+    const stepsCodeData = hasData ? steps.map((s) => {
+        const pad = '        ';
+        if (s.action === 'click') return `${pad}self.click_with_wait("xpath=" + _sub("${esc(s.xpath)}", data), "click")`;
+        if (s.action === 'input') return `${pad}self.fill_with_validation("xpath=" + _sub("${esc(s.xpath)}", data), _sub("${esc(s.params?.value || '')}", data))`;
+        if (s.action === 'navigate') return `${pad}self.page.goto(_sub("${esc(s.params?.url || '')}", data))`;
+        if (s.action === 'file_upload') return `${pad}self.page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").set_input_files(_sub("${esc(s.params?.fileName || 'file')}", data))`;
+        return stepToPomAction(s);
+    }).join('\n') : stepsCode;
+
+    const files = {
+        'config/__init__.py': '',
+        'config/test_config.py': `"""Конфигурация тестов. Сгенерировано XPath Helper Pro."""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+@dataclass
+class TestConfig:
+    CHROMIUM_PATH: str = "${ep}"
+    USER_DATA_DIR: str = "${ud}"
+    DEBUG_PORT: int = ${port}
+    DEFAULT_TIMEOUT: int = 30000
+    TEST_FILES_DIR: Path = Path("test_data/files")
+
+    @classmethod
+    def get_certificate_data(cls):
+        return {
+            "number": "ЕАЭС RU С-RU.НЦ01.В.00403/24",
+            "date": "20.02.2026",
+            "file": cls.TEST_FILES_DIR / "certificate.pdf"
+        }
+`,
+        'pages/__init__.py': '',
+        'pages/base_page.py': `"""Базовый класс страницы с явными ожиданиями. XPath Helper Pro."""
+
+import logging
+from playwright.sync_api import Page, expect
+
+logger = logging.getLogger(__name__)
+
+class BasePage:
+    def __init__(self, page: Page):
+        self.page = page
+
+    def click_with_wait(self, locator: str, description: str = "", timeout: int = 15000):
+        """Клик с ожиданием видимости и scroll."""
+        logger.info(f"🔘 Клик: {description or locator[:50]}")
+        el = self.page.locator(locator)
+        el.wait_for(state="visible", timeout=timeout)
+        el.scroll_into_view_if_needed()
+        el.click(timeout=5000)
+        return self
+
+    def click_if_exists(self, locator: str, timeout: int = 500):
+        try:
+            self.page.locator(locator).click(timeout=timeout)
+        except Exception:
+            pass
+        return self
+
+    def fill_with_validation(self, locator: str, value: str):
+        """Заполнение с проверкой."""
+        logger.info(f"✏️ Заполнение: {value[:30]}...")
+        field = self.page.locator(locator)
+        field.wait_for(state="visible", timeout=15000)
+        field.fill(value)
+        return self
+
+    def wait_for_element(self, locator: str, timeout: int = 5000):
+        self.page.locator(locator).wait_for(timeout=timeout)
+        return self
+
+    def wait_and_click_text(self, text: str):
+        """Клик по тексту с normalize-space."""
+        self.click_with_wait(f"//span[normalize-space()='{text}']", text)
+        return self
+`,
+        'pages/scenario_page.py': `"""Page Object для сценария ${name}. Сгенерировано XPath Helper Pro."""
+
+from .base_page import BasePage
+
+class ScenarioPage(BasePage):
+    def run_scenario(self):
+        """Выполнение сценария."""
+${stepsCode}
+        return self
+`,
+        'tests/__init__.py': '',
+        'tests/conftest.py': `"""Pytest fixtures. XPath Helper Pro."""
+
+import pytest
+from playwright.sync_api import sync_playwright
+from config.test_config import TestConfig
+
+@pytest.fixture(scope="function")
+def browser_context():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path=TestConfig.CHROMIUM_PATH,
+            args=[
+                f"--remote-debugging-port={TestConfig.DEBUG_PORT}",
+                f"--user-data-dir={TestConfig.USER_DATA_DIR}",
+            ],
+            headless=False,
+        )
+        context = browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            locale="ru-RU"
+        )
+        yield context
+        context.close()
+        browser.close()
+
+@pytest.fixture
+def page(browser_context):
+    return browser_context.new_page()
+`,
+        'test_data/__init__.py': '',
+        'test_data/applicant_data.py': `"""Тестовые данные. Сгенерировано XPath Helper Pro."""
+
+APPLICANT_DATA = {
+    "inn": "784133001",
+    "address": "143968, обл. Московская, г. Реутов, ш. Автомагистраль Москва-Нижний Новгород, д. 1, кв. 5",
+    "suggested_address": "Московская обл, г Реутов, шоссе Автомагистраль Москва-Нижний Новгород, д 1, кв 5"
+}
+
+DATA_ROWS = ${JSON.stringify(rows)}
+`,
+        'utils/__init__.py': '',
+        'utils/helpers.py': `"""Вспомогательные функции. XPath Helper Pro."""
+
+def _sub(s: str, data: dict) -> str:
+    if not s:
+        return ""
+    for k, v in data.items():
+        s = s.replace("{{" + k + "}}", str(v))
+    return s
+`,
+        'requirements.txt': `pytest>=7.4.0
+playwright>=1.40.0
+pytest-html>=4.0.0
+allure-pytest>=2.13.0
+python-dotenv>=1.0.0
+`,
+        'pytest.ini': `[pytest]
+testpaths = tests
+python_files = test_*.py
+python_functions = test_*
+addopts = -v --tb=short
+markers =
+    scenario: сценарии из XPath Helper
+`,
+        'README.md': `# Проект автотестов (POM)
+
+Сгенерировано XPath Helper Pro.
+
+## Установка
+
+\`\`\`bash
+pip install -r requirements.txt
+playwright install chromium
+\`\`\`
+
+## Запуск
+
+\`\`\`bash
+pytest tests/ -v -m scenario
+pytest tests/ --headed --screenshot=only-on-failure
+allure serve allure-results  # если используете allure
+\`\`\`
+
+## Структура
+
+- config/ — конфигурация
+- pages/ — Page Object Model
+- tests/ — тесты
+- test_data/ — тестовые данные
+- utils/ — хелперы
+`
+    };
+
+    const testContent = hasData ? `"""Тест ${name} (data-driven). XPath Helper Pro."""
+
+import sys
+import logging
+import pytest
+from pages.scenario_page import ScenarioPage
+from utils.helpers import _sub
+from test_data.applicant_data import DATA_ROWS
+
+logger = logging.getLogger(__name__)
+
+@pytest.mark.scenario
+@pytest.mark.parametrize("data", DATA_ROWS, ids=[f"row_{i+1}" for i in range(len(DATA_ROWS))])
+def test_${name}(page, data):
+    app = ScenarioPage(page)
+    app.run_scenario_with_data(data)
+
+if __name__ == "__main__":
+    exit_code = pytest.main([__file__, "-v", "--tb=short"])
+    sys.exit(exit_code)
+` : `"""Тест ${name}. XPath Helper Pro."""
+
+import sys
+import logging
+import pytest
+from pages.scenario_page import ScenarioPage
+
+logger = logging.getLogger(__name__)
+
+@pytest.mark.scenario
+def test_${name}(page):
+    app = ScenarioPage(page)
+    app.run_scenario()
+
+if __name__ == "__main__":
+    exit_code = pytest.main([__file__, "-v", "--tb=short"])
+    sys.exit(exit_code)
+`;
+
+    if (hasData) {
+        files['pages/scenario_page.py'] = `"""Page Object для сценария ${name} (data-driven). XPath Helper Pro."""
+
+from .base_page import BasePage
+from utils.helpers import _sub
+
+class ScenarioPage(BasePage):
+    def run_scenario_with_data(self, data):
+        """Выполнение сценария с подстановкой переменных из data."""
+${stepsCodeData}
+        return self
+`;
+    }
+    files['tests/test_' + name + '.py'] = testContent;
+
+    const fileEntries = Object.entries(files);
+    const b64Contents = fileEntries.map(([, c]) => b64EncodeUtf8(c));
+    const createScript = `#!/usr/bin/env python3
+# XPath Helper Pro — создание POM-проекта
+# Запуск: python create_project_${name}.py
+
+import base64
+import os
+
+FILES = {
+${fileEntries.map(([path], i) => `    r"${path.replace(/\\/g, '/')}": r"${b64Contents[i]}",`).join('\n')}
+}
+
+def main():
+    os.makedirs("test_results/screenshots", exist_ok=True)
+    os.makedirs("test_data/files", exist_ok=True)
+    for path, b64 in FILES.items():
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        content = base64.b64decode(b64).decode("utf-8")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"Created: {path}")
+    print("\\nГотово! Запустите: pytest tests/ -v -m scenario")
+
+if __name__ == "__main__":
+    main()
+`;
+
+    const blob = new Blob([createScript], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `create_project_${name}.py`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (exportPomTemplateBtn) {
+        exportPomTemplateBtn.textContent = '✓ Скачано';
+        setTimeout(() => { exportPomTemplateBtn.textContent = '📦 POM-шаблон'; }, 1500);
+    }
+}
+
+if (exportPomTemplateBtn) exportPomTemplateBtn.addEventListener('click', () => {
+    const steps = executionList.filter((s) => s.action !== 'separator');
+    if (steps.length === 0) {
+        exportPomTemplateBtn.textContent = 'Список пуст';
+        setTimeout(() => { exportPomTemplateBtn.textContent = '📦 POM-шаблон'; }, 2000);
+        return;
+    }
+    exportToPomTemplate();
+});
 
 // ——— Copy log ———
 if (copyLogBtn) copyLogBtn.addEventListener('click', () => {

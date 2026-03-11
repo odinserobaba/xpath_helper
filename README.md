@@ -12,6 +12,7 @@
 - **Data-driven** — импорт CSV/JSON с данными, прогон сценария для каждой строки.
 - **Экспорт в JSON** — сохранение сценария в формате для автотестов.
 - **Экспорт в Python Playwright** — тесты с pytest fixtures, conftest.py, `@pytest.mark.parametrize` и exit code 0/1.
+- **📦 POM-шаблон** — полный проект: config/, pages/, tests/, test_data/, utils/, base_page, conftest, requirements.txt.
 - **Отчёт** — экспорт HTML/JSON с именем файла из настроек.
 - **Настройки** — задержка наведения, ожидание селектора, пауза между шагами.
 
@@ -160,9 +161,35 @@ admin,admin789,https://stage.example.com
 
 Настройки сохраняются и подставляются в `test_*.py` и `conftest.py` при экспорте.
 
+### Полный POM-шаблон (📦 POM-шаблон)
+
+Кнопка **📦 POM-шаблон** создаёт скрипт `create_project_<name>.py`. Запустите его:
+
+```bash
+python create_project_scenario.py
+```
+
+Скрипт создаст структуру:
+
+```
+config/           # test_config.py с настройками chromium
+pages/            # base_page.py (явные ожидания), scenario_page.py
+tests/            # conftest.py, test_scenario.py
+test_data/        # applicant_data.py, DATA_ROWS
+utils/            # helpers.py (_sub для переменных)
+requirements.txt
+pytest.ini
+README.md
+```
+
+- **base_page.py** — `click_with_wait`, `fill_with_validation`, `wait_for_element` с логами
+- **scenario_page.py** — Page Object с методами из ваших шагов
+- **config/test_config.py** — берёт настройки из ⚙ Python
+- При Data-driven — `@pytest.mark.parametrize` и `run_scenario_with_data(data)`
+
 ### Pytest fixtures и conftest.py
 
-При экспорте скачиваются два файла:
+При экспорте «📤 Python Playwright» скачиваются два файла:
 
 - **conftest.py** — фикстура `page` с браузером и контекстом.
 - **test_&lt;name&gt;.py** — тест, использующий фикстуру `page`.
