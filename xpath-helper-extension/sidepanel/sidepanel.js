@@ -186,6 +186,8 @@ const importJsonBtn = $('importJsonBtn');
 const importJsonInput = $('importJsonInput');
 const saveToLocalBtn = $('saveToLocalBtn');
 const clearStepsBtn = $('clearStepsBtn');
+const stepTitle = $('stepTitle');
+const stepTags = $('stepTags');
 const scenarioName = $('scenarioName');
 const scenarioSelect = $('scenarioSelect');
 const listSearch = $('listSearch');
@@ -235,6 +237,7 @@ let environments = { dev: { baseUrl: '' }, stage: { baseUrl: '' }, prod: { baseU
 let currentEnv = '';
 let runnerBaseUrl = RUNNER_DEFAULT_URL;
 let runnerToken = '';
+let lastHoveredElement = null;
 
 function runnerFetch(path, options = {}) {
     const base = (runnerBaseUrl || RUNNER_DEFAULT_URL).replace(/\/+$/, '');
@@ -253,6 +256,26 @@ function logEvent(level, event, data) {
             body: JSON.stringify({ level, event, data })
         }).catch(() => {});
     } catch (_) {}
+}
+
+function parseTags(text) {
+    return (text || '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 12);
+}
+
+function suggestStepTitle(el) {
+    if (!el) return '';
+    const attrs = Array.isArray(el.attributes) ? el.attributes : [];
+    const getAttr = (name) => attrs.find((a) => String(a.name).toLowerCase() === name)?.value || '';
+    const aria = (getAttr('aria-label') || '').trim();
+    const placeholder = (getAttr('placeholder') || '').trim();
+    const title = (getAttr('title') || '').trim();
+    const value = (getAttr('value') || '').trim();
+    const text = (el.text || '').trim();
+    return aria || placeholder || title || text || value || (el.id ? `#${el.id}` : '') || (el.tagName ? `<${el.tagName}>` : '');
 }
 
 function replaceVariables(str, vars) {
@@ -281,6 +304,8 @@ function buildExportPayload() {
             step: i + 1,
             xpath: s.xpath,
             action: s.action,
+            title: s.title || '',
+            tags: Array.isArray(s.tags) ? s.tags : [],
             params: s.params || {}
         }))
     };
@@ -778,6 +803,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     if (request.action === 'elementHovered') {
         const el = request.element;
+        lastHoveredElement = el || null;
         const result = request.xpathResult;
         const primary = result?.primary?.xpath;
         if (primary) {
@@ -1295,6 +1321,8 @@ function renderExecutionList() {
     const filtered = searchQ
         ? executionList.filter((s) =>
             (s.xpath || '').toLowerCase().includes(searchQ) ||
+            (s.title || '').toLowerCase().includes(searchQ) ||
+            (Array.isArray(s.tags) ? s.tags.join(' ').toLowerCase().includes(searchQ) : false) ||
             (s.action || '').toLowerCase().includes(searchQ) ||
             (ACTION_LABELS[s.action] || '').toLowerCase().includes(searchQ) ||
             (s.action === 'separator' && 'разделитель'.includes(searchQ)))
@@ -1344,8 +1372,14 @@ function renderExecutionList() {
             }
             else if (step.action === 'navigate') paramsText = escapeHtml((step.params?.url || '').substring(0, 40));
             else if (step.action === 'user_action') paramsText = escapeHtml((step.params?.message || 'Ожидание действий').substring(0, 40));
-            const listDisplayText = step.action === 'navigate' ? (step.params?.url || '—') : (step.action === 'user_action' ? (step.params?.message || '—') : step.xpath);
+            const fallbackText = step.action === 'navigate'
+                ? (step.params?.url || '—')
+                : (step.action === 'user_action' ? (step.params?.message || '—') : step.xpath);
+            const listDisplayText = (step.title || '').trim() || fallbackText;
             const fragileWarn = (step.action !== 'separator' && step.action !== 'navigate' && step.action !== 'user_action' && step.xpath && isFragileXPath(step.xpath)) ? '<span class="fragile-xpath-warn" title="Хрупкий XPath (//div[1], position() и т.п.)">⚠</span>' : '';
+            const tagsLine = Array.isArray(step.tags) && step.tags.length
+                ? `<div class="execution-item-params">🏷 ${step.tags.map((t) => `<span class="execution-item-badge wait">${escapeHtml(String(t))}</span>`).join(' ')}</div>`
+                : '';
             li.innerHTML = `
                 <div class="execution-item-header">
                     ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
@@ -1355,6 +1389,7 @@ function renderExecutionList() {
                     ${statusBadge}
                 </div>
                 ${paramsText ? `<div class="execution-item-params">${paramsText}</div>` : ''}
+                ${tagsLine}
                 <div class="execution-item-actions">
                     <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить шаг" aria-label="Выполнить шаг">▶</button>
                     <button type="button" class="btn-icon btn-run-from-step" data-id="${escapeHtml(step.id)}" title="Выполнить с этого шага" aria-label="Выполнить с этого шага">▶▶</button>
@@ -1554,6 +1589,11 @@ function showStepModal(step, insertAt) {
     insertStepAtIndex = insertAt ?? null;
     stepXpath.value = step ? step.xpath : (primaryXpathEl ? primaryXpathEl.textContent : '') || '';
     stepAction.value = step ? step.action : 'click';
+    if (stepTitle) {
+        const suggested = (!step?.title && !editingStepId) ? suggestStepTitle(lastHoveredElement) : '';
+        stepTitle.value = (step?.title || suggested || '').toString();
+    }
+    if (stepTags) stepTags.value = Array.isArray(step?.tags) ? step.tags.join(', ') : '';
     const sepColor = step?.params?.color || SEPARATOR_COLORS[0];
     const sepLabel = step?.params?.label || '';
     if (stepSeparatorLabel) stepSeparatorLabel.value = sepLabel;
@@ -1751,13 +1791,15 @@ stepModalSave.addEventListener('click', () => {
         params.retryDelayMs = Math.max(0, parseInt(stepRetryDelayMs?.value, 10) || 300);
     }
     params.waitForLoad = !!stepWaitForLoad?.checked;
+    const titleVal = (stepTitle?.value || '').trim();
+    const tagsVal = parseTags(stepTags?.value || '');
     if (editingStepId) {
         const idx = executionList.findIndex((s) => s.id === editingStepId);
         if (idx !== -1) {
-            executionList[idx] = { ...executionList[idx], xpath, action, params };
+            executionList[idx] = { ...executionList[idx], xpath, action, params, title: titleVal, tags: tagsVal };
         }
     } else {
-        const newStep = { id: 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2), xpath, action, params };
+        const newStep = { id: 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2), xpath, action, params, title: titleVal, tags: tagsVal };
         if (insertStepAtIndex != null && insertStepAtIndex >= 0 && insertStepAtIndex <= executionList.length) {
             executionList.splice(insertStepAtIndex, 0, newStep);
         } else {
@@ -2043,6 +2085,8 @@ function exportToJson() {
             step: i + 1,
             xpath: s.xpath,
             action: s.action,
+            title: s.title || '',
+            tags: Array.isArray(s.tags) ? s.tags : [],
             params: s.params || {}
         }))
     };
@@ -2094,6 +2138,8 @@ function parseImportFile(data) {
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
         action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
+        title: typeof s.title === 'string' ? s.title : '',
+        tags: Array.isArray(s.tags) ? s.tags.map((t) => String(t)).filter(Boolean).slice(0, 12) : [],
         params: s.params && typeof s.params === 'object' ? s.params : {}
     })).filter((s) => s.xpath || s.action === 'separator');
 }

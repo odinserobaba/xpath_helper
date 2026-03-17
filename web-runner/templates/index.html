@@ -43,6 +43,9 @@
     .toast.show { display:block; }
     .hr { height: 1px; background: #2a2a4a; margin: 10px 0; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .tabs2 { display:flex; gap: 6px; margin-top: 12px; }
+    .tab2 { background: var(--bg3); border: 1px solid #2a2a4a; color: var(--muted); border-radius: 999px; padding: 8px 10px; cursor:pointer; font-weight: 700; font-size: 12px; }
+    .tab2.active { border-color: var(--accent); color: var(--text); }
   </style>
 </head>
 <body>
@@ -51,8 +54,13 @@
       <h1>✦ XPath Helper — Web Runner</h1>
       <p>Сценарии сохраняются из расширения в <span class="mono">tests/scenarios/</span>. Здесь ты видишь список, выбираешь нужный и запускаешь через Python Playwright.</p>
 
+      <div class="tabs2">
+        <button id="tabScenarios" class="tab2 active" type="button">Сценарии</button>
+        <button id="tabRuns" class="tab2" type="button">Запуски</button>
+      </div>
+
       <div class="layout" style="margin-top: 12px;">
-        <div class="panel">
+        <div id="panelScenarios" class="panel">
           <h2>
             Сценарии
             <button id="refreshBtn" class="btn2" type="button" title="Обновить список">↻</button>
@@ -63,7 +71,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        <div id="panelRunConfig" class="panel">
           <h2>Запуск</h2>
           <div class="hint">Подстановка переменных: <code>{{baseUrl}}</code>, <code>{{login}}</code> и т.п.</div>
 
@@ -113,12 +121,21 @@
           <div class="hr"></div>
           <div class="btnRow">
             <button id="runBtn" class="btn" type="button" disabled>▶ Run</button>
+            <button id="saveDefaultsBtn" class="btn2" type="button" disabled>Сохранить параметры</button>
             <button id="openLastRunBtn" class="btn2" type="button" disabled>Открыть последний run</button>
           </div>
           <div id="runSummary" class="meta"></div>
 
           <p class="hint" style="margin-top:14px;">Примечание: шаг <b>user_action</b> в веб‑раннере не может ждать пользователя и будет пропускаться с записью в лог.</p>
         </div>
+      </div>
+
+      <div id="panelRuns" class="panel" style="margin-top: 12px; display:none;">
+        <h2>
+          История запусков
+          <button id="refreshRunsBtn" class="btn2" type="button" title="Обновить историю">↻</button>
+        </h2>
+        <div id="runsList" class="list"></div>
       </div>
     </div>
   </div>
@@ -129,9 +146,17 @@
     const els = {
       list: document.getElementById('scenarioList'),
       refresh: document.getElementById('refreshBtn'),
+      refreshRuns: document.getElementById('refreshRunsBtn'),
+      runsList: document.getElementById('runsList'),
+      tabScenarios: document.getElementById('tabScenarios'),
+      tabRuns: document.getElementById('tabRuns'),
+      panelRuns: document.getElementById('panelRuns'),
+      panelScenarios: document.getElementById('panelScenarios'),
+      panelRunConfig: document.getElementById('panelRunConfig'),
       selected: document.getElementById('selectedScenario'),
       runBtn: document.getElementById('runBtn'),
       openLast: document.getElementById('openLastRunBtn'),
+      saveDefaults: document.getElementById('saveDefaultsBtn'),
       startUrl: document.getElementById('startUrlInput'),
       baseUrl: document.getElementById('baseUrlInput'),
       viewport: document.getElementById('viewportInput'),
@@ -146,6 +171,7 @@
     let scenarios = [];
     let selectedId = null;
     let lastRunId = null;
+    let runs = [];
 
     function toast(msg) {
       els.toast.textContent = msg;
@@ -169,6 +195,8 @@
           selectedId = s.id;
           els.selected.value = s.name || s.file || s.id;
           els.runBtn.disabled = false;
+          els.saveDefaults.disabled = false;
+          loadScenarioDefaults(selectedId);
           renderList();
         });
         const title = document.createElement('div');
@@ -186,6 +214,109 @@
         div.appendChild(title);
         div.appendChild(meta);
         els.list.appendChild(div);
+      }
+    }
+
+    function groupRunsByDay(items) {
+      const groups = new Map();
+      for (const r of items) {
+        const d = new Date((r.startedAtTs || 0) * 1000);
+        const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      return [...groups.entries()].sort((a,b) => b[0].localeCompare(a[0]));
+    }
+
+    function renderRuns() {
+      els.runsList.innerHTML = '';
+      if (!runs.length) {
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = 'Пока нет запусков.';
+        els.runsList.appendChild(empty);
+        return;
+      }
+      const grouped = groupRunsByDay(runs);
+      for (const [day, items] of grouped) {
+        const header = document.createElement('div');
+        header.className = 'hint';
+        header.style.marginTop = '6px';
+        header.textContent = day;
+        els.runsList.appendChild(header);
+        items.sort((a,b) => (b.startedAtTs||0) - (a.startedAtTs||0));
+        items.forEach((r, idx) => {
+          const div = document.createElement('div');
+          div.className = 'item';
+          const n = items.length - idx; // номер в пределах дня
+          const status = (r.failCount ?? 0) > 0 ? 'pill pillFail' : 'pill pillOk';
+          const title = document.createElement('div');
+          title.className = 'itemTitle';
+          title.innerHTML = `<div>#${n} ${r.scenarioName || r.scenarioId || ''}</div><span class="${status}">${(r.okCount ?? '-')}/${((r.okCount ?? 0) + (r.failCount ?? 0)) || '-'}</span>`;
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          meta.innerHTML = `<span class="mono">runId: ${r.runId}</span><span>${new Date((r.startedAtTs||0)*1000).toLocaleString()}</span><span class="mono">${r.scenarioId || ''}</span>`;
+          div.appendChild(title);
+          div.appendChild(meta);
+          div.addEventListener('click', () => window.location.href = `/runs/${r.runId}`);
+          els.runsList.appendChild(div);
+        });
+      }
+    }
+
+    async function loadRuns() {
+      els.refreshRuns.disabled = true;
+      try {
+        const r = await fetch('/api/runs');
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'Failed');
+        runs = j.runs || [];
+        renderRuns();
+      } catch (e) {
+        toast('Не удалось загрузить историю: ' + (e?.message || e));
+      } finally {
+        els.refreshRuns.disabled = false;
+      }
+    }
+
+    async function loadScenarioDefaults(id) {
+      try {
+        const r = await fetch(`/api/scenarios/${id}`);
+        const j = await r.json();
+        if (!j.ok) return;
+        const s = j.scenario || {};
+        const d = s.runnerSettings || {};
+        if (d.startUrl != null) els.startUrl.value = d.startUrl || '';
+        if (d.baseUrl != null) els.baseUrl.value = d.baseUrl || '';
+        if (d.viewport != null) els.viewport.value = d.viewport || '1280x720';
+        if (d.slowMoMs != null) els.slowMo.value = d.slowMoMs || 0;
+        if (d.headless != null) els.headless.checked = !!d.headless;
+        if (d.defaultTimeoutMs != null) els.defaultTimeout.value = d.defaultTimeoutMs || 15000;
+        if (d.variables != null) els.vars.value = JSON.stringify(d.variables || {}, null, 2);
+      } catch (_) {}
+    }
+
+    async function saveScenarioDefaults() {
+      if (!selectedId) return;
+      try {
+        let vars = {};
+        const raw = (els.vars.value || '').trim();
+        if (raw) vars = JSON.parse(raw);
+        const body = {
+          startUrl: (els.startUrl.value || '').trim(),
+          baseUrl: (els.baseUrl.value || '').trim(),
+          viewport: (els.viewport.value || '1280x720').trim() || '1280x720',
+          slowMoMs: parseInt(els.slowMo.value || '0', 10) || 0,
+          headless: !!els.headless.checked,
+          defaultTimeoutMs: parseInt(els.defaultTimeout.value || '15000', 10) || 15000,
+          variables: vars,
+        };
+        const r = await fetch(`/api/scenarios/${selectedId}/runner-settings`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'Failed');
+        toast('Параметры сохранены');
+      } catch (e) {
+        toast('Ошибка сохранения параметров: ' + (e?.message || e));
       }
     }
 
@@ -232,9 +363,8 @@
         if (!j.ok) throw new Error(j.error || 'Run failed');
         lastRunId = j.runId;
         els.openLast.disabled = false;
-        const rep = j.report || {};
-        els.summary.innerHTML = `<span class="pill pillOk">OK: ${rep.okCount ?? '-'}</span><span class="pill pillFail">FAIL: ${rep.failCount ?? '-'}</span><span>Total: ${rep.totalMs ?? '-'} ms</span><span class="mono">runId: ${lastRunId}</span>`;
-        toast('Готово: runId ' + lastRunId);
+        els.summary.innerHTML = `<span class="mono">runId: ${lastRunId}</span><span>Открываю live-страницу…</span>`;
+        toast('Старт: runId ' + lastRunId);
         // Open live run page (shows step-by-step progress and screenshots)
         window.location.href = `/runs/${lastRunId}`;
       } catch (e) {
@@ -245,11 +375,25 @@
     }
 
     els.refresh.addEventListener('click', loadScenarios);
+    els.refreshRuns.addEventListener('click', loadRuns);
     els.runBtn.addEventListener('click', runSelected);
+    els.saveDefaults.addEventListener('click', saveScenarioDefaults);
     els.openLast.addEventListener('click', () => {
       if (!lastRunId) return;
       window.location.href = `/runs/${lastRunId}/report`;
     });
+
+    function showTab(which) {
+      const isRuns = which === 'runs';
+      els.tabScenarios.classList.toggle('active', !isRuns);
+      els.tabRuns.classList.toggle('active', isRuns);
+      els.panelRuns.style.display = isRuns ? 'block' : 'none';
+      els.panelScenarios.style.display = isRuns ? 'none' : 'block';
+      els.panelRunConfig.style.display = isRuns ? 'none' : 'block';
+      if (isRuns) loadRuns();
+    }
+    els.tabScenarios.addEventListener('click', () => showTab('scenarios'));
+    els.tabRuns.addEventListener('click', () => showTab('runs'));
 
     loadScenarios();
   </script>

@@ -6,6 +6,7 @@ import os
 import re
 import time
 import uuid
+import asyncio
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -144,6 +145,23 @@ def _scenario_steps_count(raw: Any) -> int:
         return len(steps)
     except Exception:
         return 0
+
+
+def _read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, data: Any) -> None:
+    _ensure_dir(path.parent)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _scenario_path(scenario_id: str) -> Path:
+    return SCENARIOS_DIR / f"{scenario_id}.json"
+
+
+def _run_meta_path(run_dir: Path) -> Path:
+    return run_dir / "meta.json"
 
 
 def _maybe_write_file_from_base64(run_dir: Path, file_name: str, b64: Optional[str]) -> Optional[Path]:
@@ -517,6 +535,44 @@ def api_list_scenarios(request: Request) -> JSONResponse:
         )
     return JSONResponse({"ok": True, "scenarios": items})
 
+@app.get("/api/scenarios/{scenario_id}", response_class=JSONResponse)
+def api_get_scenario(scenario_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+    try:
+        data = _read_json(p)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Invalid JSON: {e}"}, status_code=500)
+    return JSONResponse({"ok": True, "scenario": data})
+
+
+@app.post("/api/scenarios/{scenario_id}/runner-settings", response_class=JSONResponse)
+async def api_save_runner_settings(scenario_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Invalid body"}, status_code=400)
+    try:
+        data = _read_json(p)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Invalid scenario JSON: {e}"}, status_code=500)
+    if not isinstance(data, dict):
+        return JSONResponse({"ok": False, "error": "Scenario must be an object"}, status_code=400)
+    # Store defaults under runnerSettings
+    data["runnerSettings"] = body
+    _write_json(p, data)
+    _jsonl_append(LOG_DIR / "web-runner.log", {"ts": time.time(), "level": "info", "event": "runner_settings_saved", "scenarioId": scenario_id})
+    return JSONResponse({"ok": True})
+
 
 @app.post("/api/scenarios", response_class=JSONResponse)
 async def api_save_scenario(request: Request) -> JSONResponse:
@@ -587,7 +643,7 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     if not scenario_id:
         return JSONResponse({"ok": False, "error": "scenarioId is required"}, status_code=400)
 
-    path = SCENARIOS_DIR / f"{scenario_id}.json"
+    path = _scenario_path(scenario_id)
     if not path.exists():
         return JSONResponse({"ok": False, "error": "Scenario not found"}, status_code=404)
 
@@ -595,19 +651,23 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     raw = json.loads(raw_bytes.decode("utf-8"))
     scenario_name, steps = _parse_scenario(raw)
 
+    runner_defaults: Dict[str, Any] = {}
+    if isinstance(raw, dict) and isinstance(raw.get("runnerSettings"), dict):
+        runner_defaults = raw.get("runnerSettings") or {}
+
     variables: Dict[str, Any] = {}
-    base_url = str(body.get("baseUrl") or "").strip()
+    base_url = str(body.get("baseUrl") or runner_defaults.get("baseUrl") or "").strip()
     if base_url:
         variables["baseUrl"] = base_url
-    extra_vars = body.get("variables") or {}
+    extra_vars = body.get("variables") or runner_defaults.get("variables") or {}
     if isinstance(extra_vars, dict):
         variables.update(extra_vars)
 
-    headless = bool(body.get("headless", True))
-    slow_mo_ms = int(body.get("slowMoMs") or 0)
-    viewport = str(body.get("viewport") or "1280x720")
-    start_url = str(body.get("startUrl") or "").strip()
-    default_timeout_ms = int(body.get("defaultTimeoutMs") or 15000)
+    headless = bool(body.get("headless", runner_defaults.get("headless", True)))
+    slow_mo_ms = int(body.get("slowMoMs") or runner_defaults.get("slowMoMs") or 0)
+    viewport = str(body.get("viewport") or runner_defaults.get("viewport") or "1280x720")
+    start_url = str(body.get("startUrl") or runner_defaults.get("startUrl") or "").strip()
+    default_timeout_ms = int(body.get("defaultTimeoutMs") or runner_defaults.get("defaultTimeoutMs") or 15000)
 
     run_id = uuid.uuid4().hex[:12]
     run_dir = OUTPUTS_DIR / run_id
@@ -615,6 +675,25 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     (run_dir / "input.json").write_bytes(raw_bytes)
     # Initialize events file early so UI can attach immediately.
     _emit_run_event(run_dir, {"ts": time.time(), "event": "created", "runId": run_id, "scenarioId": scenario_id, "scenario": scenario_name})
+    _write_json(
+        _run_meta_path(run_dir),
+        {
+            "runId": run_id,
+            "scenarioId": scenario_id,
+            "scenarioName": scenario_name,
+            "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "startedAtTs": time.time(),
+            "settings": {
+                "startUrl": start_url,
+                "baseUrl": base_url,
+                "headless": headless,
+                "slowMoMs": slow_mo_ms,
+                "viewport": viewport,
+                "defaultTimeoutMs": default_timeout_ms,
+                "variables": extra_vars if isinstance(extra_vars, dict) else {},
+            },
+        },
+    )
 
     _jsonl_append(
         LOG_DIR / "web-runner.log",
@@ -632,51 +711,98 @@ async def api_run_scenario(request: Request) -> JSONResponse:
         },
     )
 
-    try:
-        # Playwright Sync API must not run inside asyncio loop.
-        report = await anyio.to_thread.run_sync(
-            partial(
-                run_scenario,
-                scenario_name,
-                steps,
-                variables=variables,
-                start_url=start_url,
-                default_timeout_ms=default_timeout_ms,
-                headless=headless,
-                slow_mo_ms=slow_mo_ms,
-                viewport=viewport,
-                run_dir=run_dir,
+    async def _job():
+        try:
+            report = await anyio.to_thread.run_sync(
+                partial(
+                    run_scenario,
+                    scenario_name,
+                    steps,
+                    variables=variables,
+                    start_url=start_url,
+                    default_timeout_ms=default_timeout_ms,
+                    headless=headless,
+                    slow_mo_ms=slow_mo_ms,
+                    viewport=viewport,
+                    run_dir=run_dir,
+                )
             )
+        except Exception as e:
+            report = {
+                "scenario": scenario_name,
+                "okCount": 0,
+                "failCount": 0,
+                "totalMs": 0,
+                "steps": [],
+                "log": [],
+                "error": str(e),
+            }
+            _emit_run_event(run_dir, {"ts": time.time(), "event": "run_done", "okCount": 0, "failCount": 1, "totalMs": 0, "error": str(e)})
+
+        (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "log.txt").write_text("\n".join(report.get("log", [])), encoding="utf-8")
+
+        _jsonl_append(
+            LOG_DIR / "web-runner.log",
+            {
+                "ts": time.time(),
+                "level": "info",
+                "event": "run_done",
+                "runId": run_id,
+                "scenarioId": scenario_id,
+                "okCount": report.get("okCount"),
+                "failCount": report.get("failCount"),
+                "totalMs": report.get("totalMs"),
+            },
         )
-    except Exception as e:
-        report = {
-            "scenario": scenario_name,
-            "okCount": 0,
-            "failCount": 0,
-            "totalMs": 0,
-            "steps": [],
-            "log": [],
-            "error": str(e),
-        }
 
-    (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    (run_dir / "log.txt").write_text("\n".join(report.get("log", [])), encoding="utf-8")
+    # Fire-and-forget: return runId immediately so UI can open live page instantly.
+    asyncio.create_task(_job())
+    return JSONResponse({"ok": True, "runId": run_id})
 
-    _jsonl_append(
-        LOG_DIR / "web-runner.log",
-        {
-            "ts": time.time(),
-            "level": "info",
-            "event": "run_done",
-            "runId": run_id,
-            "scenarioId": scenario_id,
-            "okCount": report.get("okCount"),
-            "failCount": report.get("failCount"),
-            "totalMs": report.get("totalMs"),
-        },
-    )
 
-    return JSONResponse({"ok": True, "runId": run_id, "report": report})
+@app.get("/api/runs", response_class=JSONResponse)
+def api_list_runs(request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    items: List[Dict[str, Any]] = []
+    if OUTPUTS_DIR.exists():
+        for d in sorted(OUTPUTS_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not d.is_dir():
+                continue
+            meta_path = _run_meta_path(d)
+            if not meta_path.exists():
+                continue
+            try:
+                meta = _read_json(meta_path)
+            except Exception:
+                continue
+            report_path = d / "report.json"
+            ok = None
+            fail = None
+            total = None
+            if report_path.exists():
+                try:
+                    rep = _read_json(report_path)
+                    ok = rep.get("okCount")
+                    fail = rep.get("failCount")
+                    total = rep.get("totalMs")
+                except Exception:
+                    pass
+            items.append(
+                {
+                    "runId": meta.get("runId") or d.name,
+                    "scenarioId": meta.get("scenarioId"),
+                    "scenarioName": meta.get("scenarioName"),
+                    "startedAt": meta.get("startedAt"),
+                    "startedAtTs": meta.get("startedAtTs") or d.stat().st_mtime,
+                    "okCount": ok,
+                    "failCount": fail,
+                    "totalMs": total,
+                }
+            )
+    return JSONResponse({"ok": True, "runs": items})
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)

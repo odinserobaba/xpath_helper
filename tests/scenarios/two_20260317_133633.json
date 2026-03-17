@@ -1,0 +1,172 @@
+{
+  "name": "two",
+  "version": 1,
+  "exportedAt": "2026-03-17T10:36:33.604Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "params": {
+        "mandatory": true,
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[8]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "(//*[contains(@class, 'mat-radio-label-content')])[5]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//*[contains(@class, 'mat-select-arrow-wrapper')]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "(//*[contains(@class, 'mat-option-text')])[1]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "(//*[contains(@class, 'mat-select-arrow-wrapper')])[2]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "(//*[contains(@class, 'mat-option-text')])[1]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[10]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[12]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "(//*[contains(@class, 'mat-select-arrow-wrapper')])[3]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "//*[contains(@class, 'mat-option-text')]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "//*[@id='mat-input-14']",
+      "action": "input",
+      "params": {
+        "mandatory": true,
+        "value": "77:77:1111111:7777",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "(//*[contains(@class, 'mat-select-arrow-wrapper')])[4]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "(//*[contains(@class, 'mat-option-text')])[1]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[17]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 17,
+      "xpath": "//*[contains(@class, 'mat-checkbox-label')]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    }
+  ],
+  "id": "two_20260317_133633",
+  "runnerSettings": {
+    "startUrl": "",
+    "baseUrl": "",
+    "viewport": "1920x1080",
+    "slowMoMs": 0,
+    "headless": true,
+    "defaultTimeoutMs": 1500,
+    "variables": {}
+  }
+}

@@ -369,6 +369,16 @@
                         <option value="separator">Разделитель</option>
                     </select>
                 </div>
+                <div class="form-row">
+                    <label for="stepTitle">Название шага (опционально)</label>
+                    <input type="text" id="stepTitle" placeholder="Нажать «Войти»">
+                    <span class="setting-hint">Показывается в списке/flow вместо “сырых” XPath.</span>
+                </div>
+                <div class="form-row">
+                    <label for="stepTags">Теги (опционально)</label>
+                    <input type="text" id="stepTags" placeholder="auth, profile, upload">
+                    <span class="setting-hint">Через запятую. Используются для поиска/ориентации.</span>
+                </div>
                 <div id="stepParamsCommon" class="form-row">
                     <label for="stepTimeoutMs" class="setting-hint">Таймаут ожидания (мс), 0 = по умолчанию</label>
                     <input type="number" id="stepTimeoutMs" min="0" max="120000" value="0" placeholder="0 = по умолчанию">
