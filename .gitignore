@@ -13,9 +13,9 @@ build/
 .idea/
 .vscode/
 *.sublime-*
+.DS_Store
 
 # OS
-.DS_Store
 Thumbs.db
 *.swp
 *.swo
@@ -27,6 +27,7 @@ Thumbs.db
 .temp/
 tmp/
 temp/
+.cache/
 
 # Backups (local copy backups)
 *-backup/
@@ -47,3 +48,19 @@ coverage/
 
 # Optional
 *.local
+
+# Python (exports / templates)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Exported artifacts (if downloaded into repo)
+report*.html
+report*.json
+xpath-export-*.txt
+create_project_*.py
+test_*.py
+conftest.py
+
+# Web runner outputs
+web-runner/outputs/

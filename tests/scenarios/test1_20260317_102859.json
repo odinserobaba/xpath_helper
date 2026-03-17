@@ -1,0 +1,35 @@
+{
+  "name": "test1",
+  "version": 1,
+  "exportedAt": "2026-03-17T07:28:59.549Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "params": {
+        "mandatory": true,
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[8]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    }
+  ]
+}

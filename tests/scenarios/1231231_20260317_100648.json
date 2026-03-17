@@ -1,0 +1,441 @@
+{
+  "name": "1231231",
+  "version": 1,
+  "exportedAt": "2026-03-17T07:06:48.701Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "//span[normalize-space()='Начать']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 2,
+      "xpath": "//span[normalize-space()='Производство']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 3,
+      "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 4,
+      "xpath": "//*[@id='c24']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 5,
+      "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённого этилового спирта']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 6,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 7,
+      "xpath": "//span[normalize-space()='Да']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 8,
+      "xpath": "//span[normalize-space()='В электронном виде']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 9,
+      "xpath": "//span[normalize-space()='Перейти к заявлению']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 10,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 11,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 12,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 13,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 14,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 15,
+      "xpath": "//button[normalize-space()='Выбрать']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 16,
+      "xpath": "(//*[@id='label'])[3]",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 17,
+      "xpath": "//span[normalize-space()='Применить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 18,
+      "xpath": "//*[@name='c135']",
+      "action": "input",
+      "params": {
+        "value": "784133001"
+      }
+    },
+    {
+      "step": 19,
+      "xpath": "//textarea[contains(concat(' ', normalize-space(@class), ' '), ' search-input ')]",
+      "action": "input",
+      "params": {
+        "value": "143968, обл. Московская, г. Реутов, ш. Автомагистраль Москва-Нижний Новгород, д. 1, кв. 5"
+      }
+    },
+    {
+      "step": 20,
+      "xpath": "//span[normalize-space()='Московская обл, г Реутов, шоссе Автомагистраль Москва-Нижний Новгород, д 1, кв 5']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 21,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 22,
+      "xpath": "//p[normalize-space()='Сертификат соответствия']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 23,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 24,
+      "xpath": "//span[normalize-space()='По номеру']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 25,
+      "xpath": "//*[@id='siRakrRssNumberNumber']",
+      "action": "input",
+      "params": {
+        "value": "ЕАЭС RU С-RU.НЦ01.В.00403/24",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 26,
+      "xpath": "//*[@name='diRakrRssNumberRegDate']",
+      "action": "input",
+      "params": {
+        "value": "20.02.2026",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 27,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 28,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 29,
+      "xpath": "//button[normalize-space()='Выбрать файл']",
+      "action": "file_upload",
+      "params": {
+        "fileContentBase64": "JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK",
+        "fileName": "test.pdf"
+      }
+    },
+    {
+      "step": 30,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 31,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 32,
+      "xpath": "//div[contains(concat(' ', normalize-space(@class), ' '), ' dropdown-field ')]",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 33,
+      "xpath": "//span[normalize-space()='Собственная']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 34,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 35,
+      "xpath": "//span[normalize-space()='По номеру']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 36,
+      "xpath": "//*[@id='siRakrRalNumberInput']",
+      "action": "input",
+      "params": {
+        "value": "РОСС RU.0001.123456"
+      }
+    },
+    {
+      "step": 37,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 38,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 39,
+      "xpath": "//button[normalize-space()='Выбрать файл']",
+      "action": "file_upload",
+      "params": {
+        "fileContentBase64": "JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK",
+        "fileName": "test.pdf"
+      }
+    },
+    {
+      "step": 40,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 41,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' dropdown-field ')])[1]",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 42,
+      "xpath": "//span[normalize-space()='143968, обл. Московская, г. Реутов, ш. Автомагистраль Москва-Нижний Новгород, д. 1, кв. 5']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 43,
+      "xpath": "//*[@id='c_ObjListLkp']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 44,
+      "xpath": "//span[normalize-space()='Помещение, 41:01:0010112:1225, Камчатский край, г Петропавловск-Камчатский, ул Бийская, д 2а']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 45,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 46,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 47,
+      "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' fileupload-link-button ')]",
+      "action": "file_upload",
+      "params": {
+        "fileContentBase64": "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ZW5kb2JqCgoxNCAwIG9iago8PC9UeXBlL1N0cnVjdFRyZWVSb290Ci9QYXJlbnRUcmVlIDE1IDAgUgovUm9sZU1hcDw8L1N0YW5kYXJkL1AKPj4KL0tbNCAwIFIgIF0KPj4KZW5kb2JqCgoxNSAwIG9iago8PC9OdW1zWwowIFsgNSAwIFIgXQpdPj4KZW5kb2JqCgo2IDAgb2JqCjw8L1R5cGUvUGFnZXMKL1Jlc291cmNlcyAxMyAwIFIKL0tpZHNbIDEgMCBSIF0KL0NvdW50IDE+PgplbmRvYmoKCjE2IDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyA2IDAgUgovUGFnZU1vZGUvVXNlT3V0bGluZXMKL09wZW5BY3Rpb25bMSAwIFIgL1hZWiBudWxsIG51bGwgMF0KL1N0cnVjdFRyZWVSb290IDE0IDAgUgovTGFuZyhlbi1VUykKL01hcmtJbmZvPDwvTWFya2VkIHRydWU+Pgo+PgplbmRvYmoKCjE3IDAgb2JqCjw8L0NyZWF0b3I8RkVGRjAwNTcwMDcyMDA2OTAwNzQwMDY1MDA3Mj4KL1Byb2R1Y2VyPEZFRkYwMDRDMDA2OTAwNjIwMDcyMDA2NTAwNEYwMDY2MDA2NjAwNjkwMDYzMDA2NTAwMjAwMDMyMDAzNDAwMkUwMDMyPgovQ3JlYXRpb25EYXRlKEQ6MjAyNjAyMjYxMDUzNDIrMDMnMDAnKT4+CmVuZG9iagoKeHJlZgowIDE4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwNTA2NyAwMDAwMCBuIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAyMTkgMDAwMDAgbiAKMDAwMDAwNTMyNiAwMDAwMCBuIAowMDAwMDA1MjE2IDAwMDAwIG4gCjAwMDAwMDU1NDkgMDAwMDAgbiAKMDAwMDAwMDIzOSAwMDAwMCBuIAowMDAwMDA0MzA3IDAwMDAwIG4gCjAwMDAwMDQzMjggMDAwMDAgbiAKMDAwMDAwNDUyMyAwMDAwMCBuIAowMDAwMDA0ODE1IDAwMDAwIG4gCjAwMDAwMDQ5NzggMDAwMDAgbiAKMDAwMDAwNTAxMSAwMDAwMCBuIAowMDAwMDA1NDA4IDAwMDAwIG4gCjAwMDAwMDU1MDcgMDAwMDAgbiAKMDAwMDAwNTYyMyAwMDAwMCBuIAowMDAwMDA1NzkxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSAxOC9Sb290IDE2IDAgUgovSW5mbyAxNyAwIFIKL0lEIFsgPEU1NUNGRTNDNjFDMURCRDYzNDRCRUU3RjhBMTU0NzNBPgo8RTU1Q0ZFM0M2MUMxREJENjM0NEJFRTdGOEExNTQ3M0E+IF0KL0RvY0NoZWNrc3VtIC9GQkMxNEI4REZDQTBBMjc0M0EyOUE5MUU1NTNCNEJCMwo+PgpzdGFydHhyZWYKNTk3MAolJUVPRgo=",
+        "fileName": "test.pdf"
+      }
+    },
+    {
+      "step": 48,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 49,
+      "xpath": "//button[contains(normalize-space(), 'Выбрать файл')]",
+      "action": "file_upload",
+      "params": {
+        "fileContentBase64": "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ZW5kb2JqCgoxNCAwIG9iago8PC9UeXBlL1N0cnVjdFRyZWVSb290Ci9QYXJlbnRUcmVlIDE1IDAgUgovUm9sZU1hcDw8L1N0YW5kYXJkL1AKPj4KL0tbNCAwIFIgIF0KPj4KZW5kb2JqCgoxNSAwIG9iago8PC9OdW1zWwowIFsgNSAwIFIgXQpdPj4KZW5kb2JqCgo2IDAgb2JqCjw8L1R5cGUvUGFnZXMKL1Jlc291cmNlcyAxMyAwIFIKL0tpZHNbIDEgMCBSIF0KL0NvdW50IDE+PgplbmRvYmoKCjE2IDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyA2IDAgUgovUGFnZU1vZGUvVXNlT3V0bGluZXMKL09wZW5BY3Rpb25bMSAwIFIgL1hZWiBudWxsIG51bGwgMF0KL1N0cnVjdFRyZWVSb290IDE0IDAgUgovTGFuZyhlbi1VUykKL01hcmtJbmZvPDwvTWFya2VkIHRydWU+Pgo+PgplbmRvYmoKCjE3IDAgb2JqCjw8L0NyZWF0b3I8RkVGRjAwNTcwMDcyMDA2OTAwNzQwMDY1MDA3Mj4KL1Byb2R1Y2VyPEZFRkYwMDRDMDA2OTAwNjIwMDcyMDA2NTAwNEYwMDY2MDA2NjAwNjkwMDYzMDA2NTAwMjAwMDMyMDAzNDAwMkUwMDMyPgovQ3JlYXRpb25EYXRlKEQ6MjAyNjAyMjYxMDUzNDIrMDMnMDAnKT4+CmVuZG9iagoKeHJlZgowIDE4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwNTA2NyAwMDAwMCBuIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAyMTkgMDAwMDAgbiAKMDAwMDAwNTMyNiAwMDAwMCBuIAowMDAwMDA1MjE2IDAwMDAwIG4gCjAwMDAwMDU1NDkgMDAwMDAgbiAKMDAwMDAwMDIzOSAwMDAwMCBuIAowMDAwMDA0MzA3IDAwMDAwIG4gCjAwMDAwMDQzMjggMDAwMDAgbiAKMDAwMDAwNDUyMyAwMDAwMCBuIAowMDAwMDA0ODE1IDAwMDAwIG4gCjAwMDAwMDQ5NzggMDAwMDAgbiAKMDAwMDAwNTAxMSAwMDAwMCBuIAowMDAwMDA1NDA4IDAwMDAwIG4gCjAwMDAwMDU1MDcgMDAwMDAgbiAKMDAwMDAwNTYyMyAwMDAwMCBuIAowMDAwMDA1NzkxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSAxOC9Sb290IDE2IDAgUgovSW5mbyAxNyAwIFIKL0lEIFsgPEU1NUNGRTNDNjFDMURCRDYzNDRCRUU3RjhBMTU0NzNBPgo8RTU1Q0ZFM0M2MUMxREJENjM0NEJFRTdGOEExNTQ3M0E+IF0KL0RvY0NoZWNrc3VtIC9GQkMxNEI4REZDQTBBMjc0M0EyOUE5MUU1NTNCNEJCMwo+PgpzdGFydHhyZWYKNTk3MAolJUVPRgo=",
+        "fileName": "test.pdf"
+      }
+    },
+    {
+      "step": 50,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 51,
+      "xpath": "//span[normalize-space()='Нет']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 52,
+      "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 53,
+      "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 54,
+      "xpath": "//*[@name='c35']",
+      "action": "input",
+      "params": {
+        "value": "1"
+      }
+    },
+    {
+      "step": 55,
+      "xpath": "//*[@name='c36']",
+      "action": "input",
+      "params": {
+        "value": "20.01.2026"
+      }
+    },
+    {
+      "step": 56,
+      "xpath": "//span[normalize-space()='Перейти к подписанию']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 57,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 58,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' choose__item-header ')])[2]",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 59,
+      "xpath": "//span[normalize-space()='Подписать']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 60,
+      "xpath": "//span[normalize-space()='ООО \"ЦентрИнформ\"']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 61,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {}
+    },
+    {
+      "step": 62,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 63,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' link-plain ')])[2]",
+      "action": "click",
+      "params": {
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 64,
+      "xpath": "//span[normalize-space()='Подписать']",
+      "action": "click",
+      "params": {
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 65,
+      "xpath": "//span[normalize-space()='ООО \"ЦентрИнформ\"']",
+      "action": "click",
+      "params": {
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 66,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "params": {
+        "waitForLoad": true
+      }
+    }
+  ]
+}

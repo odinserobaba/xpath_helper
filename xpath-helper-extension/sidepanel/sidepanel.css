@@ -118,6 +118,7 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .import-preview { padding: 10px; background: var(--bg3); border-radius: 4px; margin: 10px 0; font-size: 12px; color: var(--text2); }
 .banner { position: fixed; top: 0; left: 0; right: 0; padding: 8px 12px; background: var(--warning); color: #000; font-size: 12px; text-align: center; z-index: 999; }
 .bfcache-banner { background: #3498db; color: #fff; }
+.history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .history-list { max-height: 150px; }
 .btn-primary-list { background: linear-gradient(135deg, var(--accent), #00b894); color: #000; font-weight: bold; }
 .btn-execute { background: linear-gradient(135deg, var(--success), #27ae60); color: #000; font-weight: bold; }

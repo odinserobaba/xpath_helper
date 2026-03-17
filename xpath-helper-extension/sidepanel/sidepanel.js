@@ -15,6 +15,9 @@ const STORAGE_KEY_CURRENT_ENV = 'xpath-helper-current-env';
 const STORAGE_KEY_REPORT_PATH = 'xpath-helper-report-path';
 const STORAGE_KEY_DATA_ROWS = 'xpath-helper-data-rows';
 const STORAGE_KEY_PYTHON_SETTINGS = 'xpath-helper-python-settings';
+const STORAGE_KEY_RUNNER_URL = 'xpath-helper-runner-url';
+const STORAGE_KEY_RUNNER_TOKEN = 'xpath-helper-runner-token';
+const RUNNER_DEFAULT_URL = 'http://127.0.0.1:8000';
 const PYTHON_DEFAULTS = {
     executablePath: '/opt/chromium-gost/chromium-gost',
     userDataDir: '/home/nuanred/.config/chromium',
@@ -181,6 +184,8 @@ const exportPythonPlaywrightBtn = $('exportPythonPlaywrightBtn');
 const exportPomTemplateBtn = $('exportPomTemplateBtn');
 const importJsonBtn = $('importJsonBtn');
 const importJsonInput = $('importJsonInput');
+const saveToLocalBtn = $('saveToLocalBtn');
+const clearStepsBtn = $('clearStepsBtn');
 const scenarioName = $('scenarioName');
 const scenarioSelect = $('scenarioSelect');
 const listSearch = $('listSearch');
@@ -203,6 +208,7 @@ const pythonSettingsCancel = $('pythonSettingsCancel');
 const historySection = $('historySection');
 const historyList = $('historyList');
 const historyCount = $('historyCount');
+const clearHistoryBtn = $('clearHistoryBtn');
 const copyAllXpathBtn = $('copyAllXpath');
 const onlyUniqueMode = $('onlyUniqueMode');
 const stepDelayMsEl = $('stepDelayMs');
@@ -227,6 +233,27 @@ const envModalCancel = $('envModalCancel');
 
 let environments = { dev: { baseUrl: '' }, stage: { baseUrl: '' }, prod: { baseUrl: '' } };
 let currentEnv = '';
+let runnerBaseUrl = RUNNER_DEFAULT_URL;
+let runnerToken = '';
+
+function runnerFetch(path, options = {}) {
+    const base = (runnerBaseUrl || RUNNER_DEFAULT_URL).replace(/\/+$/, '');
+    const url = base + path;
+    const headers = { ...(options.headers || {}) };
+    if (!headers['Content-Type'] && options.body && typeof options.body === 'string') headers['Content-Type'] = 'application/json';
+    if (runnerToken) headers['x-runner-token'] = runnerToken;
+    return fetch(url, { ...options, headers });
+}
+
+function logEvent(level, event, data) {
+    // Best-effort logging to localhost runner. Never fail UI.
+    try {
+        runnerFetch('/api/logs', {
+            method: 'POST',
+            body: JSON.stringify({ level, event, data })
+        }).catch(() => {});
+    } catch (_) {}
+}
 
 function replaceVariables(str, vars) {
     if (typeof str !== 'string') return str;
@@ -241,6 +268,22 @@ function replaceVariablesInStep(step, vars) {
     if (s.params.expectedValue) s.params.expectedValue = replaceVariables(s.params.expectedValue, vars);
     if (s.params.message) s.params.message = replaceVariables(s.params.message, vars);
     return s;
+}
+
+function buildExportPayload() {
+    const stepsToExport = executionList.filter((s) => s.action !== 'separator');
+    const name = (scenarioName?.value || 'XPath Helper — сценарий').trim() || 'XPath Helper — сценарий';
+    return {
+        name,
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        steps: stepsToExport.map((s, i) => ({
+            step: i + 1,
+            xpath: s.xpath,
+            action: s.action,
+            params: s.params || {}
+        }))
+    };
 }
 
 function getCurrentVariables(rowData = null) {
@@ -638,6 +681,12 @@ if (onlyUniqueMode) {
 // ——— History load ———
 chrome.storage.local.get(STORAGE_KEY_HISTORY, (d) => {
     elementHistory = Array.isArray(d[STORAGE_KEY_HISTORY]) ? d[STORAGE_KEY_HISTORY] : [];
+    renderHistory();
+});
+
+if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', () => {
+    elementHistory = [];
+    chrome.storage.local.set({ [STORAGE_KEY_HISTORY]: [] });
     renderHistory();
 });
 
@@ -1118,7 +1167,7 @@ function closeEnvModal(save) {
 
 // ——— Execution list: load, save, render ———
 function loadExecutionList() {
-    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH, STORAGE_KEY_PYTHON_SETTINGS], (data) => {
+    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH, STORAGE_KEY_PYTHON_SETTINGS, STORAGE_KEY_RUNNER_URL, STORAGE_KEY_RUNNER_TOKEN], (data) => {
         executionList = Array.isArray(data[STORAGE_KEY_EXECUTION_LIST]) ? data[STORAGE_KEY_EXECUTION_LIST] : [];
         scenarios = Array.isArray(data[STORAGE_KEY_SCENARIOS]) ? data[STORAGE_KEY_SCENARIOS] : [];
         if (data[STORAGE_KEY_ENVIRONMENTS]) {
@@ -1126,6 +1175,8 @@ function loadExecutionList() {
         }
         currentEnv = data[STORAGE_KEY_CURRENT_ENV] || '';
         dataRows = Array.isArray(data[STORAGE_KEY_DATA_ROWS]) ? data[STORAGE_KEY_DATA_ROWS] : [];
+        runnerBaseUrl = (data[STORAGE_KEY_RUNNER_URL] || RUNNER_DEFAULT_URL).trim() || RUNNER_DEFAULT_URL;
+        runnerToken = (data[STORAGE_KEY_RUNNER_TOKEN] || '').trim();
         if (envSelect) envSelect.value = currentEnv;
         if (reportPathInput) reportPathInput.value = data[STORAGE_KEY_REPORT_PATH] || 'report.html';
         if (data[STORAGE_KEY_PYTHON_SETTINGS]) {
@@ -1985,7 +2036,7 @@ const EXPORT_JSON_VERSION = 1;
 function exportToJson() {
     const stepsToExport = executionList.filter((s) => s.action !== 'separator');
     const payload = {
-        name: 'XPath Helper — сценарий',
+        name: (scenarioName?.value || 'XPath Helper — сценарий').trim() || 'XPath Helper — сценарий',
         version: EXPORT_JSON_VERSION,
         exportedAt: new Date().toISOString(),
         steps: stepsToExport.map((s, i) => ({
@@ -2004,6 +2055,36 @@ function exportToJson() {
     URL.revokeObjectURL(url);
 }
 
+async function saveScenarioToLocalRunner() {
+    if (!saveToLocalBtn) return;
+    const stepsToExport = executionList.filter((s) => s.action !== 'separator');
+    if (stepsToExport.length === 0) {
+        saveToLocalBtn.textContent = 'Список пуст';
+        setTimeout(() => { saveToLocalBtn.textContent = '💾 В раннер'; }, 2000);
+        return;
+    }
+    const payload = buildExportPayload();
+    const prev = saveToLocalBtn.textContent;
+    saveToLocalBtn.textContent = 'Сохраняю...';
+    logEvent('info', 'save_to_runner_click', { stepsCount: stepsToExport.length });
+    try {
+        const resp = await runnerFetch('/api/scenarios', { method: 'POST', body: JSON.stringify(payload) });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+        appendExecutionLog(`💾 Сохранено в раннер: ${data.scenario?.id || 'ok'}`);
+        saveToLocalBtn.textContent = '✓ Сохранено';
+        setTimeout(() => { saveToLocalBtn.textContent = '💾 В раннер'; }, 1500);
+    } catch (e) {
+        const msg = String(e?.message || e || 'Ошибка').slice(0, 80);
+        appendExecutionLog(`Ошибка сохранения в раннер: ${msg}`);
+        logEvent('error', 'save_to_runner_failed', { error: msg });
+        saveToLocalBtn.textContent = '✗ Ошибка';
+        setTimeout(() => { saveToLocalBtn.textContent = '💾 В раннер'; }, 2000);
+    } finally {
+        // keep button enabled
+    }
+}
+
 function parseImportFile(data) {
     let raw = Array.isArray(data) ? data : (data?.steps || []);
     if (raw.length && raw.some((s) => s.step != null)) {
@@ -2015,6 +2096,30 @@ function parseImportFile(data) {
         action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
         params: s.params && typeof s.params === 'object' ? s.params : {}
     })).filter((s) => s.xpath || s.action === 'separator');
+}
+
+function clearAllSteps() {
+    if (!clearStepsBtn) return;
+    if (executionList.length === 0) {
+        clearStepsBtn.textContent = 'Пусто';
+        setTimeout(() => { clearStepsBtn.textContent = '🗑 Очистить'; }, 1500);
+        return;
+    }
+    const ok = confirm(`Очистить все шаги? (${executionList.length})`);
+    if (!ok) return;
+    executionList = [];
+    lastExecutionReport = [];
+    currentExecutingStepId = null;
+    saveExecutionList();
+    renderExecutionList();
+    renderEditorStepList();
+    if (tabFlow?.classList?.contains('active')) renderFlowCanvas();
+    if (executionLog) executionLog.textContent = '';
+    document.querySelector('.tab[data-tab="log"]')?.classList.remove('log-has-content');
+    appendExecutionLog('Список шагов очищен');
+    logEvent('info', 'steps_cleared', { count: 0 });
+    clearStepsBtn.textContent = '✓ Очищено';
+    setTimeout(() => { clearStepsBtn.textContent = '🗑 Очистить'; }, 1500);
 }
 
 function showImportModal(steps) {
@@ -2744,6 +2849,8 @@ if (clearLogBtn) clearLogBtn.addEventListener('click', () => {
 });
 
 if (exportJsonBtn) exportJsonBtn.addEventListener('click', exportToJson);
+if (saveToLocalBtn) saveToLocalBtn.addEventListener('click', saveScenarioToLocalRunner);
+if (clearStepsBtn) clearStepsBtn.addEventListener('click', clearAllSteps);
 if (importJsonBtn) importJsonBtn.addEventListener('click', () => importJsonInput.click());
 if (importJsonInput) importJsonInput.addEventListener('change', () => {
     const f = importJsonInput.files?.[0];

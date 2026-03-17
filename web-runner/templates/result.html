@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run result</title>
+  <style>
+    :root { --bg:#0f0f1a; --bg2:#1a1a2e; --bg3:#16213e; --text:#eee; --muted:#aaa; --accent:#00d4aa; --err:#e74c3c; --ok:#2ecc71; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 18px; }
+    .card { background: var(--bg2); border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    h1 { font-size: 18px; margin: 0 0 10px 0; color: var(--accent); }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .ok { background: rgba(46,204,113,0.18); color: var(--ok); }
+    .fail { background: rgba(231,76,60,0.18); color: var(--err); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #2a2a4a; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
+    th { background: var(--bg3); color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; color: var(--accent); }
+    pre { background: #0a0a14; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px; overflow: auto; font-size: 12px; line-height: 1.35; }
+    .topbar { display:flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="topbar">
+        <h1>Результат запуска</h1>
+        <div><a href="/">← Новый запуск</a></div>
+      </div>
+
+      {% if error %}
+        <p><span class="pill fail">Ошибка</span> {{ error }}</p>
+      {% else %}
+        <p>
+          <b>Run ID:</b> <code>{{ run_id }}</code>
+          &nbsp;|&nbsp;
+          <b>Scenario:</b> {{ report.scenario }}
+          &nbsp;|&nbsp;
+          <span class="pill ok">OK: {{ report.okCount }}</span>
+          <span class="pill fail">FAIL: {{ report.failCount }}</span>
+          &nbsp;|&nbsp;
+          <b>Total:</b> {{ report.totalMs }} ms
+        </p>
+        <p>
+          <a href="/runs/{{ run_id }}/log">log.txt</a>
+          &nbsp;·&nbsp;
+          <a href="/runs/{{ run_id }}/report">report.json</a>
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Action</th>
+              <th>Status</th>
+              <th>Duration</th>
+              <th>Error</th>
+              <th>Screenshot</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in report.steps %}
+              <tr>
+                <td><code>{{ s.step }}</code></td>
+                <td><code>{{ s.action }}</code></td>
+                <td>
+                  {% if s.ok %}
+                    <span class="pill ok">OK</span>
+                  {% else %}
+                    <span class="pill fail">FAIL</span>
+                  {% endif %}
+                </td>
+                <td>{{ s.durationMs }} ms</td>
+                <td>{{ s.error or "" }}</td>
+                <td>
+                  {% if s.screenshot %}
+                    <a href="/runs/{{ run_id }}/screenshots/{{ s.screenshot.split('/')[-1] }}">{{ s.screenshot }}</a>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <h2 style="margin-top:14px; font-size:14px; color: var(--muted);">Log</h2>
+        <pre>{% for line in report.log %}{{ line }}
+{% endfor %}</pre>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "test1",
+  "version": 1,
+  "exportedAt": "2026-03-17T07:12:39.466Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[8]",
+      "action": "click",
+      "params": {
+        "mandatory": true,
+        "waitForLoad": true
+      }
+    }
+  ]
+}

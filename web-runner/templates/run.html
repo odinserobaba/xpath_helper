@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run {{ run_id }}</title>
+  <style>
+    :root { --bg:#0f0f1a; --bg2:#1a1a2e; --bg3:#16213e; --text:#eee; --muted:#aaa; --accent:#00d4aa; --err:#e74c3c; --ok:#2ecc71; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 18px; }
+    .card { background: var(--bg2); border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    h1 { font-size: 18px; margin: 0 0 10px 0; color: var(--accent); }
+    .top { display:flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items:center; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .ok { background: rgba(46,204,113,0.18); color: var(--ok); }
+    .fail { background: rgba(231,76,60,0.18); color: var(--err); }
+    .running { background: rgba(0,212,170,0.14); color: var(--accent); }
+    tr.current { outline: 2px solid rgba(0,212,170,0.55); outline-offset: -2px; }
+    .meta { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; color: var(--muted); font-size: 12px; }
+    .grid { display:grid; grid-template-columns: 1fr 420px; gap: 12px; margin-top: 12px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px; min-height: 200px; }
+    .panel h2 { margin: 0 0 10px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #2a2a4a; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
+    th { background: #0a0a14; color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; color: var(--accent); }
+    pre { background: #0a0a14; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px; overflow: auto; font-size: 12px; line-height: 1.35; height: 60vh; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <h1>Live run: <code>{{ run_id }}</code></h1>
+        <div><a href="/">← К списку</a></div>
+      </div>
+      <div class="meta">
+        <span id="scenarioName">Scenario: —</span>
+        <span id="counts"><span class="pill ok">OK: 0</span> <span class="pill fail">FAIL: 0</span></span>
+        <a id="reportLink" href="/runs/{{ run_id }}/report">report.json</a>
+        <a id="logLink" href="/runs/{{ run_id }}/log">log.txt</a>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <h2>Шаги</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Action</th>
+                <th>Status</th>
+                <th>Error / Screenshot</th>
+              </tr>
+            </thead>
+            <tbody id="stepsBody"></tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <h2>Log</h2>
+          <pre id="log"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const runId = "{{ run_id }}";
+    const steps = new Map(); // stepNo -> {step, action, ok?, error?, screenshot?}
+    let okCount = 0, failCount = 0;
+    let currentStep = null;
+
+    const els = {
+      stepsBody: document.getElementById('stepsBody'),
+      log: document.getElementById('log'),
+      scenarioName: document.getElementById('scenarioName'),
+      counts: document.getElementById('counts'),
+    };
+
+    function render() {
+      const rows = [...steps.values()].sort((a,b) => (a.step||0) - (b.step||0));
+      els.stepsBody.innerHTML = '';
+      for (const s of rows) {
+        const tr = document.createElement('tr');
+        if (currentStep != null && s.step === currentStep && s.ok == null) tr.classList.add('current');
+        const status = s.ok === true ? '<span class="pill ok">OK</span>' : (s.ok === false ? '<span class="pill fail">FAIL</span>' : '<span class="pill running">RUNNING</span>');
+        const shot = s.screenshot ? `<a href="/runs/${runId}/screenshots/${s.screenshot.split('/').pop()}">${s.screenshot}</a>` : '';
+        tr.innerHTML = `
+          <td><code>${s.step ?? ''}</code></td>
+          <td><code>${(s.action||'')}</code></td>
+          <td>${status}</td>
+          <td>${(s.error||'')}${shot ? '<br/>' + shot : ''}</td>
+        `;
+        els.stepsBody.appendChild(tr);
+        if (tr.classList.contains('current')) {
+          requestAnimationFrame(() => tr.scrollIntoView({ block: 'center' }));
+        }
+      }
+      els.counts.innerHTML = `<span class="pill ok">OK: ${okCount}</span> <span class="pill fail">FAIL: ${failCount}</span>`;
+    }
+
+    function logLine(line) {
+      els.log.textContent += line + "\n";
+      els.log.scrollTop = els.log.scrollHeight;
+    }
+
+    const es = new EventSource(`/api/runs/${runId}/events`);
+    es.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      const e = msg.event;
+      if (e === 'created') {
+        if (msg.scenario) els.scenarioName.textContent = 'Scenario: ' + msg.scenario;
+        logLine(`[created] scenarioId=${msg.scenarioId || ''}`);
+      } else if (e === 'run_start') {
+        if (msg.scenario) els.scenarioName.textContent = 'Scenario: ' + msg.scenario;
+        logLine(`[run_start] steps=${msg.stepsCount ?? ''}`);
+      } else if (e === 'navigated') {
+        logLine(`[navigate] ${msg.url || ''}`);
+      } else if (e === 'step_start') {
+        currentStep = msg.step;
+        steps.set(msg.step, { step: msg.step, action: msg.action, ok: null, error: null, screenshot: null });
+        logLine(`[step_start] #${msg.step} ${msg.action}`);
+      } else if (e === 'step_done') {
+        const cur = steps.get(msg.step) || { step: msg.step, action: msg.action };
+        cur.ok = msg.ok;
+        cur.error = msg.error || null;
+        cur.screenshot = msg.screenshot || null;
+        steps.set(msg.step, cur);
+        if (msg.ok) okCount++; else failCount++;
+        logLine(`[step_done] #${msg.step} ${msg.ok ? 'OK' : 'FAIL'}`);
+      } else if (e === 'run_done') {
+        okCount = msg.okCount ?? okCount;
+        failCount = msg.failCount ?? failCount;
+        logLine(`[run_done] ok=${okCount} fail=${failCount} totalMs=${msg.totalMs ?? ''}`);
+        es.close();
+      }
+      render();
+    };
+    es.onerror = () => {
+      logLine('[sse] disconnected');
+    };
+  </script>
+</body>
+</html>

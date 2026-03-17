@@ -96,7 +96,10 @@
             </div>
         </section>
         <section id="historySection" class="xpath-section hidden">
-            <h3>История элементов <span id="historyCount" class="count">(0)</span></h3>
+            <div class="history-header">
+                <h3>История элементов <span id="historyCount" class="count">(0)</span></h3>
+                <button type="button" id="clearHistoryBtn" class="btn btn-sm" title="Удалить все элементы из истории">🗑 Удалить все</button>
+            </div>
             <div id="historyList" class="xpath-list history-list"></div>
         </section>
         
@@ -141,6 +144,8 @@
                     <button type="button" id="executeListBtn" class="btn btn-execute" title="Выполнить все шаги">▶ Выполнить</button>
                     <button type="button" id="stopExecuteBtn" class="btn btn-stop hidden" title="Остановить выполнение">⏹ Стоп</button>
                     <button type="button" id="saveListBtn" class="btn" title="Сохранить в storage">💾 Сохранить</button>
+                    <button type="button" id="saveToLocalBtn" class="btn" title="Сохранить сценарий в локальный раннер (localhost)">💾 В раннер</button>
+                    <button type="button" id="clearStepsBtn" class="btn" title="Очистить все шаги текущего списка">🗑 Очистить</button>
                     <button type="button" id="exportJsonBtn" class="btn" title="Экспорт в JSON для автотестов">📤 JSON</button>
                     <button type="button" id="exportTemplatesBtn" class="btn" title="Экспорт в Playwright/Cypress/Selenium">📤 Шаблоны</button>
                     <button type="button" id="exportPythonPlaywrightBtn" class="btn" title="Экспорт в Python Playwright (chromium-gost)">📤 Python Playwright</button>

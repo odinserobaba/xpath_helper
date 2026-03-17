@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XPath Helper — Web Runner</title>
+  <style>
+    :root { --bg:#0f0f1a; --bg2:#1a1a2e; --bg3:#16213e; --text:#eee; --muted:#aaa; --accent:#00d4aa; --err:#e74c3c; --ok:#2ecc71; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 18px; }
+    .card { background: var(--bg2); border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px; }
+    h1 { font-size: 18px; margin: 0 0 10px 0; color: var(--accent); }
+    p { margin: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+    label { display:block; font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+    input[type="text"], input[type="number"], textarea { width: 100%; background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; }
+    textarea { min-height: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .row { display:flex; gap: 12px; flex-wrap: wrap; }
+    .row > .col { flex: 1; min-width: 220px; }
+    .btn { display:inline-flex; align-items:center; gap:8px; background: linear-gradient(135deg, var(--accent), #00b894); color:#000; border:0; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor:pointer; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .small { font-size: 12px; color: var(--muted); }
+    .check { display:flex; align-items:center; gap:8px; margin-top: 12px; }
+    code { color: var(--accent); }
+    .layout { display:grid; grid-template-columns: 360px 1fr; gap: 14px; }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+    .panel { background: var(--bg3); border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px; min-height: 200px; }
+    .panel h2 { margin: 0 0 10px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; display:flex; justify-content: space-between; align-items:center; }
+    .btn2 { background: var(--bg2); border: 1px solid #2a2a4a; color: var(--text); border-radius: 10px; padding: 8px 10px; cursor:pointer; font-weight: 600; }
+    .btn2:hover { border-color: var(--accent); }
+    .btnRow { display:flex; gap: 8px; flex-wrap: wrap; }
+    .list { display:flex; flex-direction: column; gap: 8px; max-height: 65vh; overflow:auto; padding-right: 2px; }
+    .item { background: #0a0a14; border: 1px solid #2a2a4a; border-radius: 10px; padding: 10px; cursor:pointer; }
+    .item:hover { border-color: var(--accent); }
+    .item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(0,212,170,0.25), 0 0 18px rgba(0,212,170,0.12); }
+    .itemTitle { display:flex; gap: 8px; align-items:center; justify-content: space-between; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .pillOk { background: rgba(46,204,113,0.18); color: var(--ok); }
+    .pillFail { background: rgba(231,76,60,0.18); color: var(--err); }
+    .meta { margin-top: 6px; font-size: 12px; color: var(--muted); display:flex; gap: 10px; flex-wrap: wrap; }
+    .toast { position: fixed; bottom: 16px; right: 16px; background: #0a0a14; border: 1px solid #2a2a4a; color: var(--text); padding: 10px 12px; border-radius: 12px; max-width: 420px; display:none; }
+    .toast.show { display:block; }
+    .hr { height: 1px; background: #2a2a4a; margin: 10px 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>✦ XPath Helper — Web Runner</h1>
+      <p>Сценарии сохраняются из расширения в <span class="mono">tests/scenarios/</span>. Здесь ты видишь список, выбираешь нужный и запускаешь через Python Playwright.</p>
+
+      <div class="layout" style="margin-top: 12px;">
+        <div class="panel">
+          <h2>
+            Сценарии
+            <button id="refreshBtn" class="btn2" type="button" title="Обновить список">↻</button>
+          </h2>
+          <div id="scenarioList" class="list"></div>
+          <div class="hint" style="margin-top:10px;">
+            Сохрани сценарий из расширения кнопкой “Сохранить в раннер”, затем нажми ↻.
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Запуск</h2>
+          <div class="hint">Подстановка переменных: <code>{{baseUrl}}</code>, <code>{{login}}</code> и т.п.</div>
+
+          <label>Выбранный сценарий</label>
+          <input id="selectedScenario" type="text" readonly placeholder="— выбери слева —" />
+
+          <label style="margin-top:12px;">Start URL (куда перейти перед шагами)</label>
+          <input id="startUrlInput" type="text" placeholder="https://example.com/page" />
+          <div class="hint">Если в сценарии нет шага <code>navigate</code>, раннеру нужно знать стартовую страницу (в расширении она уже открыта).</div>
+
+          <div class="row" style="margin-top:12px;">
+            <div class="col">
+              <label>baseUrl (опционально)</label>
+              <input id="baseUrlInput" type="text" placeholder="https://example.com" />
+              <div class="hint">Будет доступен как <code>{{baseUrl}}</code>.</div>
+            </div>
+            <div class="col">
+              <label>Viewport</label>
+              <input id="viewportInput" type="text" placeholder="1280x720" value="1280x720" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>slowMo (ms)</label>
+              <input id="slowMoInput" type="number" min="0" max="5000" value="0" />
+            </div>
+            <div class="col">
+              <label class="check">
+                <input id="headlessInput" type="checkbox" checked />
+                Headless
+              </label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>Default timeout (ms)</label>
+              <input id="defaultTimeoutInput" type="number" min="0" max="120000" value="15000" />
+              <div class="hint">Используется для click/input/wait_for_element если у шага нет <code>params.timeoutMs</code>.</div>
+            </div>
+          </div>
+
+          <label style="margin-top:14px;">Variables JSON (опционально)</label>
+          <textarea id="varsInput" placeholder='{"login":"alice","password":"secret"}'></textarea>
+
+          <div class="hr"></div>
+          <div class="btnRow">
+            <button id="runBtn" class="btn" type="button" disabled>▶ Run</button>
+            <button id="openLastRunBtn" class="btn2" type="button" disabled>Открыть последний run</button>
+          </div>
+          <div id="runSummary" class="meta"></div>
+
+          <p class="hint" style="margin-top:14px;">Примечание: шаг <b>user_action</b> в веб‑раннере не может ждать пользователя и будет пропускаться с записью в лог.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const els = {
+      list: document.getElementById('scenarioList'),
+      refresh: document.getElementById('refreshBtn'),
+      selected: document.getElementById('selectedScenario'),
+      runBtn: document.getElementById('runBtn'),
+      openLast: document.getElementById('openLastRunBtn'),
+      startUrl: document.getElementById('startUrlInput'),
+      baseUrl: document.getElementById('baseUrlInput'),
+      viewport: document.getElementById('viewportInput'),
+      slowMo: document.getElementById('slowMoInput'),
+      headless: document.getElementById('headlessInput'),
+      defaultTimeout: document.getElementById('defaultTimeoutInput'),
+      vars: document.getElementById('varsInput'),
+      summary: document.getElementById('runSummary'),
+      toast: document.getElementById('toast'),
+    };
+
+    let scenarios = [];
+    let selectedId = null;
+    let lastRunId = null;
+
+    function toast(msg) {
+      els.toast.textContent = msg;
+      els.toast.classList.add('show');
+      setTimeout(() => els.toast.classList.remove('show'), 2600);
+    }
+
+    function renderList() {
+      els.list.innerHTML = '';
+      if (!scenarios.length) {
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = 'Пока нет сценариев в tests/scenarios/';
+        els.list.appendChild(empty);
+        return;
+      }
+      for (const s of scenarios) {
+        const div = document.createElement('div');
+        div.className = 'item' + (s.id === selectedId ? ' selected' : '');
+        div.addEventListener('click', () => {
+          selectedId = s.id;
+          els.selected.value = s.name || s.file || s.id;
+          els.runBtn.disabled = false;
+          renderList();
+        });
+        const title = document.createElement('div');
+        title.className = 'itemTitle';
+        const left = document.createElement('div');
+        left.textContent = (s.name || s.file || s.id);
+        const right = document.createElement('span');
+        right.className = 'pill pillOk';
+        right.textContent = `${s.stepsCount} steps`;
+        title.appendChild(left);
+        title.appendChild(right);
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = `<span class="mono">${s.file}</span><span>mtime: ${new Date(s.mtime * 1000).toLocaleString()}</span>`;
+        div.appendChild(title);
+        div.appendChild(meta);
+        els.list.appendChild(div);
+      }
+    }
+
+    async function loadScenarios() {
+      els.refresh.disabled = true;
+      try {
+        const r = await fetch('/api/scenarios');
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'Failed');
+        scenarios = j.scenarios || [];
+        if (selectedId && !scenarios.find(x => x.id === selectedId)) {
+          selectedId = null;
+          els.selected.value = '';
+          els.runBtn.disabled = true;
+        }
+        renderList();
+      } catch (e) {
+        toast('Не удалось загрузить список сценариев: ' + (e?.message || e));
+      } finally {
+        els.refresh.disabled = false;
+      }
+    }
+
+    async function runSelected() {
+      if (!selectedId) return;
+      els.runBtn.disabled = true;
+      els.summary.textContent = '';
+      try {
+        let vars = {};
+        const raw = (els.vars.value || '').trim();
+        if (raw) vars = JSON.parse(raw);
+        const body = {
+          scenarioId: selectedId,
+          startUrl: (els.startUrl.value || '').trim(),
+          baseUrl: (els.baseUrl.value || '').trim(),
+          variables: vars,
+          headless: !!els.headless.checked,
+          slowMoMs: parseInt(els.slowMo.value || '0', 10) || 0,
+          viewport: (els.viewport.value || '1280x720').trim() || '1280x720',
+          defaultTimeoutMs: parseInt(els.defaultTimeout.value || '15000', 10) || 15000,
+        };
+        const r = await fetch('/api/runs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'Run failed');
+        lastRunId = j.runId;
+        els.openLast.disabled = false;
+        const rep = j.report || {};
+        els.summary.innerHTML = `<span class="pill pillOk">OK: ${rep.okCount ?? '-'}</span><span class="pill pillFail">FAIL: ${rep.failCount ?? '-'}</span><span>Total: ${rep.totalMs ?? '-'} ms</span><span class="mono">runId: ${lastRunId}</span>`;
+        toast('Готово: runId ' + lastRunId);
+        // Open live run page (shows step-by-step progress and screenshots)
+        window.location.href = `/runs/${lastRunId}`;
+      } catch (e) {
+        toast('Ошибка запуска: ' + (e?.message || e));
+      } finally {
+        els.runBtn.disabled = !selectedId;
+      }
+    }
+
+    els.refresh.addEventListener('click', loadScenarios);
+    els.runBtn.addEventListener('click', runSelected);
+    els.openLast.addEventListener('click', () => {
+      if (!lastRunId) return;
+      window.location.href = `/runs/${lastRunId}/report`;
+    });
+
+    loadScenarios();
+  </script>
+</body>
+</html>
