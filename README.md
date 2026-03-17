@@ -1,44 +1,84 @@
 # XPath Helper Pro
 
-Расширение для Chrome (Manifest V3), которое помогает строить, проверять и выполнять XPath на любой странице, с упором на **Angular Material**. Поддерживает список шагов (клик, ввод, загрузка файла, пауза, ветвление, assert), экспорт/импорт в JSON, эмуляцию загрузки файлов, Data-driven тестирование и экспорт в Python Playwright с POM-архитектурой.
+**XPath Helper Pro** = Chrome extension для записи сценариев + локальный **Web Runner** для запуска сценариев в **Python Playwright** (UI + CLI/CI).
+
+---
+
+## Быстрый старт (5 минут)
+
+### 1) Запуск локального раннера (обязательно для сохранения на диск)
+
+```bash
+cd web-runner
+./install.sh
+./run.sh
+```
+
+Открой `http://127.0.0.1:8000`.
+
+### 2) Установка расширения
+
+1. В Chrome открой `chrome://extensions/`
+2. Включи **Режим разработчика**
+3. Нажми **Загрузить распакованное** и выбери папку `xpath-helper-extension/`
+
+### 3) Workflow “записал → сохранил → запустил”
+
+1. Открой целевой сайт
+2. Включи инспекцию (Ctrl или `Alt+X`)
+3. Добавь шаги в **Список**
+4. Дай шагам `title`/`tags` (для читаемости)
+5. Нажми **💾 В раннер** → сценарий сохранится в `tests/scenarios/`
+6. В `web-runner` выбери сценарий, укажи **Start URL**, нажми **Run** → откроется `/runs/<runId>` (live прогресс)
 
 ---
 
 ## Содержание
 
-1. [Возможности](#возможности)
-2. [Установка](#установка)
-3. [Инспектор XPath](#инспектор-xpath)
-4. [Список шагов и выполнение](#список-шагов-и-выполнение)
-5. [Редактор и Flow](#редактор-и-flow)
-6. [Типы шагов (действий)](#типы-шагов-действий)
-7. [Формат JSON](#формат-json-для-автотестов)
-8. [Data-driven тестирование](#data-driven-тестирование)
-9. [Окружения и переменные](#окружения-и-переменные)
-10. [Экспорт в Python Playwright](#экспорт-в-python-playwright-pytest)
-11. [POM-шаблон](#pom-шаблон)
-12. [Отчёты и логи](#отчёты-и-логи)
-13. [Структура проекта расширения](#структура-проекта-расширения)
+- [Концепция и архитектура](#концепция-и-архитектура)
+- [Часть 1. Расширение (Chrome MV3)](#часть-1-расширение-chrome-mv3)
+  - [Установка](#установка)
+  - [Инспектор XPath](#инспектор-xpath)
+  - [Список шагов](#список-шагов)
+  - [Ориентация в шагах: title/tags](#ориентация-в-шагах-titletags)
+  - [Стабильность селекторов: fallback selectors](#стабильность-селекторов-fallback-selectors)
+  - [Assert как QA-предикат (до действия)](#assert-как-qa-предикат-до-действия)
+  - [Flow и Editor](#flow-и-editor)
+  - [Окружения и переменные](#окружения-и-переменные)
+  - [Экспорт/импорт сценариев](#формат-json-для-автотестов)
+- [Часть 2. Web Runner (Python Playwright)](#часть-2-web-runner-python-playwright)
+  - [Запуск](#запуск-1)
+  - [Сценарии на диске](#сценарии-на-диске)
+  - [Параметры запуска на сценарий](#параметры-запуска-на-сценарий)
+  - [Data-driven (наборы данных)](#data-driven-наборы-данных)
+  - [Live выполнение](#live-выполнение)
+  - [Отчёты и артефакты](#отчёты-и-артефакты)
+  - [Логирование и masking секретов](#логирование-и-masking-секретов)
+  - [История сценариев (versioning)](#история-сценариев-versioning)
+  - [CLI/CI запуск](#clici-запуск-1)
+  - [Безопасность: token](#безопасность-token)
+- [Формат сценария (JSON)](#формат-сценария-json)
+- [Траблшутинг](#траблшутинг)
+- [Структура проекта](#структура-проекта)
 
 ---
 
-## Возможности
+## Концепция и архитектура
 
-| Функция | Описание |
-|---------|----------|
-| **Инспектор** | Генерация XPath при наведении (Ctrl или Alt+X), проверка уникальности, фильтр по типу |
-| **Список шагов** | Клик, ввод, загрузка файла, пауза, пауза до элемента, ветвление, assert, переход, действие пользователя |
-| **Редактор** | Детальное редактирование шагов с параметрами |
-| **Flow** | Визуальная схема сценария и вставка шагов между карточками |
-| **Окружения** | dev/stage/prod с переменными `{{baseUrl}}`, `{{login}}` и т.п. |
-| **Data-driven** | Импорт CSV/JSON, прогон сценария для каждой строки данных |
-| **Экспорт JSON** | Формат для автотестов с полем `step` |
-| **Экспорт Python Playwright** | test_*.py, conftest.py, fixtures, parametrize, exit code 0/1 |
-| **POM-шаблон** | Полный проект: config/, pages/, tests/, base_page, conftest |
-| **Отчёт** | HTML/JSON с именем файла из настроек |
-| **Подсветка при ошибке** | Красная рамка на проблемном элементе при падении шага |
-| **Копирование XPath при ошибке** | Кнопка 📋 у упавших шагов |
-| **Предупреждение о хрупких XPath** | Пометка `//div[1]`, `position()` и т.п. |
+```mermaid
+flowchart TD
+  ext[ChromeExtension_Sidepanel] -->|POST /api/scenarios| runner[webRunner_FastAPI]
+  runner -->|write json| scenarios[tests/scenarios]
+  runner -->|run playwright| outputs[web-runner/outputs]
+  runner -->|jsonl logs| logs[tests/logs]
+  user[User] -->|open| runnerUI[webRunner_UI]
+  runnerUI -->|GET /api/scenarios| runner
+  runnerUI -->|POST /api/runs| runner
+```
+
+---
+
+## Часть 1. Расширение (Chrome MV3)
 
 ---
 
@@ -91,7 +131,7 @@
 
 ---
 
-## Список шагов и выполнение
+## Список шагов
 
 ### Вкладка «Список»
 
@@ -110,6 +150,8 @@
 - **▶ Выполнить** — выполнить все шаги.
 - **⏹ Стоп** — остановить выполнение.
 - **💾 Сохранить** — сохранить список в storage.
+- **💾 В раннер** — сохранить сценарий на диск через localhost (для запуска Playwright раннером).
+- **🗑 Очистить** — очистить все шаги текущего списка.
 - **📤 JSON** — экспорт в JSON.
 - **📤 Шаблоны** — экспорт в Playwright/Cypress/Selenium.
 - **📤 Python Playwright** — экспорт в Python.
@@ -118,7 +160,7 @@
 - **▶ Data-driven** — выполнить сценарий для каждой строки данных.
 - **📥 Загрузить** — импорт шагов из JSON.
 
-### Управление шагами
+### Управление шагами (карточка шага)
 
 У каждого шага:
 
@@ -132,6 +174,30 @@
 
 При ошибке шага появляется кнопка **📋** для копирования XPath/URL.
 
+## Ориентация в шагах: title/tags
+
+- `title` — короткое имя шага (“Нажать Войти”, “Заполнить ИНН”)
+- `tags` — список тегов для поиска и группировки (например: `auth`, `smoke`, `upload`)
+- `title` автоподставляется при добавлении “текущего” элемента (aria-label/placeholder/title/text)
+
+## Стабильность селекторов: fallback selectors
+
+- В карточке шага можно задать **Название шага** (`title`) и **Теги** (`tags`) — это отображается в списке и участвует в поиске.
+- В карточке шага отображается блок **Selectors**: `Primary` + до 3 `Fallback` (из `params.fallbackXPaths`) и кнопка **✓?** для проверки `count` на текущей странице.
+
+### Как работает fallback
+
+- Основной `xpath` **не заменяется**.
+- В `params.fallbackXPaths` расширение добавляет резервные XPath на основе `data-testid`, `aria-label`, `placeholder`, `name`, текста.
+- В UI можно проверить каждый селектор кнопкой **✓?** (сколько совпадений на текущей странице).
+
+## Assert как QA-предикат (до действия)
+
+Кнопка **✓ + Assert** в модалке шага добавляет:
+
+- для `click/input/...` — `assert element_exists` **перед** действием (precondition)
+- для `navigate` — `assert url_contains` **после** перехода (postcondition)
+
 ### Выполнение
 
 - Шаги выполняются по порядку с подсветкой текущего.
@@ -142,7 +208,7 @@
 
 ---
 
-## Редактор и Flow
+## Flow и Editor
 
 ### Вкладка «Редактор»
 
@@ -207,7 +273,7 @@
   "version": 1,
   "exportedAt": "2025-03-06T12:00:00.000Z",
   "steps": [
-    { "step": 1, "xpath": "//button[@id='submit']", "action": "click", "params": {} },
+    { "step": 1, "xpath": "//button[@id='submit']", "action": "click", "title": "Нажать Submit", "tags": ["smoke"], "params": { "fallbackXPaths": ["//*[@data-testid='submit']"] } },
     { "step": 2, "xpath": "//input[@name='email']", "action": "input", "params": { "value": "user@example.com" } },
     { "step": 3, "xpath": "//input[@type='file']", "action": "file_upload", "params": { "fileName": "doc.pdf", "fileContentBase64": "JVBERi0xLjQK..." } },
     { "step": 4, "xpath": "", "action": "wait", "params": { "delayMs": 500 } }
@@ -222,7 +288,13 @@
 | **step** | Порядок шага (обязателен при импорте) |
 | **xpath** | XPath селектор |
 | **action** | `click`, `click_if_exists`, `input`, `file_upload`, `wait`, `wait_for_element`, `user_action`, `assert`, `branch`, `navigate`, `separator` |
+| **title** | Короткое имя шага (для UI) |
+| **tags** | Список тегов (для UI/поиска) |
 | **params** | Параметры: `value`, `delayMs`, `timeoutMs`, `url`, `fileName`, `fileContentBase64`, `condition`, `expectedValue`, `attributeName`, `nextId`, `nextElseId`, `message` и др. |
+
+### Важное про fallback селекторы
+
+Если `params.fallbackXPaths` задан, раннер и UI могут использовать/проверять эти селекторы как **резервные** (основной `xpath` не заменяется).
 
 ### Импорт (📥 Загрузить)
 
@@ -510,7 +582,7 @@ pytest tests/ -v -m scenario
 
 ---
 
-## Структура проекта расширения
+## Структура проекта
 
 ```
 xpath-helper-extension/
@@ -523,13 +595,157 @@ xpath-helper-extension/
     ├── sidepanel.html     # Вкладки: Инспектор, Список, Редактор, Flow, Лог
     ├── sidepanel.css      # Стили панели
     └── sidepanel.js       # Логика: фильтры, список, экспорт/импорт, выполнение, переменные
+
+web-runner/
+├── app.py                 # FastAPI + Playwright runner + API
+├── templates/             # UI (dark theme)
+├── outputs/               # Артефакты запусков (в .gitignore)
+├── install.sh             # Установка (venv + deps + playwright chromium)
+├── run.sh                 # Запуск сервера
+└── cli.py                 # CLI для CI
 ```
 
 ---
 
-## Требования
+## Требования (расширение)
 
 - Chrome (или совместимый браузер с поддержкой Manifest V3, Side Panel, `chrome.scripting`).
+
+---
+
+## Часть 2. Web Runner (Python Playwright)
+
+### Запуск
+
+Локальный сайт, который:
+
+- принимает сценарии из расширения (кнопка **💾 В раннер**) и сохраняет их в `tests/scenarios/`
+- запускает сценарии через **Python Playwright**
+- показывает live-выполнение (`/runs/<runId>`), пишет артефакты в `web-runner/outputs/<runId>/`
+
+### Быстрый старт
+
+```bash
+cd web-runner
+./install.sh
+./run.sh
+```
+
+Открой `http://127.0.0.1:8000`.
+
+### Сценарии на диске
+
+- **сценарии**: `tests/scenarios/*.json`
+- **история сценариев (снапшоты)**: `tests/scenarios/.history/<scenarioId>/*.json`
+- **логи**:
+  - `tests/logs/web-runner.log` (JSONL)
+  - `tests/logs/extension.log` (JSONL)
+
+### Параметры запуска на сценарий
+
+В UI можно сохранить “дефолты” прямо в сценарий (кнопка **Сохранить параметры**). Они сохраняются в `runnerSettings` внутри `tests/scenarios/<scenarioId>.json`:
+
+- `startUrl`, `baseUrl`
+- `headless`, `slowMoMs`, `viewport`, `defaultTimeoutMs`
+- `variables`
+- `dataRows`, `maxRows`, `stopOnFirstFail`
+
+### Data-driven (наборы данных)
+
+В UI можно указать:
+
+- `Variables JSON` — базовые переменные
+- `Data-driven rows` — массив строк (каждая строка перекрывает базовые переменные)
+- `Max rows` и `Stop on first fail`
+
+Артефакты строк сохраняются в `web-runner/outputs/<runId>/rows/row_N/...`.
+
+### Live выполнение
+
+После запуска UI открывает `/runs/<runId>` — там видно:
+
+- какой шаг сейчас выполняется (RUNNING/OK/FAIL)
+- лог в реальном времени (SSE)
+- ссылки на скриншоты и отчёты
+
+### Отчёты и артефакты
+
+Для каждого run:
+
+- `web-runner/outputs/<runId>/report.json`
+- `web-runner/outputs/<runId>/report.html`
+- `web-runner/outputs/<runId>/log.txt`
+- `web-runner/outputs/<runId>/screenshots/step_<n>_before.png`, `step_<n>_after.png`, `step_<n>_fail.png`
+
+История сценариев:
+
+- при сохранении сценария и при сохранении его runner-параметров делается снапшот в `tests/scenarios/.history/<scenarioId>/`.
+
+### Логирование и masking секретов
+
+- `tests/logs/web-runner.log` и `tests/logs/extension.log` пишутся в формате JSONL.
+- В отчётах/метаданных чувствительные поля (`password/token/secret/...`) маскируются как `***`.
+
+### История сценариев (versioning)
+
+- `web-runner` сохраняет снапшоты сценариев и runner-параметров в `tests/scenarios/.history/`.
+- API: `GET /api/scenarios/<scenarioId>/history`
+
+## CLI/CI запуск
+
+CLI для CI: `web-runner/cli.py` (exit code 0/1, артефакты в `web-runner/outputs/cli_<timestamp>/`):
+
+```bash
+cd web-runner
+./install.sh
+./cli.py --scenario-id <scenarioId> --headless --start-url "https://example.com"
+```
+
+Data-driven:
+
+```bash
+./cli.py --scenario-id <scenarioId> --headless --start-url "https://example.com" --data-file ../test_data/rows.json --stop-on-first-fail
+```
+
+### Безопасность: token
+
+Можно включить общий token для API (чтобы посторонний сайт не мог запускать тесты):
+
+```bash
+export XPATH_RUNNER_TOKEN="my-secret"
+cd web-runner
+./run.sh
+```
+
+Расширение отправляет `x-runner-token` автоматически (если настроить).
+
+---
+
+## Формат сценария (JSON)
+
+Сценарий — это объект:
+
+- `id` (при сохранении в раннер)
+- `name`, `version`, `exportedAt`
+- `runnerSettings` (опционально, хранит дефолты запуска)
+- `steps[]`
+
+Элемент `steps[]`:
+
+- `step` (номер)
+- `action`
+- `xpath`
+- `title` (опционально)
+- `tags[]` (опционально)
+- `params` (параметры шага, включая `fallbackXPaths[]`)
+
+---
+
+## Траблшутинг
+
+- **Шаги не находятся в раннере, но работают в расширении**: в раннере открой нужную страницу через `Start URL` или добавь шаг `navigate` в сценарий.
+- **Flaky ошибки**: используй fallback селекторы, добавляй `wait_for_element` перед действием, увеличивай `Default timeout`.
+- **Безопасность**: можно включить token через `XPATH_RUNNER_TOKEN` (см. `web-runner/README.md`).
 
 ---
 

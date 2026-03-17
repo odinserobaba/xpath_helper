@@ -40,3 +40,22 @@ uvicorn app:app --reload --port 8000
 ```
 
 Тогда расширение должно отправлять заголовок `x-runner-token: my-secret` (ключ хранится локально в storage расширения).
+
+## CLI/CI запуск (без UI)
+
+Можно запускать сценарий в CI как обычную команду (exit code 0/1). Артефакты пишутся в `web-runner/outputs/cli_<timestamp>/`.
+
+Пример:
+
+```bash
+cd web-runner
+./install.sh
+./cli.py --scenario-id test1_20260317_102859 --headless --start-url "https://example.com"
+echo $?
+```
+
+Data-driven:
+
+```bash
+./cli.py --scenario-id test1_20260317_102859 --headless --start-url "https://example.com" --data-file ../test_data/rows.json --stop-on-first-fail
+```

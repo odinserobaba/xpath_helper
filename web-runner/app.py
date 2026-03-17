@@ -29,6 +29,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 SCENARIOS_DIR = REPO_ROOT / "tests" / "scenarios"
 LOG_DIR = REPO_ROOT / "tests" / "logs"
 RUNNER_TOKEN = os.environ.get("XPATH_RUNNER_TOKEN", "").strip() or None
+SCENARIO_HISTORY_DIR = REPO_ROOT / "tests" / "scenarios" / ".history"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app = FastAPI(title="XPath Helper — Web Runner")
@@ -68,6 +69,27 @@ def _substitute_vars(s: str, variables: Dict[str, Any]) -> str:
         return "" if v is None else str(v)
 
     return re.sub(r"\{\{\s*([^}]+?)\s*\}\}", repl, s)
+
+def _mask_secrets(obj: Any) -> Any:
+    secret_keys = ("password", "passwd", "pwd", "token", "secret", "authorization", "auth")
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            ks = str(k).lower()
+            if any(sk in ks for sk in secret_keys) and v not in (None, "", {} , []):
+                out[k] = "***"
+            else:
+                out[k] = _mask_secrets(v)
+        return out
+    if isinstance(obj, list):
+        return [_mask_secrets(x) for x in obj]
+    return obj
+
+def _merge_vars(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(base or {})
+    for k, v in (overlay or {}).items():
+        out[k] = v
+    return out
 
 
 def _ensure_dir(p: Path) -> None:
@@ -109,6 +131,7 @@ class Step:
     xpath: str
     action: str
     params: Dict[str, Any]
+    fallback_xpaths: List[str]
 
 
 def _parse_scenario(raw: Any) -> Tuple[str, List[Step]]:
@@ -134,7 +157,10 @@ def _parse_scenario(raw: Any) -> Tuple[str, List[Step]]:
         step_no = int(s.get("step") or (i + 1))
         xpath = s.get("xpath") or ""
         params = s.get("params") if isinstance(s.get("params"), dict) else {}
-        steps.append(Step(step=step_no, xpath=str(xpath), action=str(action), params=params))
+        fx = []
+        if isinstance(params, dict) and isinstance(params.get("fallbackXPaths"), list):
+            fx = [str(x) for x in params.get("fallbackXPaths") if str(x).strip()][:8]
+        steps.append(Step(step=step_no, xpath=str(xpath), action=str(action), params=params, fallback_xpaths=fx))
 
     steps.sort(key=lambda x: x.step)
     return name, steps
@@ -159,9 +185,70 @@ def _write_json(path: Path, data: Any) -> None:
 def _scenario_path(scenario_id: str) -> Path:
     return SCENARIOS_DIR / f"{scenario_id}.json"
 
+def _snapshot_scenario(scenario_id: str) -> None:
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        return
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    dst = SCENARIO_HISTORY_DIR / scenario_id / f"{ts}.json"
+    _ensure_dir(dst.parent)
+    dst.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+
 
 def _run_meta_path(run_dir: Path) -> Path:
     return run_dir / "meta.json"
+
+def _write_html_report(run_dir: Path, report: Dict[str, Any]) -> None:
+    shots_dir = run_dir / "screenshots"
+    def link(p: Optional[str]) -> str:
+        if not p:
+            return ""
+        name = p.split("/")[-1]
+        return f'<a href="/runs/{run_dir.name}/screenshots/{name}">{p}</a>'
+
+    rows_html = []
+    for s in report.get("steps", []):
+        status = "OK" if s.get("ok") else "FAIL"
+        rows_html.append(
+            "<tr>"
+            f"<td>{s.get('step')}</td>"
+            f"<td><code>{s.get('action')}</code></td>"
+            f"<td>{status}</td>"
+            f"<td>{s.get('durationMs','')}</td>"
+            f"<td>{(s.get('failReason') or '')}</td>"
+            f"<td>{(s.get('error') or '')}</td>"
+            f"<td>{link(s.get('before'))}</td>"
+            f"<td>{link(s.get('after'))}</td>"
+            f"<td>{link(s.get('screenshot'))}</td>"
+            "</tr>"
+        )
+
+    slow = report.get("summary", {}).get("topSlowSteps", [])
+    slow_html = "".join([f"<li>#{x.get('step')} {x.get('action')} — {x.get('durationMs')}ms</li>" for x in slow])
+    html = f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Run {run_dir.name}</title>
+<style>
+body{{font-family:sans-serif;background:#0f0f1a;color:#eee;padding:20px}}
+a{{color:#00d4aa}}
+table{{border-collapse:collapse;width:100%}}
+th,td{{border:1px solid #2a2a4a;padding:8px;font-size:12px;vertical-align:top}}
+th{{background:#16213e;color:#aaa}}
+code{{color:#00d4aa}}
+</style></head>
+<body>
+<h1>Run: {run_dir.name}</h1>
+<p>Scenario: {report.get('scenario','')}</p>
+<p>OK: {report.get('okCount','')} | FAIL: {report.get('failCount','')} | Total: {report.get('totalMs','')}ms</p>
+<p><a href="/runs/{run_dir.name}/report">report.json</a> · <a href="/runs/{run_dir.name}/log">log.txt</a></p>
+<h2>Top slow steps</h2><ul>{slow_html}</ul>
+<h2>Steps</h2>
+<table>
+<thead><tr><th>#</th><th>Action</th><th>Status</th><th>ms</th><th>Reason</th><th>Error</th><th>Before</th><th>After</th><th>Fail shot</th></tr></thead>
+<tbody>{''.join(rows_html)}</tbody>
+</table>
+</body></html>"""
+    (run_dir / "report.html").write_text(html, encoding="utf-8")
 
 
 def _maybe_write_file_from_base64(run_dir: Path, file_name: str, b64: Optional[str]) -> Optional[Path]:
@@ -243,6 +330,8 @@ def run_scenario(
                 ok = True
                 err = ""
                 shot = None
+                shot_before = None
+                shot_after = None
 
                 # Substitute variables in commonly used fields
                 xpath = _substitute_vars(s.xpath, variables)
@@ -251,6 +340,19 @@ def run_scenario(
                     for k, v in (s.params or {}).items()
                 }
                 step_timeout_ms = int(params.get("timeoutMs") or default_timeout_ms or 5000)
+                wait_state = str(params.get("waitState") or "visible").strip().lower()
+                if wait_state not in {"visible", "attached"}:
+                    wait_state = "visible"
+                require_enabled = bool(params.get("requireEnabled", True))
+                retry_on_flaky = bool(params.get("retryOnFlaky", True))
+                max_attempts = int(params.get("flakyMaxAttempts") or 2)
+                retry_delay_ms = int(params.get("flakyRetryDelayMs") or 250)
+                fallback_xpaths = [
+                    _substitute_vars(x, variables) for x in (s.fallback_xpaths or [])
+                    if isinstance(x, str) and x.strip()
+                ]
+                selector_candidates = [xpath] + fallback_xpaths
+                selector_used = xpath
 
                 _log_line(logs, f"#{s.step} {s.action} xpath={xpath[:120]!r}")
                 _emit_run_event(
@@ -271,36 +373,107 @@ def run_scenario(
                 )
 
                 try:
+                    # Screenshot before step (best-effort)
+                    shot_before = screenshot(f"step_{s.step}_before")
+
+                    def is_flaky_error(e: Exception) -> bool:
+                        msg = str(e)
+                        return any(
+                            k in msg
+                            for k in [
+                                "Execution context was destroyed",
+                                "Target closed",
+                                "Navigation",
+                                "has been closed",
+                                "Element is not attached",
+                                "most likely because of a navigation",
+                            ]
+                        )
+
+                    def ensure_enabled(locator) -> None:
+                        if not require_enabled:
+                            return
+                        # Best-effort: many elements support is_enabled
+                        try:
+                            if not locator.is_enabled():
+                                locator.wait_for(state="visible", timeout=max(0, step_timeout_ms))
+                        except Exception:
+                            return
+
                     if s.action == "navigate":
                         url = params.get("url") or ""
                         url = _substitute_vars(str(url), variables)
                         if not url:
                             raise ValueError("navigate.params.url is required")
                         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "wait":
                         delay_ms = int(params.get("delayMs") or 500)
                         page.wait_for_timeout(max(0, delay_ms))
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "wait_for_element":
                         if not xpath:
                             raise ValueError("wait_for_element requires xpath")
-                        page.locator(f"xpath={xpath}").first.wait_for(state="visible", timeout=max(0, step_timeout_ms))
+                        ok_found = False
+                        for cand in selector_candidates:
+                            if not cand:
+                                continue
+                            try:
+                                page.locator(f"xpath={cand}").first.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                selector_used = cand
+                                ok_found = True
+                                break
+                            except PlaywrightTimeoutError:
+                                continue
+                        if not ok_found:
+                            raise PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for any selector (primary + fallbacks)")
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "click_if_exists":
                         if not xpath:
                             raise ValueError("click_if_exists requires xpath")
-                        loc = page.locator(f"xpath={xpath}").first
-                        if loc.count() > 0:
-                            loc.wait_for(state="visible", timeout=max(0, step_timeout_ms))
-                            loc.click(timeout=max(0, step_timeout_ms))
+                        for cand in selector_candidates:
+                            if not cand:
+                                continue
+                            loc = page.locator(f"xpath={cand}").first
+                            if loc.count() > 0:
+                                selector_used = cand
+                                loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                ensure_enabled(loc)
+                                loc.click(timeout=max(0, step_timeout_ms))
+                                break
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "click":
                         if not xpath:
                             raise ValueError("click requires xpath")
-                        loc = page.locator(f"xpath={xpath}").first
-                        loc.wait_for(state="visible", timeout=max(0, step_timeout_ms))
-                        loc.click(timeout=max(0, step_timeout_ms))
+                        last_click_err = None
+                        clicked = False
+                        attempts = max(1, max_attempts) if retry_on_flaky else 1
+                        for attempt in range(attempts):
+                            for cand in selector_candidates:
+                                if not cand:
+                                    continue
+                                try:
+                                    loc = page.locator(f"xpath={cand}").first
+                                    loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                    ensure_enabled(loc)
+                                    selector_used = cand
+                                    loc.click(timeout=max(0, step_timeout_ms))
+                                    clicked = True
+                                    break
+                                except (PlaywrightTimeoutError, PlaywrightError) as e:
+                                    last_click_err = e
+                                    if retry_on_flaky and attempt < attempts - 1 and is_flaky_error(e):
+                                        page.wait_for_timeout(max(0, retry_delay_ms))
+                                        continue
+                            if clicked:
+                                break
+                        if not clicked:
+                            raise last_click_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for click")
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "input":
                         if not xpath:
@@ -308,9 +481,31 @@ def run_scenario(
                         value = params.get("value")
                         if value is None:
                             value = ""
-                        loc = page.locator(f"xpath={xpath}").first
-                        loc.wait_for(state="visible", timeout=max(0, step_timeout_ms))
-                        loc.fill(str(value), timeout=max(0, step_timeout_ms))
+                        last_fill_err = None
+                        filled = False
+                        attempts = max(1, max_attempts) if retry_on_flaky else 1
+                        for attempt in range(attempts):
+                            for cand in selector_candidates:
+                                if not cand:
+                                    continue
+                                try:
+                                    loc = page.locator(f"xpath={cand}").first
+                                    loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                    ensure_enabled(loc)
+                                    selector_used = cand
+                                    loc.fill(str(value), timeout=max(0, step_timeout_ms))
+                                    filled = True
+                                    break
+                                except (PlaywrightTimeoutError, PlaywrightError) as e:
+                                    last_fill_err = e
+                                    if retry_on_flaky and attempt < attempts - 1 and is_flaky_error(e):
+                                        page.wait_for_timeout(max(0, retry_delay_ms))
+                                        continue
+                            if filled:
+                                break
+                        if not filled:
+                            raise last_fill_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for input")
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "file_upload":
                         if not xpath:
@@ -324,14 +519,29 @@ def run_scenario(
                             _ensure_dir(file_path.parent)
                             if not file_path.exists():
                                 file_path.write_bytes(b"")
-                        loc = page.locator(f"xpath={xpath}").first
-                        loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
-                        loc.set_input_files(str(file_path), timeout=max(0, max(step_timeout_ms, 10_000)))
+                        last_up_err = None
+                        done = False
+                        for cand in selector_candidates:
+                            if not cand:
+                                continue
+                            try:
+                                loc = page.locator(f"xpath={cand}").first
+                                loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
+                                selector_used = cand
+                                loc.set_input_files(str(file_path), timeout=max(0, max(step_timeout_ms, 10_000)))
+                                done = True
+                                break
+                            except (PlaywrightTimeoutError, PlaywrightError) as e:
+                                last_up_err = e
+                        if not done:
+                            raise last_up_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for file_upload")
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "user_action":
                         # In extension this is a manual pause. Here we just log and continue.
                         message = str(params.get("message") or "user_action")
                         _log_line(logs, f"User action (skipped): {message}")
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action in {"assert", "branch"}:
                         cond = str(params.get("condition") or "element_exists")
@@ -421,6 +631,7 @@ def run_scenario(
                                         continue
                                 except Exception:
                                     pass
+                        shot_after = screenshot(f"step_{s.step}_after")
 
                     else:
                         raise ValueError(f"Unsupported action: {s.action}")
@@ -432,7 +643,7 @@ def run_scenario(
                     _log_line(logs, f"✗ FAIL step {s.step}: {err}")
                     _emit_run_event(
                         run_dir,
-                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": False, "error": err, "screenshot": shot},
+                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": False, "error": err, "screenshot": shot, "before": shot_before, "after": shot_after},
                     )
                     _jsonl_append(
                         LOG_DIR / "web-runner.log",
@@ -451,7 +662,7 @@ def run_scenario(
                     _log_line(logs, f"✓ OK step {s.step}")
                     _emit_run_event(
                         run_dir,
-                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": True},
+                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": True, "selectorUsed": selector_used, "before": shot_before, "after": shot_after},
                     )
                     _jsonl_append(
                         LOG_DIR / "web-runner.log",
@@ -474,6 +685,9 @@ def run_scenario(
                         "durationMs": int((time.time() - step_t0) * 1000),
                         "error": err or None,
                         "screenshot": shot,
+                        "before": shot_before,
+                        "after": shot_after,
+                        "selectorUsed": selector_used,
                     }
                 )
 
@@ -492,6 +706,18 @@ def run_scenario(
     ok_count = sum(1 for r in results if r["ok"])
     fail_count = sum(1 for r in results if not r["ok"])
 
+    # Summary: top slow steps and likely failure cause
+    slow = sorted(results, key=lambda r: (r.get("durationMs") or 0), reverse=True)[:5]
+    for r in results:
+        if not r.get("ok"):
+            em = str(r.get("error") or "")
+            if "Timeout" in em:
+                r["failReason"] = "timeout"
+            elif "selector" in em.lower() or "locator" in em.lower():
+                r["failReason"] = "selector"
+            else:
+                r["failReason"] = "error"
+
     _emit_run_event(run_dir, {"ts": time.time(), "event": "run_done", "okCount": ok_count, "failCount": fail_count, "totalMs": total_ms})
     return {
         "scenario": scenario_name,
@@ -500,6 +726,9 @@ def run_scenario(
         "totalMs": total_ms,
         "steps": results,
         "log": logs,
+        "summary": {
+            "topSlowSteps": [{"step": x["step"], "action": x["action"], "durationMs": x.get("durationMs")} for x in slow],
+        },
     }
 
 @app.get("/api/scenarios", response_class=JSONResponse)
@@ -568,10 +797,25 @@ async def api_save_runner_settings(scenario_id: str, request: Request) -> JSONRe
     if not isinstance(data, dict):
         return JSONResponse({"ok": False, "error": "Scenario must be an object"}, status_code=400)
     # Store defaults under runnerSettings
+    _snapshot_scenario(scenario_id)
     data["runnerSettings"] = body
     _write_json(p, data)
     _jsonl_append(LOG_DIR / "web-runner.log", {"ts": time.time(), "level": "info", "event": "runner_settings_saved", "scenarioId": scenario_id})
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/scenarios/{scenario_id}/history", response_class=JSONResponse)
+def api_scenario_history(scenario_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    d = SCENARIO_HISTORY_DIR / scenario_id
+    if not d.exists():
+        return JSONResponse({"ok": True, "history": []})
+    items = []
+    for p in sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        items.append({"file": p.name, "mtime": int(p.stat().st_mtime)})
+    return JSONResponse({"ok": True, "history": items})
 
 
 @app.post("/api/scenarios", response_class=JSONResponse)
@@ -603,6 +847,7 @@ async def api_save_scenario(request: Request) -> JSONResponse:
     if isinstance(raw, dict) and not raw.get("id"):
         raw = {**raw, "id": scenario_id}
     path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    _snapshot_scenario(scenario_id)
 
     _jsonl_append(
         LOG_DIR / "web-runner.log",
@@ -669,6 +914,13 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     start_url = str(body.get("startUrl") or runner_defaults.get("startUrl") or "").strip()
     default_timeout_ms = int(body.get("defaultTimeoutMs") or runner_defaults.get("defaultTimeoutMs") or 15000)
 
+    # Data-driven rows: list[dict]
+    data_rows = body.get("dataRows", None)
+    if data_rows is None:
+        data_rows = runner_defaults.get("dataRows", None)
+    max_rows = int(body.get("maxRows") or runner_defaults.get("maxRows") or 0)
+    stop_on_first_fail = bool(body.get("stopOnFirstFail", runner_defaults.get("stopOnFirstFail", True)))
+
     run_id = uuid.uuid4().hex[:12]
     run_dir = OUTPUTS_DIR / run_id
     _ensure_dir(run_dir)
@@ -691,6 +943,9 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                 "viewport": viewport,
                 "defaultTimeoutMs": default_timeout_ms,
                 "variables": extra_vars if isinstance(extra_vars, dict) else {},
+                "dataRowsCount": len(data_rows) if isinstance(data_rows, list) else 0,
+                "maxRows": max_rows,
+                "stopOnFirstFail": stop_on_first_fail,
             },
         },
     )
@@ -713,20 +968,66 @@ async def api_run_scenario(request: Request) -> JSONResponse:
 
     async def _job():
         try:
-            report = await anyio.to_thread.run_sync(
-                partial(
-                    run_scenario,
-                    scenario_name,
-                    steps,
-                    variables=variables,
-                    start_url=start_url,
-                    default_timeout_ms=default_timeout_ms,
-                    headless=headless,
-                    slow_mo_ms=slow_mo_ms,
-                    viewport=viewport,
-                    run_dir=run_dir,
+            if isinstance(data_rows, list) and data_rows:
+                rows = [r for r in data_rows if isinstance(r, dict)]
+                if max_rows and max_rows > 0:
+                    rows = rows[:max_rows]
+                _emit_run_event(run_dir, {"ts": time.time(), "event": "dd_start", "rows": len(rows)})
+                row_reports = []
+                total_ok = 0
+                total_fail = 0
+                dd_t0 = time.time()
+                for i, row in enumerate(rows):
+                    if stop_on_first_fail and total_fail > 0:
+                        break
+                    row_vars = _merge_vars(variables, row)
+                    _emit_run_event(run_dir, {"ts": time.time(), "event": "dd_row_start", "rowIndex": i})
+                    rep = await anyio.to_thread.run_sync(
+                        partial(
+                            run_scenario,
+                            scenario_name,
+                            steps,
+                            variables=row_vars,
+                            start_url=start_url,
+                            default_timeout_ms=default_timeout_ms,
+                            headless=headless,
+                            slow_mo_ms=slow_mo_ms,
+                            viewport=viewport,
+                            run_dir=run_dir / "rows" / f"row_{i+1}",
+                        )
+                    )
+                    row_reports.append({"rowIndex": i, "okCount": rep.get("okCount"), "failCount": rep.get("failCount"), "totalMs": rep.get("totalMs")})
+                    if rep.get("failCount", 0) > 0:
+                        total_fail += 1
+                    else:
+                        total_ok += 1
+                    _emit_run_event(run_dir, {"ts": time.time(), "event": "dd_row_done", "rowIndex": i, "ok": rep.get("failCount", 0) == 0})
+                total_ms = int((time.time() - dd_t0) * 1000)
+                report = {
+                    "scenario": scenario_name,
+                    "dataDriven": True,
+                    "rowsTotal": len(rows),
+                    "rowsOk": total_ok,
+                    "rowsFail": total_fail,
+                    "totalMs": total_ms,
+                    "rowReports": row_reports,
+                    "settings": _mask_secrets({"variables": variables}),
+                }
+            else:
+                report = await anyio.to_thread.run_sync(
+                    partial(
+                        run_scenario,
+                        scenario_name,
+                        steps,
+                        variables=variables,
+                        start_url=start_url,
+                        default_timeout_ms=default_timeout_ms,
+                        headless=headless,
+                        slow_mo_ms=slow_mo_ms,
+                        viewport=viewport,
+                        run_dir=run_dir,
+                    )
                 )
-            )
         except Exception as e:
             report = {
                 "scenario": scenario_name,
@@ -741,6 +1042,8 @@ async def api_run_scenario(request: Request) -> JSONResponse:
 
         (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         (run_dir / "log.txt").write_text("\n".join(report.get("log", [])), encoding="utf-8")
+        if isinstance(report, dict) and report.get("steps"):
+            _write_html_report(run_dir, report)
 
         _jsonl_append(
             LOG_DIR / "web-runner.log",

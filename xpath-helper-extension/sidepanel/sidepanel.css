@@ -235,6 +235,16 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .flow-card .flow-card-badge.user_action { background: rgba(243, 156, 18, 0.3); color: var(--warning); }
 .execution-item-badge.user_action { background: rgba(243, 156, 18, 0.3); color: var(--warning); }
 
+/* Selector fallbacks preview */
+.selector-block { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.selector-row { display: flex; gap: 6px; align-items: center; }
+.selector-label { font-size: 11px; color: var(--text2); min-width: 58px; }
+.selector-xpath { font-family: monospace; font-size: 11px; color: var(--text2); word-break: break-all; flex: 1; min-width: 0; }
+.selector-count { font-size: 10px; padding: 2px 6px; border-radius: 6px; border: 1px solid #2a2a4a; color: var(--text2); min-width: 44px; text-align: center; }
+.selector-count.ok { border-color: rgba(46,204,113,0.35); color: var(--success); }
+.selector-count.warn { border-color: rgba(243,156,18,0.35); color: var(--warning); }
+.selector-count.err { border-color: rgba(231,76,60,0.35); color: var(--error); }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }

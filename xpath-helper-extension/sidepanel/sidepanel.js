@@ -178,6 +178,7 @@ const stepFileLabel = $('stepFileLabel');
 const stepFileInput = $('stepFileInput');
 const stepModalCancel = $('stepModalCancel');
 const stepModalSave = $('stepModalSave');
+const stepModalSaveAddAssert = $('stepModalSaveAddAssert');
 const exportJsonBtn = $('exportJsonBtn');
 const exportTemplatesBtn = $('exportTemplatesBtn');
 const exportPythonPlaywrightBtn = $('exportPythonPlaywrightBtn');
@@ -276,6 +277,43 @@ function suggestStepTitle(el) {
     const value = (getAttr('value') || '').trim();
     const text = (el.text || '').trim();
     return aria || placeholder || title || text || value || (el.id ? `#${el.id}` : '') || (el.tagName ? `<${el.tagName}>` : '');
+}
+
+function suggestFallbackXPaths(el) {
+    if (!el) return [];
+    const attrs = Array.isArray(el.attributes) ? el.attributes : [];
+    const getAttr = (name) => attrs.find((a) => String(a.name).toLowerCase() === name)?.value || '';
+    const candidates = [];
+    const testId = (getAttr('data-testid') || getAttr('data-test-id') || getAttr('data-test') || '').trim();
+    const aria = (getAttr('aria-label') || '').trim();
+    const placeholder = (getAttr('placeholder') || '').trim();
+    const name = (getAttr('name') || '').trim();
+    const role = (getAttr('role') || '').trim();
+    const text = (el.text || '').trim();
+    const tag = (el.tagName || '').toLowerCase();
+
+    const esc1 = (s) => String(s).replace(/'/g, "\\'");
+
+    if (testId) candidates.push(`//*[@data-testid='${esc1(testId)}']`);
+    if (aria) candidates.push(`//*[@aria-label='${esc1(aria)}']`);
+    if (placeholder) candidates.push(`//*[@placeholder='${esc1(placeholder)}']`);
+    if (name) candidates.push(`//*[@name='${esc1(name)}']`);
+    if (role && aria) candidates.push(`//*[@role='${esc1(role)}' and @aria-label='${esc1(aria)}']`);
+    if (tag && aria) candidates.push(`//${tag}[@aria-label='${esc1(aria)}']`);
+    if (tag && placeholder) candidates.push(`//${tag}[@placeholder='${esc1(placeholder)}']`);
+    if (text && text.length <= 40) candidates.push(`//*[normalize-space()='${esc1(text)}']`);
+    if (tag && text && text.length <= 40) candidates.push(`//${tag}[normalize-space()='${esc1(text)}']`);
+
+    // Dedup + cap
+    const seen = new Set();
+    const out = [];
+    for (const x of candidates) {
+        if (!x || seen.has(x)) continue;
+        seen.add(x);
+        out.push(x);
+        if (out.length >= 6) break;
+    }
+    return out;
 }
 
 function replaceVariables(str, vars) {
@@ -1380,6 +1418,22 @@ function renderExecutionList() {
             const tagsLine = Array.isArray(step.tags) && step.tags.length
                 ? `<div class="execution-item-params">🏷 ${step.tags.map((t) => `<span class="execution-item-badge wait">${escapeHtml(String(t))}</span>`).join(' ')}</div>`
                 : '';
+            const fallbackXPaths = Array.isArray(step.params?.fallbackXPaths) ? step.params.fallbackXPaths : [];
+            const showSelectors = step.action !== 'navigate' && step.action !== 'user_action' && step.action !== 'separator' && (step.xpath || fallbackXPaths.length);
+            const selectorBlock = showSelectors ? (() => {
+                const rows = [];
+                const primary = (step.xpath || '').trim();
+                const mk = (label, xp, kind, idx) => `
+                    <div class="selector-row">
+                        <span class="selector-label">${escapeHtml(label)}</span>
+                        <span class="selector-xpath" title="${escapeHtml(xp)}">${escapeHtml(truncate(xp, 80))}</span>
+                        <span class="selector-count" data-count-for="${escapeHtml(step.id)}:${escapeHtml(kind)}:${idx}">—</span>
+                        <button type="button" class="btn-icon btn-validate-xpath" title="Проверить (count)" data-step-id="${escapeHtml(step.id)}" data-kind="${escapeHtml(kind)}" data-idx="${idx}" data-xpath="${escapeHtml(xp)}">✓?</button>
+                    </div>`;
+                if (primary) rows.push(mk('Primary', primary, 'primary', 0));
+                fallbackXPaths.slice(0, 3).forEach((xp, i) => { if (xp) rows.push(mk('Fallback', String(xp), 'fallback', i)); });
+                return rows.length ? `<div class="selector-block">${rows.join('')}</div>` : '';
+            })() : '';
             li.innerHTML = `
                 <div class="execution-item-header">
                     ${!searchQ ? `<span class="execution-item-drag" title="Перетащить" aria-label="Перетащить">⋮⋮</span>` : ''}
@@ -1390,6 +1444,7 @@ function renderExecutionList() {
                 </div>
                 ${paramsText ? `<div class="execution-item-params">${paramsText}</div>` : ''}
                 ${tagsLine}
+                ${selectorBlock}
                 <div class="execution-item-actions">
                     <button type="button" class="btn-icon btn-run-step" data-id="${escapeHtml(step.id)}" title="Выполнить шаг" aria-label="Выполнить шаг">▶</button>
                     <button type="button" class="btn-icon btn-run-from-step" data-id="${escapeHtml(step.id)}" title="Выполнить с этого шага" aria-label="Выполнить с этого шага">▶▶</button>
@@ -1743,7 +1798,7 @@ stepFileInput.addEventListener('change', () => {
 });
 
 stepModalCancel.addEventListener('click', hideStepModal);
-stepModalSave.addEventListener('click', () => {
+function upsertStepFromModal({ alsoAddAssert = false } = {}) {
     const action = stepAction.value;
     const navUrl = (stepNavigateUrl?.value || '').trim();
     let xpath = action === 'separator' || action === 'user_action' ? '—' : (action === 'navigate' ? navUrl : stepXpath.value.trim());
@@ -1793,23 +1848,84 @@ stepModalSave.addEventListener('click', () => {
     params.waitForLoad = !!stepWaitForLoad?.checked;
     const titleVal = (stepTitle?.value || '').trim();
     const tagsVal = parseTags(stepTags?.value || '');
+    // Attach fallback selectors (do not override main xpath).
+    const fallbackXPaths = Array.isArray(params.fallbackXPaths) ? params.fallbackXPaths : [];
+    const autoFallbacks = (!editingStepId && (action === 'click' || action === 'click_if_exists' || action === 'input' || action === 'file_upload' || action === 'wait_for_element' || action === 'assert' || action === 'branch'))
+        ? suggestFallbackXPaths(lastHoveredElement)
+        : [];
+    const mergedFallbacks = [...fallbackXPaths, ...autoFallbacks].filter(Boolean).slice(0, 8);
+    if (mergedFallbacks.length) params.fallbackXPaths = mergedFallbacks;
+    let savedIdx = -1;
     if (editingStepId) {
         const idx = executionList.findIndex((s) => s.id === editingStepId);
         if (idx !== -1) {
             executionList[idx] = { ...executionList[idx], xpath, action, params, title: titleVal, tags: tagsVal };
+            savedIdx = idx;
         }
     } else {
         const newStep = { id: 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2), xpath, action, params, title: titleVal, tags: tagsVal };
         if (insertStepAtIndex != null && insertStepAtIndex >= 0 && insertStepAtIndex <= executionList.length) {
             executionList.splice(insertStepAtIndex, 0, newStep);
+            savedIdx = insertStepAtIndex;
         } else {
             executionList.push(newStep);
+            savedIdx = executionList.length - 1;
         }
     }
+
+    if (alsoAddAssert) {
+        const baseIdx = savedIdx >= 0 ? savedIdx : (executionList.length - 1);
+        const baseStep = executionList[baseIdx];
+        if (baseStep) {
+            let assertCondition = 'element_exists';
+            let assertExpected = '';
+            let assertXpath = baseStep.xpath;
+            let insertOffset = 0; // 0 => before baseStep, 1 => after baseStep
+            if (baseStep.action === 'navigate') {
+                assertCondition = 'url_contains';
+                const u = (baseStep.params?.url || '').trim();
+                try {
+                    const urlObj = new URL(u);
+                    assertExpected = urlObj.pathname && urlObj.pathname !== '/' ? urlObj.pathname : urlObj.hostname;
+                } catch (_) {
+                    // fallback: strip protocol and query
+                    assertExpected = u.replace(/^https?:\/\//, '').split('?')[0].split('#')[0].slice(0, 60);
+                }
+                assertXpath = '—';
+                // For navigate, post-condition is more useful than pre-condition.
+                insertOffset = 1;
+            } else {
+                // Pre-condition: ensure element exists before action.
+                assertCondition = 'element_exists';
+                assertExpected = '';
+                assertXpath = baseStep.xpath;
+            }
+            const assertStep = {
+                id: 'step-' + Date.now() + '-assert-' + Math.random().toString(36).slice(2),
+                xpath: assertXpath,
+                action: 'assert',
+                title: baseStep.action === 'navigate' ? 'Проверить URL (после)' : 'Проверить элемент (до)',
+                tags: ['assert'],
+                params: {
+                    condition: assertCondition,
+                    expectedValue: assertExpected,
+                    // wait mode makes assertion stable after navigation/click
+                    waitMode: true,
+                    timeoutMs: Math.max(0, parseInt(stepTimeoutMs?.value, 10) || 5000),
+                    softAssert: false,
+                }
+            };
+            executionList.splice(baseIdx + insertOffset, 0, assertStep);
+        }
+    }
+
     saveExecutionList();
     hideStepModal();
     renderExecutionList();
-});
+}
+
+stepModalSave.addEventListener('click', () => upsertStepFromModal({ alsoAddAssert: false }));
+if (stepModalSaveAddAssert) stepModalSaveAddAssert.addEventListener('click', () => upsertStepFromModal({ alsoAddAssert: true }));
 
 addStepBtn.addEventListener('click', () => {
     const xpath = (currentResult?.primary?.xpath || (primaryXpathEl && primaryXpathEl.textContent) || '').trim();
@@ -1826,6 +1942,47 @@ addStepManualBtn.addEventListener('click', () => {
 });
 
 document.addEventListener('click', (e) => {
+    const validateBtn = e.target.closest('.btn-validate-xpath');
+    if (validateBtn) {
+        const stepId = validateBtn.dataset.stepId;
+        const xpathRaw = validateBtn.dataset.xpath || '';
+        const kind = validateBtn.dataset.kind || 'primary';
+        const idx = validateBtn.dataset.idx || '0';
+        const step = executionList.find((s) => s.id === stepId);
+        if (!step) return;
+        const xpath = replaceVariables(String(xpathRaw), getCurrentVariables());
+        const countEl = document.querySelector(`[data-count-for="${CSS.escape(stepId)}:${CSS.escape(kind)}:${CSS.escape(idx)}"]`);
+        if (countEl) { countEl.textContent = '...'; countEl.className = 'selector-count'; }
+        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+            if (!tab?.id) return;
+            try {
+                chrome.tabs.sendMessage(tab.id, { action: 'validateXpath', xpath }, (resp) => {
+                    const err = chrome.runtime.lastError;
+                    if (err) {
+                        if (countEl) { countEl.textContent = 'err'; countEl.classList.add('err'); }
+                        appendExecutionLog(`validateXpath error: ${err.message || err}`);
+                        return;
+                    }
+                    const ok = resp?.ok;
+                    const c = resp?.count;
+                    if (!countEl) return;
+                    if (!ok) {
+                        countEl.textContent = 'err';
+                        countEl.classList.add('err');
+                        return;
+                    }
+                    countEl.textContent = String(c);
+                    if (c === 1) countEl.classList.add('ok');
+                    else if (c > 1) countEl.classList.add('warn');
+                    else countEl.classList.add('err');
+                });
+            } catch (ex) {
+                if (countEl) { countEl.textContent = 'err'; countEl.classList.add('err'); }
+            }
+        });
+        return;
+    }
+
     const editBtn = e.target.closest('.btn-edit-step');
     if (editBtn) {
         const step = executionList.find((s) => s.id === editBtn.dataset.id);

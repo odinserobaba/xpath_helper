@@ -118,6 +118,27 @@
           <label style="margin-top:14px;">Variables JSON (опционально)</label>
           <textarea id="varsInput" placeholder='{"login":"alice","password":"secret"}'></textarea>
 
+          <div class="row" style="margin-top: 12px;">
+            <div class="col">
+              <label>Data-driven (JSON массив строк)</label>
+              <textarea id="dataRowsInput" placeholder='[{"login":"alice","password":"secret"},{"login":"bob","password":"pass"}]'></textarea>
+              <div class="hint">Если заполнено — сценарий будет выполнен для каждой строки данных (переменные строки перекрывают Variables JSON).</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col">
+              <label>Max rows</label>
+              <input id="maxRowsInput" type="number" min="0" max="100000" value="0" />
+              <div class="hint">0 = все строки.</div>
+            </div>
+            <div class="col">
+              <label class="check">
+                <input id="stopOnFirstFailInput" type="checkbox" checked />
+                Остановить на первой ошибке строки
+              </label>
+            </div>
+          </div>
+
           <div class="hr"></div>
           <div class="btnRow">
             <button id="runBtn" class="btn" type="button" disabled>▶ Run</button>
@@ -164,6 +185,9 @@
       headless: document.getElementById('headlessInput'),
       defaultTimeout: document.getElementById('defaultTimeoutInput'),
       vars: document.getElementById('varsInput'),
+      dataRows: document.getElementById('dataRowsInput'),
+      maxRows: document.getElementById('maxRowsInput'),
+      stopOnFirstFail: document.getElementById('stopOnFirstFailInput'),
       summary: document.getElementById('runSummary'),
       toast: document.getElementById('toast'),
     };
@@ -293,6 +317,9 @@
         if (d.headless != null) els.headless.checked = !!d.headless;
         if (d.defaultTimeoutMs != null) els.defaultTimeout.value = d.defaultTimeoutMs || 15000;
         if (d.variables != null) els.vars.value = JSON.stringify(d.variables || {}, null, 2);
+        if (d.dataRows != null) els.dataRows.value = JSON.stringify(d.dataRows || [], null, 2);
+        if (d.maxRows != null) els.maxRows.value = d.maxRows || 0;
+        if (d.stopOnFirstFail != null) els.stopOnFirstFail.checked = !!d.stopOnFirstFail;
       } catch (_) {}
     }
 
@@ -302,6 +329,9 @@
         let vars = {};
         const raw = (els.vars.value || '').trim();
         if (raw) vars = JSON.parse(raw);
+        let dataRows = null;
+        const dr = (els.dataRows.value || '').trim();
+        if (dr) dataRows = JSON.parse(dr);
         const body = {
           startUrl: (els.startUrl.value || '').trim(),
           baseUrl: (els.baseUrl.value || '').trim(),
@@ -310,6 +340,9 @@
           headless: !!els.headless.checked,
           defaultTimeoutMs: parseInt(els.defaultTimeout.value || '15000', 10) || 15000,
           variables: vars,
+          dataRows,
+          maxRows: parseInt(els.maxRows.value || '0', 10) || 0,
+          stopOnFirstFail: !!els.stopOnFirstFail.checked,
         };
         const r = await fetch(`/api/scenarios/${selectedId}/runner-settings`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         const j = await r.json();
@@ -348,11 +381,17 @@
         let vars = {};
         const raw = (els.vars.value || '').trim();
         if (raw) vars = JSON.parse(raw);
+        let dataRows = null;
+        const dr = (els.dataRows.value || '').trim();
+        if (dr) dataRows = JSON.parse(dr);
         const body = {
           scenarioId: selectedId,
           startUrl: (els.startUrl.value || '').trim(),
           baseUrl: (els.baseUrl.value || '').trim(),
           variables: vars,
+          dataRows,
+          maxRows: parseInt(els.maxRows.value || '0', 10) || 0,
+          stopOnFirstFail: !!els.stopOnFirstFail.checked,
           headless: !!els.headless.checked,
           slowMoMs: parseInt(els.slowMo.value || '0', 10) || 0,
           viewport: (els.viewport.value || '1280x720').trim() || '1280x720',
