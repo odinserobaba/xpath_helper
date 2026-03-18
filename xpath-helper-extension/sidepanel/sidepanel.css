@@ -183,6 +183,12 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
     border-radius: 8px 0 0 8px;
     background: var(--step-color, transparent);
 }
+
+/* Mini view: compact list */
+.mini-view .selector-block,
+.mini-view .execution-item-params { display: none !important; }
+.mini-view .execution-item { padding: 8px 8px; }
+.mini-view .execution-item-actions .btn-icon { width: 24px; height: 24px; }
 .list-setting { margin-top: 8px; }
 .execution-item-drag { cursor: grab; color: var(--text2); font-size: 14px; padding: 0 4px; user-select: none; }
 .execution-item-drag:active { cursor: grabbing; }

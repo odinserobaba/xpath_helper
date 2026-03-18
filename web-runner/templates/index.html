@@ -109,6 +109,38 @@
 
           <div class="row">
             <div class="col">
+              <label class="check">
+                <input id="attachCdpInput" type="checkbox" />
+                Attach к уже открытому Chromium (CDP)
+              </label>
+              <div class="hint">Нужно запустить Chromium-Gost с <code>--remote-debugging-port=9222</code>. Тогда раннер подключится к тому же профилю/окну.</div>
+            </div>
+            <div class="col">
+              <label>CDP endpoint / port</label>
+              <input id="cdpEndpointInput" type="text" placeholder="9222 или http://127.0.0.1:9222" value="9222" />
+              <div class="hint">Если включён Attach — headless/slowMo могут не применяться.</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label class="check">
+                <input id="bringToFrontInput" type="checkbox" checked />
+                Bring to front (показать вкладку)
+              </label>
+              <div class="hint">В CDP режиме поможет “увидеть” что раннер делает (переключит активную вкладку).</div>
+            </div>
+            <div class="col">
+              <label class="check">
+                <input id="highlightStepsInput" type="checkbox" checked />
+                Подсвечивать элемент перед действием
+              </label>
+              <div class="hint">Рисует outline на элементе перед click/input/set_date.</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
               <label>Default timeout (ms)</label>
               <input id="defaultTimeoutInput" type="number" min="0" max="120000" value="15000" />
               <div class="hint">Используется для click/input/wait_for_element если у шага нет <code>params.timeoutMs</code>.</div>
@@ -183,6 +215,10 @@
       viewport: document.getElementById('viewportInput'),
       slowMo: document.getElementById('slowMoInput'),
       headless: document.getElementById('headlessInput'),
+      attachCdp: document.getElementById('attachCdpInput'),
+      cdpEndpoint: document.getElementById('cdpEndpointInput'),
+      bringToFront: document.getElementById('bringToFrontInput'),
+      highlightSteps: document.getElementById('highlightStepsInput'),
       defaultTimeout: document.getElementById('defaultTimeoutInput'),
       vars: document.getElementById('varsInput'),
       dataRows: document.getElementById('dataRowsInput'),
@@ -316,6 +352,10 @@
         if (d.slowMoMs != null) els.slowMo.value = d.slowMoMs || 0;
         if (d.headless != null) els.headless.checked = !!d.headless;
         if (d.defaultTimeoutMs != null) els.defaultTimeout.value = d.defaultTimeoutMs || 15000;
+        if (d.connectOverCdp != null) els.attachCdp.checked = !!d.connectOverCdp;
+        if (d.cdpEndpoint != null) els.cdpEndpoint.value = d.cdpEndpoint || '9222';
+        if (d.bringToFront != null) els.bringToFront.checked = !!d.bringToFront;
+        if (d.highlightSteps != null) els.highlightSteps.checked = !!d.highlightSteps;
         if (d.variables != null) els.vars.value = JSON.stringify(d.variables || {}, null, 2);
         if (d.dataRows != null) els.dataRows.value = JSON.stringify(d.dataRows || [], null, 2);
         if (d.maxRows != null) els.maxRows.value = d.maxRows || 0;
@@ -339,6 +379,10 @@
           slowMoMs: parseInt(els.slowMo.value || '0', 10) || 0,
           headless: !!els.headless.checked,
           defaultTimeoutMs: parseInt(els.defaultTimeout.value || '15000', 10) || 15000,
+          connectOverCdp: !!els.attachCdp.checked,
+          cdpEndpoint: (els.cdpEndpoint.value || '').trim(),
+          bringToFront: !!els.bringToFront.checked,
+          highlightSteps: !!els.highlightSteps.checked,
           variables: vars,
           dataRows,
           maxRows: parseInt(els.maxRows.value || '0', 10) || 0,
@@ -396,6 +440,10 @@
           slowMoMs: parseInt(els.slowMo.value || '0', 10) || 0,
           viewport: (els.viewport.value || '1280x720').trim() || '1280x720',
           defaultTimeoutMs: parseInt(els.defaultTimeout.value || '15000', 10) || 15000,
+          connectOverCdp: !!els.attachCdp.checked,
+          cdpEndpoint: (els.cdpEndpoint.value || '').trim(),
+          bringToFront: !!els.bringToFront.checked,
+          highlightSteps: !!els.highlightSteps.checked,
         };
         const r = await fetch('/api/runs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         const j = await r.json();

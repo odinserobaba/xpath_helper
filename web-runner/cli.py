@@ -44,6 +44,10 @@ def main() -> int:
     ap.add_argument("--slowmo-ms", type=int, default=0, help="SlowMo in ms")
     ap.add_argument("--viewport", default="1280x720", help="Viewport WxH")
     ap.add_argument("--default-timeout-ms", type=int, default=15000, help="Default step timeout")
+    ap.add_argument("--attach-cdp", action="store_true", help="Attach to existing Chromium via CDP (same profile/window)")
+    ap.add_argument("--cdp-endpoint", default="", help="CDP endpoint like http://127.0.0.1:9222 or port like 9222")
+    ap.add_argument("--bring-to-front", action="store_true", help="Bring page to front during steps (CDP-friendly)")
+    ap.add_argument("--no-highlight", action="store_true", help="Disable highlight before actions")
     ap.add_argument("--outputs-dir", default="", help="Override outputs dir (default web-runner/outputs)")
     args = ap.parse_args()
 
@@ -128,6 +132,10 @@ def main() -> int:
                         headless=bool(args.headless),
                         slow_mo_ms=args.slowmo_ms,
                         viewport=args.viewport,
+                        connect_over_cdp=bool(args.attach_cdp),
+                        cdp_endpoint=str(args.cdp_endpoint or ""),
+                        bring_to_front=bool(args.bring_to_front),
+                        highlight_steps=not bool(args.no_highlight),
                         run_dir=run_dir / "rows" / f"row_{i+1}",
                     )
                 )
@@ -155,6 +163,10 @@ def main() -> int:
                 headless=bool(args.headless),
                 slow_mo_ms=args.slowmo_ms,
                 viewport=args.viewport,
+                connect_over_cdp=bool(args.attach_cdp),
+                cdp_endpoint=str(args.cdp_endpoint or ""),
+                bring_to_front=bool(args.bring_to_front),
+                highlight_steps=not bool(args.no_highlight),
                 run_dir=run_dir,
             )
         )

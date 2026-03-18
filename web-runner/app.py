@@ -281,6 +281,11 @@ def run_scenario(
     headless: bool,
     slow_mo_ms: int,
     viewport: str,
+    connect_over_cdp: bool = False,
+    cdp_endpoint: str = "",
+    bring_to_front: bool = True,
+    highlight_steps: bool = True,
+    highlight_ms: int = 600,
     run_dir: Path,
 ) -> Dict[str, Any]:
     logs: List[str] = []
@@ -304,9 +309,36 @@ def run_scenario(
         {"ts": time.time(), "level": "info", "event": "playwright_launch", "runId": run_dir.name, "scenario": scenario_name},
     )
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
-        context = browser.new_context(viewport={"width": width, "height": height})
-        page = context.new_page()
+        if connect_over_cdp:
+            endpoint = (cdp_endpoint or "").strip()
+            if endpoint.isdigit():
+                endpoint = f"http://127.0.0.1:{endpoint}"
+            if endpoint and "://" not in endpoint:
+                endpoint = "http://" + endpoint
+            if not endpoint:
+                endpoint = "http://127.0.0.1:9222"
+            _log_line(logs, f"CDP attach: {endpoint}")
+            _emit_run_event(run_dir, {"ts": time.time(), "event": "cdp_attach", "endpoint": endpoint})
+            browser = p.chromium.connect_over_cdp(endpoint)
+            # Use existing context/profile when possible
+            context = browser.contexts[0] if browser.contexts else browser.new_context(viewport={"width": width, "height": height})
+            page = context.new_page()
+        else:
+            browser = p.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
+            context = browser.new_context(viewport={"width": width, "height": height})
+            page = context.new_page()
+        tracing_enabled = False
+
+        def maybe_start_tracing(params: Dict[str, Any]) -> None:
+            nonlocal tracing_enabled
+            if tracing_enabled:
+                return
+            try:
+                if bool(params.get("trace", False)) or bool(params.get("tracing", False)):
+                    context.tracing.start(screenshots=True, snapshots=True, sources=True)
+                    tracing_enabled = True
+            except Exception:
+                tracing_enabled = False
 
         def screenshot(name: str) -> Optional[str]:
             try:
@@ -318,11 +350,163 @@ def run_scenario(
             except Exception:
                 return None
 
+        def element_screenshot(locator, name: str) -> Optional[str]:
+            try:
+                shots = run_dir / "screenshots"
+                _ensure_dir(shots)
+                path = shots / f"{name}.png"
+                locator.screenshot(path=str(path))
+                return str(path.relative_to(run_dir))
+            except Exception:
+                return None
+
+        def maybe_bring_to_front() -> None:
+            if not bring_to_front:
+                return
+            try:
+                page.bring_to_front()
+            except Exception:
+                return
+
+        def highlight_locator(locator) -> None:
+            if not highlight_steps:
+                return
+            ms = int(highlight_ms or 0)
+            if ms <= 0:
+                return
+            try:
+                locator.evaluate(
+                    """(el, ms) => {
+                      try {
+                        const prevOutline = el.style.outline;
+                        const prevShadow = el.style.boxShadow;
+                        el.style.outline = '3px solid #00d4aa';
+                        el.style.boxShadow = '0 0 18px rgba(0,212,170,0.35)';
+                        setTimeout(() => { el.style.outline = prevOutline; el.style.boxShadow = prevShadow; }, Math.max(0, ms|0));
+                      } catch (e) {}
+                    }""",
+                    ms,
+                )
+            except Exception:
+                return
+
+        def first_visible(locator):
+            """Pick first visible element from a locator list (best-effort)."""
+            try:
+                idx = locator.evaluate_all(
+                    """(els) => {
+                      for (let i = 0; i < els.length; i++) {
+                        const el = els[i];
+                        if (!el) continue;
+                        const cs = window.getComputedStyle(el);
+                        if (!cs) continue;
+                        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+                        const r = el.getBoundingClientRect();
+                        if (r.width <= 0 || r.height <= 0) continue;
+                        return i;
+                      }
+                      return -1;
+                    }"""
+                )
+                if isinstance(idx, int) and idx >= 0:
+                    return locator.nth(idx)
+            except Exception:
+                pass
+            return locator.first
+
+        def js_click_first_visible_by_xpath(xp: str) -> bool:
+            """Click first visible element matched by XPath inside the page."""
+            try:
+                return bool(
+                    page.evaluate(
+                        """(xpath) => {
+                          try {
+                            const snap = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                            const isVisible = (el) => {
+                              if (!el) return false;
+                              const cs = window.getComputedStyle(el);
+                              if (!cs) return false;
+                              if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
+                              const r = el.getBoundingClientRect();
+                              return r.width > 0 && r.height > 0;
+                            };
+                            for (let i = 0; i < snap.snapshotLength; i++) {
+                              const el = snap.snapshotItem(i);
+                              if (!isVisible(el)) continue;
+                              try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) {}
+                              try { el.click(); return true; } catch (e) {}
+                            }
+                            return false;
+                          } catch (e) {
+                            return false;
+                          }
+                        }""",
+                        xp,
+                    )
+                )
+            except Exception:
+                return False
+
+        def try_open_listbox_hint() -> None:
+            """Best-effort: open combobox/listbox via keyboard to make options visible."""
+            try:
+                # 1) focus an existing combobox if present
+                try:
+                    cb = page.locator("input[role='combobox'][aria-expanded='false'], input[role='combobox']:not([aria-expanded]), input[role='combobox']").first
+                    if cb.count() > 0:
+                        try:
+                            cb.scroll_into_view_if_needed(timeout=1500)
+                        except Exception:
+                            pass
+                        try:
+                            cb.click(timeout=1500, force=True)
+                        except Exception:
+                            try:
+                                cb.focus()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                # 2) try keyboard open patterns
+                page.keyboard.press("ArrowDown")
+                page.wait_for_timeout(180)
+                page.keyboard.press("ArrowDown")
+                page.wait_for_timeout(180)
+            except Exception:
+                return
+
+        def element_visibility_summary_by_xpath(xp: str) -> Dict[str, Any]:
+            """Return counts for total/visible matches for debugging/heuristics."""
+            try:
+                return page.evaluate(
+                    """(xpath) => {
+                      try {
+                        const snap = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                        let visible = 0;
+                        for (let i = 0; i < snap.snapshotLength; i++) {
+                          const el = snap.snapshotItem(i);
+                          if (!el) continue;
+                          const cs = window.getComputedStyle(el);
+                          if (!cs) continue;
+                          if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+                          const r = el.getBoundingClientRect();
+                          if (r.width <= 0 || r.height <= 0) continue;
+                          visible++;
+                        }
+                        return { total: snap.snapshotLength, visible };
+                      } catch (e) { return { total: 0, visible: 0, error: String(e) }; }
+                    }""",
+                    xp,
+                )
+            except Exception as e:
+                return {"total": 0, "visible": 0, "error": str(e)}
+
         try:
             if start_url:
                 _log_line(logs, f"Start URL: {start_url}")
                 page.goto(start_url, wait_until="domcontentloaded", timeout=30_000)
                 _emit_run_event(run_dir, {"ts": time.time(), "event": "navigated", "url": start_url})
+                maybe_bring_to_front()
 
             idx = 0
             while idx < len(steps):
@@ -333,6 +517,8 @@ def run_scenario(
                 shot = None
                 shot_before = None
                 shot_after = None
+                el_before = None
+                el_after = None
 
                 # Substitute variables in commonly used fields
                 xpath = _substitute_vars(s.xpath, variables)
@@ -340,11 +526,17 @@ def run_scenario(
                     k: (_substitute_vars(v, variables) if isinstance(v, str) else v)
                     for k, v in (s.params or {}).items()
                 }
+                maybe_start_tracing(params)
                 step_timeout_ms = int(params.get("timeoutMs") or default_timeout_ms or 5000)
                 wait_state = str(params.get("waitState") or "visible").strip().lower()
                 if wait_state not in {"visible", "attached"}:
                     wait_state = "visible"
                 require_enabled = bool(params.get("requireEnabled", True))
+                # Click robustness knobs
+                click_force = bool(params.get("clickForce", False))
+                click_trial = bool(params.get("clickTrial", True))
+                click_js_fallback = bool(params.get("clickJsFallback", True))
+                prefer_visible = bool(params.get("preferVisible", True))
                 retry_on_flaky = bool(params.get("retryOnFlaky", True))
                 max_attempts = int(params.get("flakyMaxAttempts") or 2)
                 retry_delay_ms = int(params.get("flakyRetryDelayMs") or 250)
@@ -376,6 +568,14 @@ def run_scenario(
                 try:
                     # Screenshot before step (best-effort)
                     shot_before = screenshot(f"step_{s.step}_before")
+                    # Element screenshot before (best-effort)
+                    try:
+                        if xpath and s.action not in {"navigate", "wait", "user_action"}:
+                            loc0 = page.locator(f"xpath={xpath}").first
+                            if loc0.count() > 0:
+                                el_before = element_screenshot(loc0, f"step_{s.step}_el_before")
+                    except Exception:
+                        el_before = None
 
                     def is_flaky_error(e: Exception) -> bool:
                         msg = str(e)
@@ -431,6 +631,13 @@ def run_scenario(
                         if not ok_found:
                             raise PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for any selector (primary + fallbacks)")
                         shot_after = screenshot(f"step_{s.step}_after")
+                        try:
+                            if selector_used:
+                                loc1 = page.locator(f"xpath={selector_used}").first
+                                if loc1.count() > 0:
+                                    el_after = element_screenshot(loc1, f"step_{s.step}_el_after")
+                        except Exception:
+                            el_after = None
 
                     elif s.action == "click_if_exists":
                         if not xpath:
@@ -438,14 +645,37 @@ def run_scenario(
                         for cand in selector_candidates:
                             if not cand:
                                 continue
-                            loc = page.locator(f"xpath={cand}").first
-                            if loc.count() > 0:
+                            loc_all = page.locator(f"xpath={cand}")
+                            if loc_all.count() > 0:
                                 selector_used = cand
-                                loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                # Prefer JS click on first visible match (handles virtualized lists / hidden clones)
+                                if prefer_visible:
+                                    if js_click_first_visible_by_xpath(cand):
+                                        break
+                                    vis = element_visibility_summary_by_xpath(cand)
+                                    if int(vis.get("total") or 0) > 0 and int(vis.get("visible") or 0) == 0:
+                                        # Options exist but hidden → try opening listbox and retry
+                                        try_open_listbox_hint()
+                                        if js_click_first_visible_by_xpath(cand):
+                                            break
+                                loc = first_visible(loc_all) if prefer_visible else loc_all.first
+                                loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
                                 ensure_enabled(loc)
-                                loc.click(timeout=max(0, step_timeout_ms))
+                                maybe_bring_to_front()
+                                highlight_locator(loc)
+                                try:
+                                    loc.click(timeout=max(0, step_timeout_ms), force=click_force)
+                                except Exception:
+                                    loc.click(timeout=max(0, step_timeout_ms), force=True)
                                 break
                         shot_after = screenshot(f"step_{s.step}_after")
+                        try:
+                            if selector_used:
+                                loc1 = page.locator(f"xpath={selector_used}").first
+                                if loc1.count() > 0:
+                                    el_after = element_screenshot(loc1, f"step_{s.step}_el_after")
+                        except Exception:
+                            el_after = None
 
                     elif s.action == "click":
                         if not xpath:
@@ -458,11 +688,56 @@ def run_scenario(
                                 if not cand:
                                     continue
                                 try:
-                                    loc = page.locator(f"xpath={cand}").first
-                                    loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                    loc_all = page.locator(f"xpath={cand}")
+                                    # Fast path: click first visible match via JS (best for virtualized menus/lists)
+                                    if prefer_visible:
+                                        if js_click_first_visible_by_xpath(cand):
+                                            selector_used = cand
+                                            clicked = True
+                                            break
+                                        vis = element_visibility_summary_by_xpath(cand)
+                                        if int(vis.get("total") or 0) > 0 and int(vis.get("visible") or 0) == 0:
+                                            # Found only hidden matches → likely listbox closed. Try open and retry.
+                                            try_open_listbox_hint()
+                                            if js_click_first_visible_by_xpath(cand):
+                                                selector_used = cand
+                                                clicked = True
+                                                break
+                                    loc = first_visible(loc_all) if prefer_visible else loc_all.first
+                                    loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
                                     ensure_enabled(loc)
                                     selector_used = cand
-                                    loc.click(timeout=max(0, step_timeout_ms))
+                                    maybe_bring_to_front()
+                                    highlight_locator(loc)
+                                    # Scroll into view first (helps with hidden/overlapped elements)
+                                    try:
+                                        loc.scroll_into_view_if_needed(timeout=max(0, step_timeout_ms))
+                                    except Exception:
+                                        pass
+                                    # Trial click to surface intercept issues early (optional)
+                                    if click_trial:
+                                        try:
+                                            loc.click(timeout=max(0, step_timeout_ms), trial=True)
+                                        except Exception:
+                                            pass
+                                    # Primary click
+                                    try:
+                                        loc.click(timeout=max(0, step_timeout_ms), force=click_force)
+                                    except Exception as e:
+                                        # Fallback 1: force click
+                                        if not click_force:
+                                            try:
+                                                loc.click(timeout=max(0, step_timeout_ms), force=True)
+                                            except Exception:
+                                                raise e
+                                        else:
+                                            raise e
+                                    # Fallback 2: JS click (last resort)
+                                    if click_js_fallback:
+                                        try:
+                                            loc.evaluate("(el) => el && el.click && el.click()")
+                                        except Exception:
+                                            pass
                                     clicked = True
                                     break
                                 except (PlaywrightTimeoutError, PlaywrightError) as e:
@@ -475,6 +750,13 @@ def run_scenario(
                         if not clicked:
                             raise last_click_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for click")
                         shot_after = screenshot(f"step_{s.step}_after")
+                        try:
+                            if selector_used:
+                                loc1 = page.locator(f"xpath={selector_used}").first
+                                if loc1.count() > 0:
+                                    el_after = element_screenshot(loc1, f"step_{s.step}_el_after")
+                        except Exception:
+                            el_after = None
 
                     elif s.action == "input":
                         if not xpath:
@@ -494,6 +776,8 @@ def run_scenario(
                                     loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
                                     ensure_enabled(loc)
                                     selector_used = cand
+                                    maybe_bring_to_front()
+                                    highlight_locator(loc)
                                     loc.fill(str(value), timeout=max(0, step_timeout_ms))
                                     filled = True
                                     break
@@ -507,6 +791,13 @@ def run_scenario(
                         if not filled:
                             raise last_fill_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for input")
                         shot_after = screenshot(f"step_{s.step}_after")
+                        try:
+                            if selector_used:
+                                loc1 = page.locator(f"xpath={selector_used}").first
+                                if loc1.count() > 0:
+                                    el_after = element_screenshot(loc1, f"step_{s.step}_el_after")
+                        except Exception:
+                            el_after = None
 
                     elif s.action == "set_date":
                         if not xpath:
@@ -527,6 +818,8 @@ def run_scenario(
                                     loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
                                     ensure_enabled(loc)
                                     selector_used = cand
+                                    maybe_bring_to_front()
+                                    highlight_locator(loc)
                                     loc.evaluate(
                                         """(el, v) => {
                                           try { el.focus && el.focus(); } catch (e) {}
@@ -549,6 +842,13 @@ def run_scenario(
                         if not done:
                             raise last_set_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for set_date")
                         shot_after = screenshot(f"step_{s.step}_after")
+                        try:
+                            if selector_used:
+                                loc1 = page.locator(f"xpath={selector_used}").first
+                                if loc1.count() > 0:
+                                    el_after = element_screenshot(loc1, f"step_{s.step}_el_after")
+                        except Exception:
+                            el_after = None
 
                     elif s.action == "file_upload":
                         if not xpath:
@@ -571,6 +871,8 @@ def run_scenario(
                                 loc = page.locator(f"xpath={cand}").first
                                 loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
                                 selector_used = cand
+                                maybe_bring_to_front()
+                                highlight_locator(loc)
                                 loc.set_input_files(str(file_path), timeout=max(0, max(step_timeout_ms, 10_000)))
                                 done = True
                                 break
@@ -686,7 +988,7 @@ def run_scenario(
                     _log_line(logs, f"✗ FAIL step {s.step}: {err}")
                     _emit_run_event(
                         run_dir,
-                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": False, "error": err, "screenshot": shot, "before": shot_before, "after": shot_after},
+                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": False, "error": err, "screenshot": shot, "before": shot_before, "after": shot_after, "elBefore": el_before, "elAfter": el_after},
                     )
                     _jsonl_append(
                         LOG_DIR / "web-runner.log",
@@ -705,7 +1007,7 @@ def run_scenario(
                     _log_line(logs, f"✓ OK step {s.step}")
                     _emit_run_event(
                         run_dir,
-                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": True, "selectorUsed": selector_used, "before": shot_before, "after": shot_after},
+                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": True, "selectorUsed": selector_used, "before": shot_before, "after": shot_after, "elBefore": el_before, "elAfter": el_after},
                     )
                     _jsonl_append(
                         LOG_DIR / "web-runner.log",
@@ -730,6 +1032,8 @@ def run_scenario(
                         "screenshot": shot,
                         "before": shot_before,
                         "after": shot_after,
+                        "elBefore": el_before,
+                        "elAfter": el_after,
                         "selectorUsed": selector_used,
                     }
                 )
@@ -742,6 +1046,12 @@ def run_scenario(
                 idx += 1
 
         finally:
+            try:
+                if tracing_enabled:
+                    trace_path = run_dir / "trace.zip"
+                    context.tracing.stop(path=str(trace_path))
+            except Exception:
+                pass
             context.close()
             browser.close()
 
@@ -956,6 +1266,10 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     viewport = str(body.get("viewport") or runner_defaults.get("viewport") or "1280x720")
     start_url = str(body.get("startUrl") or runner_defaults.get("startUrl") or "").strip()
     default_timeout_ms = int(body.get("defaultTimeoutMs") or runner_defaults.get("defaultTimeoutMs") or 15000)
+    connect_over_cdp = bool(body.get("connectOverCdp", runner_defaults.get("connectOverCdp", False)))
+    cdp_endpoint = str(body.get("cdpEndpoint") or runner_defaults.get("cdpEndpoint") or "").strip()
+    bring_to_front = bool(body.get("bringToFront", runner_defaults.get("bringToFront", True)))
+    highlight_steps = bool(body.get("highlightSteps", runner_defaults.get("highlightSteps", True)))
 
     # Data-driven rows: list[dict]
     data_rows = body.get("dataRows", None)
@@ -985,6 +1299,10 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                 "slowMoMs": slow_mo_ms,
                 "viewport": viewport,
                 "defaultTimeoutMs": default_timeout_ms,
+                "connectOverCdp": connect_over_cdp,
+                "cdpEndpoint": cdp_endpoint,
+                "bringToFront": bring_to_front,
+                "highlightSteps": highlight_steps,
                 "variables": extra_vars if isinstance(extra_vars, dict) else {},
                 "dataRowsCount": len(data_rows) if isinstance(data_rows, list) else 0,
                 "maxRows": max_rows,
@@ -1036,6 +1354,10 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                             headless=headless,
                             slow_mo_ms=slow_mo_ms,
                             viewport=viewport,
+                            connect_over_cdp=connect_over_cdp,
+                            cdp_endpoint=cdp_endpoint,
+                            bring_to_front=bring_to_front,
+                            highlight_steps=highlight_steps,
                             run_dir=run_dir / "rows" / f"row_{i+1}",
                         )
                     )
@@ -1068,6 +1390,10 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                         headless=headless,
                         slow_mo_ms=slow_mo_ms,
                         viewport=viewport,
+                        connect_over_cdp=connect_over_cdp,
+                        cdp_endpoint=cdp_endpoint,
+                        bring_to_front=bring_to_front,
+                        highlight_steps=highlight_steps,
                         run_dir=run_dir,
                     )
                 )

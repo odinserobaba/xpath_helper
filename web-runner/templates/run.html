@@ -121,6 +121,8 @@
         logLine(`[run_start] steps=${msg.stepsCount ?? ''}`);
       } else if (e === 'navigated') {
         logLine(`[navigate] ${msg.url || ''}`);
+      } else if (e === 'cdp_attach') {
+        logLine(`[cdp_attach] ${msg.endpoint || ''}`);
       } else if (e === 'step_start') {
         currentStep = msg.step;
         steps.set(msg.step, { step: msg.step, action: msg.action, ok: null, error: null, screenshot: null });
@@ -132,7 +134,8 @@
         cur.screenshot = msg.screenshot || null;
         steps.set(msg.step, cur);
         if (msg.ok) okCount++; else failCount++;
-        logLine(`[step_done] #${msg.step} ${msg.ok ? 'OK' : 'FAIL'}`);
+        const used = msg.selectorUsed ? ` selectorUsed=${msg.selectorUsed}` : '';
+        logLine(`[step_done] #${msg.step} ${msg.ok ? 'OK' : 'FAIL'}${used}`);
       } else if (e === 'run_done') {
         okCount = msg.okCount ?? okCount;
         failCount = msg.failCount ?? failCount;

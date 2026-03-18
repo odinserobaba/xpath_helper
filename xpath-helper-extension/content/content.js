@@ -117,7 +117,8 @@ function init() {
     indicator.setAttribute('role', 'button');
     indicator.setAttribute('aria-label', 'Открыть панель XPath Helper');
     indicator.setAttribute('aria-pressed', 'false');
-    indicator.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:10px 20px;background:linear-gradient(135deg,#00d4aa,#0099ff);color:white;border-radius:8px;font-family:sans-serif;font-weight:bold;z-index:2147483647;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:background .2s, box-shadow .2s;';
+    // Поднимаем индикатор выше, чтобы не перекрывал системные/чат-виджеты
+    indicator.style.cssText = 'position:fixed;bottom:96px;right:20px;padding:10px 20px;background:linear-gradient(135deg,#00d4aa,#0099ff);color:white;border-radius:8px;font-family:sans-serif;font-weight:bold;z-index:2147483647;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:background .2s, box-shadow .2s;';
     indicator.innerHTML = '✦ XPath Helper';
     indicator.addEventListener('click', () => sendToPanel({ action: 'openPanel' }));
     document.documentElement.appendChild(indicator);
@@ -364,6 +365,15 @@ function init() {
             }
         }
 
+        function selectorCandidates(step) {
+            const primary = (step?.xpath || '').trim();
+            const fx = Array.isArray(step?.params?.fallbackXPaths) ? step.params.fallbackXPaths.map((x) => String(x).trim()).filter(Boolean) : [];
+            const out = [];
+            if (primary) out.push(primary);
+            for (const x of fx) if (x && !out.includes(x)) out.push(x);
+            return out;
+        }
+
         for (let i = 0; i < steps.length; i++) {
             if (!isContextValid() || token !== runToken) break;
             if (i > 0 && stepDelayMs > 0) await new Promise((r) => setTimeout(r, stepDelayMs));
@@ -387,8 +397,12 @@ function init() {
 
                 if (step.action === 'wait_for_element') {
                     const timeout = step.params?.timeoutMs ?? baseTimeout;
-                    const el = await findElementByXPath(step.xpath, timeout);
-                    if (!el) throw new Error('Элемент не появился за ' + timeout + 'мс: ' + (step.xpath || '').substring(0, 80));
+                    let found = null;
+                    for (const cand of selectorCandidates(step)) {
+                        found = await findElementByXPath(cand, timeout);
+                        if (found) break;
+                    }
+                    if (!found) throw new Error('Элемент не появился за ' + timeout + 'мс: ' + (step.xpath || '').substring(0, 80));
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -506,7 +520,12 @@ function init() {
                 }
 
                 const stepTimeout = step.params?.timeoutMs ?? baseTimeout;
-                const el = await findElementByXPath(step.xpath, stepTimeout);
+                let el = null;
+                let usedXpath = '';
+                for (const cand of selectorCandidates(step)) {
+                    el = await findElementByXPath(cand, stepTimeout);
+                    if (el) { usedXpath = cand; break; }
+                }
                 if (!el) throw new Error('Элемент не найден (таймаут ' + stepTimeout + 'мс): ' + (step.xpath || '').substring(0, 80));
 
                 if (step.action === 'click') {

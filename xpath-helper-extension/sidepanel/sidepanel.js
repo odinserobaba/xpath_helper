@@ -215,6 +215,7 @@ const scenarioName = $('scenarioName');
 const scenarioSelect = $('scenarioSelect');
 const listSearch = $('listSearch');
 const stopExecuteBtn = $('stopExecuteBtn');
+const healthCheckBtn = $('healthCheckBtn');
 const executionLog = $('executionLog');
 const copyLogBtn = $('copyLogBtn');
 const exportReportBtn = $('exportReportBtn');
@@ -282,9 +283,35 @@ function logEvent(level, event, data) {
     try {
         runnerFetch('/api/logs', {
             method: 'POST',
-            body: JSON.stringify({ level, event, data })
+            body: JSON.stringify({ level, event, data: maskSecrets(data) })
         }).catch(() => {});
     } catch (_) {}
+}
+
+function maskSecrets(obj) {
+    const secretKeys = ['password', 'passwd', 'pwd', 'token', 'secret', 'authorization', 'auth'];
+    if (obj == null) return obj;
+    if (Array.isArray(obj)) return obj.map(maskSecrets);
+    if (typeof obj === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) {
+            const ks = String(k).toLowerCase();
+            if (secretKeys.some((sk) => ks.includes(sk)) && v != null && v !== '' && !(Array.isArray(v) && v.length === 0)) {
+                out[k] = '***';
+            } else {
+                out[k] = maskSecrets(v);
+            }
+        }
+        return out;
+    }
+    return obj;
+}
+
+function maskSecretsInText(s) {
+    if (!s || typeof s !== 'string') return s;
+    return s
+        .replace(/(password|passwd|pwd|token|secret|authorization)\s*[:=]\s*([^\s,;]+)/gi, '$1=***')
+        .replace(/(\"(password|passwd|pwd|token|secret|authorization)\"\\s*:\\s*\")([^\"]+)(\")/gi, '$1***$4');
 }
 
 function parseTags(text) {
@@ -1053,6 +1080,20 @@ document.querySelectorAll('.tab').forEach((tab) => {
             if (tabList) { tabList.classList.add('active'); tabList.hidden = false; renderExecutionList(); }
         }
     });
+});
+
+// ——— Hotkeys (panel) ———
+// Ctrl+Enter: run list, Esc: stop, Ctrl+S: save, Ctrl+F: focus search, M: toggle mini view
+document.addEventListener('keydown', (e) => {
+    const tag = (e.target?.tagName || '').toLowerCase();
+    const inInput = tag === 'input' || tag === 'textarea' || e.target?.isContentEditable;
+    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); executeListBtn?.click(); return; }
+    if (e.key === 'Escape') { stopExecuteBtn?.click(); return; }
+    if (e.ctrlKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveListBtn?.click(); return; }
+    if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); listSearch?.focus(); return; }
+    if (!inInput && (e.key === 'm' || e.key === 'M')) {
+        document.body.classList.toggle('mini-view');
+    }
 });
 
 // ——— Editor tab ———
@@ -1986,11 +2027,21 @@ function upsertStepFromModal({ alsoAddAssert = false } = {}) {
     const titleVal = (stepTitle?.value || '').trim();
     const tagsVal = parseTags(stepTags?.value || '');
     // Attach fallback selectors (do not override main xpath).
+    // Strategy: store ALL unique selectors (excluding primary) + attribute-based fallbacks.
     const fallbackXPaths = Array.isArray(params.fallbackXPaths) ? params.fallbackXPaths : [];
-    const autoFallbacks = (!editingStepId && (action === 'click' || action === 'click_if_exists' || action === 'input' || action === 'file_upload' || action === 'wait_for_element' || action === 'assert' || action === 'branch'))
+    const isSelectorAction = (action === 'click' || action === 'click_if_exists' || action === 'input' || action === 'set_date' || action === 'file_upload' || action === 'wait_for_element' || action === 'assert' || action === 'branch');
+    const uniquePool = (!editingStepId && isSelectorAction && Array.isArray(currentResult?.uniqueOnly))
+        ? currentResult.uniqueOnly.map((x) => x?.xpath).filter(Boolean)
+        : [];
+    const uniqueFallbacks = uniquePool.filter((x) => String(x).trim() && String(x).trim() !== String(xpath).trim()).slice(0, 25);
+    const autoFallbacks = (!editingStepId && isSelectorAction)
         ? suggestFallbackXPaths(lastHoveredElement)
         : [];
-    const mergedFallbacks = [...fallbackXPaths, ...autoFallbacks].filter(Boolean).slice(0, 8);
+    const mergedFallbacks = [...fallbackXPaths, ...uniqueFallbacks, ...autoFallbacks]
+        .map((x) => String(x).trim())
+        .filter(Boolean)
+        .filter((x, i, arr) => arr.indexOf(x) === i)
+        .slice(0, 30);
     if (mergedFallbacks.length) params.fallbackXPaths = mergedFallbacks;
     let savedIdx = -1;
     if (editingStepId) {
@@ -3611,7 +3662,7 @@ function runExecutionFromStep(fromStepId) {
 function appendExecutionLog(line) {
     if (!executionLog) return;
     const t = new Date().toLocaleTimeString('ru-RU', { hour12: false });
-    executionLog.textContent += `[${t}] ${line}\n`;
+    executionLog.textContent += `[${t}] ${maskSecretsInText(String(line))}\n`;
     executionLog.scrollTop = executionLog.scrollHeight;
     const logTab = document.querySelector('.tab[data-tab="log"]');
     if (logTab && !logTab.classList.contains('log-has-content')) {
@@ -3697,6 +3748,48 @@ executeListBtn.addEventListener('click', () => {
         });
     });
 });
+
+async function runHealthCheck(tabId) {
+    const steps = executionList.filter((s) => s.action !== 'separator' && s.action !== 'navigate' && s.action !== 'user_action');
+    if (steps.length === 0) {
+        appendExecutionLog('Health-check: нет шагов с XPath');
+        return;
+    }
+    appendExecutionLog(`Health-check: ${steps.length} шагов…`);
+    let ok = 0, warn = 0, bad = 0;
+    for (const step of steps) {
+        const xps = [];
+        if (step.xpath) xps.push({ kind: 'primary', idx: 0, xp: step.xpath });
+        const fx = Array.isArray(step.params?.fallbackXPaths) ? step.params.fallbackXPaths : [];
+        fx.slice(0, 5).forEach((xp, i) => { if (xp) xps.push({ kind: 'fallback', idx: i, xp: String(xp) }); });
+        for (const item of xps) {
+            const xp = replaceVariables(item.xp, getCurrentVariables());
+            const resp = await sendToContentAndWait(tabId, { action: 'validateXpath', xpath: xp }, 8000).catch((e) => ({ ok: false, error: e?.message || String(e) }));
+            const count = resp?.count;
+            const line = `HC #${step.id} ${item.kind}${item.kind === 'fallback' ? '[' + item.idx + ']' : ''} → ${typeof count === 'number' ? count : 'err'}: ${truncate(xp, 80)}`;
+            if (!resp?.ok) { bad++; appendExecutionLog(line + ` (${resp?.error || 'error'})`); continue; }
+            if (count === 1) { ok++; appendExecutionLog(line); }
+            else if (count === 0) { bad++; appendExecutionLog(line + ' (NOT FOUND)'); }
+            else { warn++; appendExecutionLog(line + ' (NOT UNIQUE)'); }
+        }
+    }
+    appendExecutionLog(`Health-check done: ok=${ok} warn=${warn} bad=${bad}`);
+}
+
+if (healthCheckBtn) {
+    healthCheckBtn.addEventListener('click', () => {
+        chrome.tabs.query({ active: true, currentWindow: true }, async ([tab]) => {
+            if (!tab?.id) return;
+            const prev = healthCheckBtn.textContent;
+            healthCheckBtn.textContent = '…';
+            try {
+                await runHealthCheck(tab.id);
+            } finally {
+                healthCheckBtn.textContent = prev;
+            }
+        });
+    });
+}
 
 if (stopExecuteBtn) {
     stopExecuteBtn.addEventListener('click', () => {

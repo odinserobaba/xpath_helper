@@ -1,0 +1,451 @@
+{
+  "name": "pr2",
+  "version": 1,
+  "exportedAt": "2026-03-18T09:03:54.880Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [
+        "Продление"
+      ],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "https://svcdev-beta.test.gosuslugi.ru/611099/1/form",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//span[normalize-space()='Начать']",
+      "action": "click",
+      "title": "Начать",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Начать']",
+          "//span[normalize-space()='Начать']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//span[normalize-space()='Производство']",
+      "action": "click",
+      "title": "Производство",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Производство']",
+          "//span[normalize-space()='Производство']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
+      "action": "click",
+      "title": "Производство этилового спирта, алкогольной и спирт",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//*[@id='c24']",
+      "action": "click",
+      "title": "Начните печатать и выберите вариант из списка, нажав стрелку Вниз",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
+          "//*[@role='combobox' and @aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
+          "//input[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённого этилового спирта']",
+      "action": "click",
+      "title": "Производство, хранение и поставки произведённого э",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "//span[normalize-space()='В электронном виде']",
+      "action": "click",
+      "title": "В электронном виде",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='В электронном виде']",
+          "//span[normalize-space()='В электронном виде']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "//span[normalize-space()='5 лет']",
+      "action": "click",
+      "title": "5 лет",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='5 лет']",
+          "//span[normalize-space()='5 лет']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "//span[normalize-space()='Перейти к заявлению']",
+      "action": "click",
+      "title": "Перейти к заявлению",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Перейти к заявлению']",
+          "//span[normalize-space()='Перейти к заявлению']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "//*[@name='c10']",
+      "action": "input",
+      "title": "#c10",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[@name='c10']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "12ПСЭ0000012",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "//*[@name='c40']",
+      "action": "input",
+      "title": "Дата",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "01.01.2026",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 17,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 18,
+      "xpath": "//button[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//button[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 19,
+      "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+      "action": "click",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 20,
+      "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+      "action": "click",
+      "title": "По реквизитам платёжного поручения или УИН",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 21,
+      "xpath": "//*[@name='c35']",
+      "action": "input",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[@name='c35']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "123",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 22,
+      "xpath": "//*[@name='c36']",
+      "action": "input",
+      "title": "Дата",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[@aria-label='Дата']",
+          "//*[@name='c36']",
+          "//input[@aria-label='Дата']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "01.01.2026",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 23,
+      "xpath": "//span[normalize-space()='Перейти к подписанию']",
+      "action": "click",
+      "title": "Перейти к подписанию",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Перейти к подписанию']",
+          "//span[normalize-space()='Перейти к подписанию']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 24,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 25,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
+      "action": "click",
+      "title": "Подписание происходит в браузере. Сертификат УКЭП",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 26,
+      "xpath": "//span[normalize-space()='Подписать']",
+      "action": "click",
+      "title": "Подписать",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Подписать']",
+          "//span[normalize-space()='Подписать']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 27,
+      "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+      "action": "click",
+      "title": "ООО \"ЦентрИнформ\"",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+          "//button[normalize-space()='ООО \"ЦентрИнформ\"']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 28,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    }
+  ],
+  "id": "pr2_20260318_120354",
+  "runnerSettings": {
+    "startUrl": "",
+    "baseUrl": "",
+    "viewport": "1280x720",
+    "slowMoMs": 0,
+    "headless": true,
+    "defaultTimeoutMs": 2000,
+    "connectOverCdp": true,
+    "cdpEndpoint": "9222",
+    "bringToFront": true,
+    "highlightSteps": true,
+    "variables": {},
+    "dataRows": null,
+    "maxRows": 0,
+    "stopOnFirstFail": true
+  }
+}
