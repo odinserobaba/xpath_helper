@@ -46,6 +46,49 @@
                     <span class="setting-value">ms</span>
                 </div>
             </div>
+            <h4 class="settings-subtitle">Ожидание после шага (загрузка)</h4>
+            <div class="setting-row">
+                <label for="waitReadyMs" title="Пауза после document.ready">После ready (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="waitReadyMs" min="0" max="2000" value="80" aria-label="После ready">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label for="waitNetworkQuietMs" title="Время «тишины» по сети перед переходом к следующей проверке">Сеть: тишина (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="waitNetworkQuietMs" min="0" max="2000" value="150">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label for="waitNetworkTimeoutMs" title="Макс. ожидание тишины по сети">Сеть: макс (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="waitNetworkTimeoutMs" min="0" max="15000" value="2500">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label for="waitDomQuietMs" title="Время «тишины» по DOM (без мутаций)">DOM: тишина (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="waitDomQuietMs" min="0" max="2000" value="100">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label for="waitDomTimeoutMs" title="Макс. ожидание тишины по DOM">DOM: макс (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="waitDomTimeoutMs" min="0" max="10000" value="1500">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label for="waitPostActionMs" title="Пауза сразу после клика/ввода перед проверкой загрузки">Пауза после действия (мс):</label>
+                <div class="setting-input-row">
+                    <input type="number" id="waitPostActionMs" min="0" max="1000" value="50">
+                    <span class="setting-value">ms</span>
+                </div>
+            </div>
             <div class="setting-row">
                 <label class="filter-check">
                     <input type="checkbox" id="onlyUniqueMode" title="Показывать только уникальные XPath в инспекторе">
@@ -79,6 +122,7 @@
                     <span id="primaryUnique" class="badge unique">✓</span>
                     <span id="primaryScore" class="badge score">100</span>
                 </div>
+                <p id="primaryLinkedHint" class="primary-linked-hint hidden" role="status">При добавлении шага будет использован связанный input (дата/ввод).</p>
                 <div class="primary-actions">
                     <button id="copyPrimary" class="btn-copy" aria-label="Копировать основной XPath">📋 Копировать</button>
                     <button id="copyForConsole" class="btn-console" aria-label="Копировать для консоли DevTools">🖥 Для консоли</button>
@@ -196,6 +240,7 @@
                                 <option value="click">Клик</option>
                                 <option value="click_if_exists">Клик если есть</option>
                                 <option value="input">Ввод текста</option>
+                                <option value="set_date">Дата (set_date)</option>
                                 <option value="file_upload">Загрузка файла</option>
                                 <option value="wait">Пауза</option>
                                 <option value="wait_for_element">Пауза до элемента</option>
@@ -206,9 +251,18 @@
                                 <option value="separator">Разделитель</option>
                             </select>
                         </div>
+                        <div class="form-row" id="editorStepColorRow">
+                            <label class="setting-hint">Цвет шага</label>
+                            <div id="editorStepColorColors" class="step-color-colors" aria-label="Цвет шага"></div>
+                        </div>
                         <div id="editorParamsInput" class="form-row hidden">
                             <label for="editorInputValue">Текст для ввода</label>
                             <input type="text" id="editorInputValue" placeholder="Значение">
+                        </div>
+                        <div id="editorParamsSetDate" class="form-row hidden">
+                            <label for="editorDateValue">Дата</label>
+                            <input type="date" id="editorDateValue" aria-describedby="editorDateHint">
+                            <span id="editorDateHint" class="setting-hint">Формат: yyyy-MM-dd. По умолчанию — сегодня.</span>
                         </div>
                         <div id="editorParamsWait" class="form-row hidden">
                             <label for="editorWaitMs">Задержка (мс)</label>
@@ -359,6 +413,7 @@
                         <option value="click">Клик</option>
                         <option value="click_if_exists">Клик если есть</option>
                         <option value="input">Ввод текста</option>
+                        <option value="set_date">Дата (set_date)</option>
                         <option value="file_upload">Загрузка файла (эмуляция)</option>
                         <option value="wait">Пауза (мс)</option>
                         <option value="wait_for_element">Пауза до элемента</option>
@@ -378,6 +433,10 @@
                     <label for="stepTags">Теги (опционально)</label>
                     <input type="text" id="stepTags" placeholder="auth, profile, upload">
                     <span class="setting-hint">Через запятую. Используются для поиска/ориентации.</span>
+                </div>
+                <div class="form-row" id="stepColorRow">
+                    <label class="setting-hint">Цвет шага</label>
+                    <div id="stepColorColors" class="step-color-colors" aria-label="Цвет шага"></div>
                 </div>
                 <div id="stepParamsCommon" class="form-row">
                     <label for="stepTimeoutMs" class="setting-hint">Таймаут ожидания (мс), 0 = по умолчанию</label>
@@ -404,6 +463,11 @@
                 <div id="stepParamsInput" class="form-row hidden">
                     <label for="stepInputValue">Текст для ввода</label>
                     <input type="text" id="stepInputValue" placeholder="Значение">
+                </div>
+                <div id="stepParamsSetDate" class="form-row hidden">
+                    <label for="stepDateValue">Дата</label>
+                    <input type="date" id="stepDateValue" aria-describedby="stepDateHint">
+                    <span id="stepDateHint" class="setting-hint">Формат: yyyy-MM-dd. По умолчанию — сегодня.</span>
                 </div>
                 <div id="stepParamsWait" class="form-row hidden">
                     <label for="stepWaitMs">Задержка (мс)</label>

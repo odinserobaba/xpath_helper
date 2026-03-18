@@ -48,6 +48,7 @@ ALLOWED_ACTIONS = {
     "click",
     "click_if_exists",
     "input",
+    "set_date",
     "file_upload",
     "wait",
     "wait_for_element",
@@ -505,6 +506,48 @@ def run_scenario(
                                 break
                         if not filled:
                             raise last_fill_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for input")
+                        shot_after = screenshot(f"step_{s.step}_after")
+
+                    elif s.action == "set_date":
+                        if not xpath:
+                            raise ValueError("set_date requires xpath")
+                        value = params.get("value")
+                        if value is None:
+                            value = ""
+                        # Expect ISO date (YYYY-MM-DD) for input[type=date]; we still set any string as best-effort.
+                        last_set_err = None
+                        done = False
+                        attempts = max(1, max_attempts) if retry_on_flaky else 1
+                        for attempt in range(attempts):
+                            for cand in selector_candidates:
+                                if not cand:
+                                    continue
+                                try:
+                                    loc = page.locator(f"xpath={cand}").first
+                                    loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
+                                    ensure_enabled(loc)
+                                    selector_used = cand
+                                    loc.evaluate(
+                                        """(el, v) => {
+                                          try { el.focus && el.focus(); } catch (e) {}
+                                          el.value = v ?? '';
+                                          el.dispatchEvent(new Event('input', { bubbles: true }));
+                                          el.dispatchEvent(new Event('change', { bubbles: true }));
+                                          try { el.blur && el.blur(); } catch (e) {}
+                                        }""",
+                                        str(value),
+                                    )
+                                    done = True
+                                    break
+                                except (PlaywrightTimeoutError, PlaywrightError) as e:
+                                    last_set_err = e
+                                    if retry_on_flaky and attempt < attempts - 1 and is_flaky_error(e):
+                                        page.wait_for_timeout(max(0, retry_delay_ms))
+                                        continue
+                            if done:
+                                break
+                        if not done:
+                            raise last_set_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for set_date")
                         shot_after = screenshot(f"step_{s.step}_after")
 
                     elif s.action == "file_upload":

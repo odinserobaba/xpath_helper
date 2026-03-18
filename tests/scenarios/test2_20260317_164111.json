@@ -1,0 +1,251 @@
+{
+  "name": "test2",
+  "version": 1,
+  "exportedAt": "2026-03-17T13:41:11.749Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Прекращение действия лицензии на деятельность в об",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#00b0ff",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "(//span[contains(@class, 'mat-radio-label-content')])[2]",
+      "action": "click",
+      "title": "Продление срока действия лицензии на деятельность",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[8]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//span[contains(@class, 'mat-select-placeholder')]",
+      "action": "click",
+      "title": "Регистрационный номер",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#00b0ff",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Регистрационный номер']",
+          "//span[normalize-space()='Регистрационный номер']"
+        ]
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "//span[normalize-space()='77ПСН0014041']",
+      "action": "click",
+      "title": "77ПСН0014041",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='77ПСН0014041']",
+          "//span[normalize-space()='77ПСН0014041']"
+        ]
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[3]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "//span[contains(@class, 'mat-select-placeholder') and normalize-space()='Количество лет']",
+      "action": "click",
+      "title": "Количество лет",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Количество лет']",
+          "//span[normalize-space()='Количество лет']"
+        ]
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "//span[contains(@class, 'mat-option-text') and normalize-space()='1']",
+      "action": "click",
+      "title": "1",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#d500f9",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='1']",
+          "//span[normalize-space()='1']"
+        ]
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "(//div[contains(@class, 'mat-form-field-infix')])[17]",
+      "action": "click",
+      "title": "Количество месяцевКоличество месяцев",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Количество месяцевКоличество месяцев']",
+          "//div[normalize-space()='Количество месяцевКоличество месяцев']"
+        ]
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "//span[contains(@class, 'mat-option-text') and normalize-space()='1']",
+      "action": "click",
+      "title": "1",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#d500f9",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='1']",
+          "//span[normalize-space()='1']"
+        ]
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[4]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "(//*[contains(@class, 'mat-select-min-line')])[4]",
+      "action": "click",
+      "title": "Тип оплаты",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Тип оплаты']",
+          "//span[normalize-space()='Тип оплаты']"
+        ]
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "//span[normalize-space()='По реквизитам платежного поручения']",
+      "action": "click",
+      "title": "По реквизитам платежного поручения",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='По реквизитам платежного поручения']",
+          "//span[normalize-space()='По реквизитам платежного поручения']"
+        ]
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "(//*[contains(@class, 'mat-input-element')])[15]",
+      "action": "input",
+      "title": "Номер платежки",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "123123123",
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "(//*[contains(@class, 'mat-form-field-infix')])[20]",
+      "action": "input",
+      "title": "Дата *",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "02-02-2026",
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    }
+  ],
+  "id": "test2_20260317_164111"
+}

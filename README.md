@@ -33,6 +33,26 @@ cd web-runner
 
 ---
 
+## Что нового (последние улучшения)
+
+### Расширение (sidepanel/content)
+
+- **Шаги стали “читаемыми”**: `title` + `tags`, автоподстановка title.
+- **Стабильность селекторов**: `params.fallbackXPaths`, блок Selectors (Primary/Fallback + проверка count).
+- **Цвет шага (10 ярких)**: выбор цвета в модалке и в Editor, визуальная полоска в списке и Flow (`params.stepColor`).
+- **`set_date` для `input[type=date]`**: отдельное действие, ставит дату через `value + input/change` (Angular “видит”).
+- **Выбор даты без ошибок формата**: для `set_date` в UI используется `input type="date"` + подсказка формата `yyyy-MM-dd`, по умолчанию — **сегодня**.
+- **Навёлся на label → добавился input**: если наведён `label[for]`, при добавлении шага берём связанный input (и автоматически выбираем `set_date` для date).
+- **Управляемые “тайминги после шага”**: в настройках вынесены ожидания ready/network/dom и пауза “после действия”; значения прокидываются в content-script и реально влияют на скорость.
+
+### Web Runner (FastAPI + Playwright)
+
+- **Fallback selectors** в выполнении: пробуем primary XPath, затем fallbacks.
+- **Более стабильные ожидания/ретраи**: wait state, retryOnFlaky, before/after screenshots, HTML report.
+- **`set_date` в раннере**: ставит дату через `evaluate` (value + input/change), чтобы Angular корректно принял значение.
+
+---
+
 ## Содержание
 
 - [Концепция и архитектура](#концепция-и-архитектура)
@@ -127,6 +147,11 @@ flowchart TD
 |----------|----------|--------------|
 | Задержка наведения (мс) | Debounce при наведении (80–200 мс) | 120 |
 | Ожидание селектора (мс) | Макс. время ожидания элемента при выполнении шагов | 5000 |
+| Пауза между шагами (мс) | Задержка между шагами при выполнении списка | 100 |
+| После ready (мс) | Пауза после `document.readyState === "complete"` перед проверками | 80 |
+| Сеть: тишина/макс (мс) | Ожидание “тишины” по сети (resource entries) | 150 / 2500 |
+| DOM: тишина/макс (мс) | Ожидание “тишины” по DOM (MutationObserver) | 100 / 1500 |
+| Пауза после действия (мс) | Пауза сразу после click/input/file_upload перед ожиданием загрузки | 50 |
 | Только уникальные XPath | Скрывать неуникальные варианты | выкл |
 
 ---
@@ -235,6 +260,7 @@ flowchart TD
 | **Клик** | Клик по элементу | XPath, timeout, waitForLoad |
 | **Клик если есть** | Клик без ошибки, если элемент не найден | XPath |
 | **Ввод текста** | Заполнение поля | XPath, value |
+| **Дата (set_date)** | Установка даты для `input[type=date]` (value + input/change) | XPath, value (`yyyy-MM-dd`) |
 | **Загрузка файла** | Эмуляция file input | XPath, fileName, fileContentBase64 |
 | **Пауза (мс)** | Фиксированная задержка | delayMs |
 | **Пауза до элемента** | Ожидание появления элемента по XPath | XPath, timeoutMs |
@@ -258,6 +284,7 @@ flowchart TD
 - **Обязательный шаг** — при ошибке остановить выполнение.
 - **Ждать загрузки страницы** — после действия ждать network idle и DOM stable.
 - **Повтор при ошибке** — retryCount, retryDelayMs.
+- **Цвет шага** — `params.stepColor` (только для UI: список/flow).
 
 ---
 
@@ -287,10 +314,10 @@ flowchart TD
 |------|----------|
 | **step** | Порядок шага (обязателен при импорте) |
 | **xpath** | XPath селектор |
-| **action** | `click`, `click_if_exists`, `input`, `file_upload`, `wait`, `wait_for_element`, `user_action`, `assert`, `branch`, `navigate`, `separator` |
+| **action** | `click`, `click_if_exists`, `input`, `set_date`, `file_upload`, `wait`, `wait_for_element`, `user_action`, `assert`, `branch`, `navigate`, `separator` |
 | **title** | Короткое имя шага (для UI) |
 | **tags** | Список тегов (для UI/поиска) |
-| **params** | Параметры: `value`, `delayMs`, `timeoutMs`, `url`, `fileName`, `fileContentBase64`, `condition`, `expectedValue`, `attributeName`, `nextId`, `nextElseId`, `message` и др. |
+| **params** | Параметры: `value`, `delayMs`, `timeoutMs`, `url`, `fileName`, `fileContentBase64`, `condition`, `expectedValue`, `attributeName`, `nextId`, `nextElseId`, `message`, `fallbackXPaths`, `stepColor` и др. |
 
 ### Важное про fallback селекторы
 

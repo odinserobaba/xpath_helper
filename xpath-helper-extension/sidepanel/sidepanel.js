@@ -5,6 +5,18 @@ const STORAGE_KEY_DEBOUNCE = 'xpath-helper-debounce-ms';
 const STORAGE_KEY_EXECUTION_LIST = 'xpath-helper-execution-list';
 const STORAGE_KEY_SELECTOR_TIMEOUT = 'xpath-helper-selector-timeout-ms';
 const STORAGE_KEY_STEP_DELAY = 'xpath-helper-step-delay-ms';
+const STORAGE_KEY_WAIT_READY_MS = 'xpath-helper-wait-ready-ms';
+const STORAGE_KEY_WAIT_NETWORK_QUIET_MS = 'xpath-helper-wait-network-quiet-ms';
+const STORAGE_KEY_WAIT_NETWORK_TIMEOUT_MS = 'xpath-helper-wait-network-timeout-ms';
+const STORAGE_KEY_WAIT_DOM_QUIET_MS = 'xpath-helper-wait-dom-quiet-ms';
+const STORAGE_KEY_WAIT_DOM_TIMEOUT_MS = 'xpath-helper-wait-dom-timeout-ms';
+const STORAGE_KEY_WAIT_POST_ACTION_MS = 'xpath-helper-wait-post-action-ms';
+const WAIT_READY_DEFAULT = 80;
+const WAIT_NETWORK_QUIET_DEFAULT = 150;
+const WAIT_NETWORK_TIMEOUT_DEFAULT = 2500;
+const WAIT_DOM_QUIET_DEFAULT = 100;
+const WAIT_DOM_TIMEOUT_DEFAULT = 1500;
+const WAIT_POST_ACTION_DEFAULT = 50;
 const STORAGE_KEY_ONLY_UNIQUE = 'xpath-helper-only-unique';
 const STORAGE_KEY_SCENARIOS = 'xpath-helper-scenarios';
 const STORAGE_KEY_HISTORY = 'xpath-helper-element-history';
@@ -31,7 +43,7 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя', wait_for_element: 'Ждать элемент' };
+const ACTION_LABELS = { click: 'Клик', input: 'Ввод', set_date: 'Дата', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя', wait_for_element: 'Ждать элемент' };
 const BRANCH_CONDITIONS = [
     { value: 'element_exists', label: 'Элемент есть' },
     { value: 'text_equals', label: 'Текст равен' },
@@ -43,6 +55,7 @@ const BRANCH_CONDITIONS = [
     { value: 'count_equals', label: 'Количество элементов' }
 ];
 const SEPARATOR_COLORS = ['#00d4aa', '#667eea', '#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', '#e91e63'];
+const STEP_COLORS = ['#ff1744', '#ff9100', '#ffd600', '#76ff03', '#00e676', '#1de9b6', '#00b0ff', '#651fff', '#d500f9', '#ff4081'];
 
 // Минимальный валидный PDF (~400 байт) для тестирования загрузки файлов
 const MINIMAL_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK';
@@ -58,6 +71,7 @@ const primarySectionEl = $('primarySection');
 const primaryXpathEl = $('primaryXpath');
 const primaryUniqueEl = $('primaryUnique');
 const primaryScoreEl = $('primaryScore');
+const primaryLinkedHint = $('primaryLinkedHint');
 const copyPrimaryBtn = $('copyPrimary');
 const copyForConsoleBtn = $('copyForConsole');
 const addPrimaryToListBtn = $('addPrimaryToList');
@@ -104,7 +118,11 @@ const editorChooseFileBtn = $('editorChooseFileBtn');
 const editorMinimalPdfBtn = $('editorMinimalPdfBtn');
 const editorSeparatorLabel = $('editorSeparatorLabel');
 const editorSeparatorColors = $('editorSeparatorColors');
+const editorStepColorRow = $('editorStepColorRow');
+const editorStepColorColors = $('editorStepColorColors');
 const editorParamsInput = $('editorParamsInput');
+const editorParamsSetDate = $('editorParamsSetDate');
+const editorDateValue = $('editorDateValue');
 const editorParamsWait = $('editorParamsWait');
 const editorParamsUserAction = $('editorParamsUserAction');
 const editorUserActionMessage = $('editorUserActionMessage');
@@ -141,6 +159,8 @@ const stepParamsSeparator = $('stepParamsSeparator');
 const stepParamsWaitForLoad = $('stepParamsWaitForLoad');
 const stepSeparatorLabel = $('stepSeparatorLabel');
 const stepSeparatorColors = $('stepSeparatorColors');
+const stepColorRow = $('stepColorRow');
+const stepColorColors = $('stepColorColors');
 const executeListBtn = $('executeListBtn');
 const saveListBtn = $('saveListBtn');
 const listHint = $('listHint');
@@ -150,6 +170,8 @@ const stepXpath = $('stepXpath');
 const stepAction = $('stepAction');
 const stepParamsInput = $('stepParamsInput');
 const stepInputValue = $('stepInputValue');
+const stepParamsSetDate = $('stepParamsSetDate');
+const stepDateValue = $('stepDateValue');
 const stepParamsWait = $('stepParamsWait');
 const stepParamsUserAction = $('stepParamsUserAction');
 const stepUserActionMessage = $('stepUserActionMessage');
@@ -215,6 +237,12 @@ const clearHistoryBtn = $('clearHistoryBtn');
 const copyAllXpathBtn = $('copyAllXpath');
 const onlyUniqueMode = $('onlyUniqueMode');
 const stepDelayMsEl = $('stepDelayMs');
+const waitReadyMsEl = $('waitReadyMs');
+const waitNetworkQuietMsEl = $('waitNetworkQuietMs');
+const waitNetworkTimeoutMsEl = $('waitNetworkTimeoutMs');
+const waitDomQuietMsEl = $('waitDomQuietMs');
+const waitDomTimeoutMsEl = $('waitDomTimeoutMs');
+const waitPostActionMsEl = $('waitPostActionMs');
 const stepRetryOnError = $('stepRetryOnError');
 const stepRetryCount = $('stepRetryCount');
 const stepRetryDelayMs = $('stepRetryDelayMs');
@@ -648,9 +676,18 @@ function renderResults(result) {
         primaryUniqueEl.textContent = result.primary.isUnique ? '✓ Уникальный' : '×' + result.primary.matchCount;
         primaryUniqueEl.className = `badge ${result.primary.isUnique ? 'unique' : ''}`;
         primaryScoreEl.textContent = result.primary.score;
+        if (primaryLinkedHint) {
+            if (result.linkedControl) {
+                primaryLinkedHint.textContent = result.linkedControl.type === 'date' ? 'При добавлении шага → связанный input (дата).' : 'При добавлении шага → связанный input (ввод).';
+                show(primaryLinkedHint);
+            } else {
+                hide(primaryLinkedHint);
+            }
+        }
         show(primarySectionEl);
     } else {
         hide(primarySectionEl);
+        if (primaryLinkedHint) hide(primaryLinkedHint);
     }
 
     const uniqueOthers = result.uniqueOnly?.slice(1) || [];
@@ -728,6 +765,40 @@ if (stepDelayMsEl) {
         chrome.storage.local.set({ [STORAGE_KEY_STEP_DELAY]: v });
     });
 }
+
+function getWaitAfterStepOptions() {
+    return {
+        waitReadyMs: Math.max(0, parseInt(waitReadyMsEl?.value, 10) || WAIT_READY_DEFAULT),
+        waitNetworkQuietMs: Math.max(0, parseInt(waitNetworkQuietMsEl?.value, 10) || WAIT_NETWORK_QUIET_DEFAULT),
+        waitNetworkTimeoutMs: Math.max(0, parseInt(waitNetworkTimeoutMsEl?.value, 10) || WAIT_NETWORK_TIMEOUT_DEFAULT),
+        waitDomQuietMs: Math.max(0, parseInt(waitDomQuietMsEl?.value, 10) || WAIT_DOM_QUIET_DEFAULT),
+        waitDomTimeoutMs: Math.max(0, parseInt(waitDomTimeoutMsEl?.value, 10) || WAIT_DOM_TIMEOUT_DEFAULT),
+        waitPostActionMs: Math.max(0, parseInt(waitPostActionMsEl?.value, 10) || WAIT_POST_ACTION_DEFAULT),
+    };
+}
+
+const WAIT_STORAGE_KEYS = [
+    STORAGE_KEY_WAIT_READY_MS, STORAGE_KEY_WAIT_NETWORK_QUIET_MS, STORAGE_KEY_WAIT_NETWORK_TIMEOUT_MS,
+    STORAGE_KEY_WAIT_DOM_QUIET_MS, STORAGE_KEY_WAIT_DOM_TIMEOUT_MS, STORAGE_KEY_WAIT_POST_ACTION_MS,
+];
+const WAIT_EL_IDS = ['waitReadyMs', 'waitNetworkQuietMs', 'waitNetworkTimeoutMs', 'waitDomQuietMs', 'waitDomTimeoutMs', 'waitPostActionMs'];
+const WAIT_DEFAULTS = [WAIT_READY_DEFAULT, WAIT_NETWORK_QUIET_DEFAULT, WAIT_NETWORK_TIMEOUT_DEFAULT, WAIT_DOM_QUIET_DEFAULT, WAIT_DOM_TIMEOUT_DEFAULT, WAIT_POST_ACTION_DEFAULT];
+chrome.storage.local.get(WAIT_STORAGE_KEYS, (d) => {
+    WAIT_EL_IDS.forEach((id, i) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const v = d[WAIT_STORAGE_KEYS[i]];
+        if (typeof v === 'number' && v >= 0) el.value = v;
+    });
+});
+WAIT_EL_IDS.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+        const v = Math.max(0, parseInt(el.value || '0', 10) || WAIT_DEFAULTS[i]);
+        chrome.storage.local.set({ [WAIT_STORAGE_KEYS[i]]: v });
+    });
+});
 if (onlyUniqueMode) {
     chrome.storage.local.get(STORAGE_KEY_ONLY_UNIQUE, (d) => {
         onlyUniqueModeVal = !!d[STORAGE_KEY_ONLY_UNIQUE];
@@ -781,10 +852,17 @@ copyForConsoleBtn.addEventListener('click', () => {
 
 if (addPrimaryToListBtn) {
     addPrimaryToListBtn.addEventListener('click', () => {
-        const xpath = (currentResult?.primary?.xpath || primaryXpathEl.textContent || '').trim();
+        let xpath = (currentResult?.primary?.xpath || primaryXpathEl.textContent || '').trim();
+        let action = 'click';
+        let params = {};
+        if (currentResult?.linkedControl?.xpath) {
+            xpath = currentResult.linkedControl.xpath;
+            action = currentResult.linkedControl.type === 'date' ? 'set_date' : 'input';
+            if (action === 'set_date') params = { value: new Date().toISOString().slice(0, 10) };
+        }
         if (!xpath) return;
         openListTab();
-        showStepModal({ xpath, action: 'click', params: {} });
+        showStepModal({ xpath, action, params });
     });
 }
 
@@ -1014,6 +1092,8 @@ function selectEditorStep(stepId) {
     editorXpath.value = step.xpath || '';
     editorAction.value = step.action || 'click';
     editorInputValue.value = step.params?.value || '';
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+    if (editorDateValue) editorDateValue.value = (step.action === 'set_date' && step.params?.value && isoDate.test(String(step.params.value))) ? step.params.value : new Date().toISOString().slice(0, 10);
     editorWaitMs.value = step.params?.delayMs ?? 500;
     editorFileName.value = step.params?.fileName || '';
     editorFileBase64 = step.params?.fileContentBase64 || null;
@@ -1033,6 +1113,7 @@ function selectEditorStep(stepId) {
     if (editorUserActionMessage) editorUserActionMessage.value = step.params?.message || '';
     if (editorBranchExpected) editorBranchExpected.value = step.params?.expectedValue || '';
     renderEditorSeparatorColors(step.params?.color || SEPARATOR_COLORS[0]);
+    renderEditorStepColorButtons(step.params?.stepColor || STEP_COLORS[0]);
     toggleEditorParams();
     if (step.action === 'branch') {
         if (editorBranchNextId) editorBranchNextId.value = step.params?.nextId || '';
@@ -1043,7 +1124,12 @@ function selectEditorStep(stepId) {
 
 function toggleEditorParams() {
     const action = editorAction.value;
+    const hideStepColor = action === 'separator';
+    if (editorStepColorRow) { editorStepColorRow.classList.toggle('hidden', hideStepColor); editorStepColorRow.style.display = hideStepColor ? 'none' : ''; }
     if (editorParamsInput) { editorParamsInput.classList.toggle('hidden', action !== 'input'); editorParamsInput.style.display = action === 'input' ? '' : 'none'; }
+    const isSetDate = action === 'set_date';
+    if (editorParamsSetDate) { editorParamsSetDate.classList.toggle('hidden', !isSetDate); editorParamsSetDate.style.display = isSetDate ? '' : 'none'; }
+    if (isSetDate && editorDateValue && !editorDateValue.value) editorDateValue.value = new Date().toISOString().slice(0, 10);
     if (editorParamsWait) { editorParamsWait.classList.toggle('hidden', action !== 'wait'); editorParamsWait.style.display = action === 'wait' ? '' : 'none'; }
     if (editorParamsUserAction) { editorParamsUserAction.classList.toggle('hidden', action !== 'user_action'); editorParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
     if (editorParamsFile) { editorParamsFile.classList.toggle('hidden', action !== 'file_upload'); editorParamsFile.style.display = action === 'file_upload' ? '' : 'none'; }
@@ -1072,6 +1158,20 @@ function renderEditorSeparatorColors(selected) {
     });
 }
 
+function renderEditorStepColorButtons(selected) {
+    if (!editorStepColorColors) return;
+    const sel = selected || STEP_COLORS[0];
+    editorStepColorColors.innerHTML = STEP_COLORS.map((c) =>
+        `<button type="button" class="step-color-btn ${c === sel ? 'selected' : ''}" data-color="${escapeHtml(c)}" style="background:${c}" title="${escapeHtml(c)}"></button>`
+    ).join('');
+    editorStepColorColors.querySelectorAll('.step-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            editorStepColorColors.querySelectorAll('.step-color-btn').forEach((b) => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        });
+    });
+}
+
 function applyEditorStep() {
     const step = executionList.find((s) => s.id === selectedEditorStepId);
     if (!step) return;
@@ -1080,6 +1180,7 @@ function applyEditorStep() {
     step.action = action;
     step.params = step.params || {};
     if (action === 'input') step.params.value = editorInputValue.value;
+    if (action === 'set_date') step.params.value = (editorDateValue?.value || new Date().toISOString().slice(0, 10)).trim();
     if (action === 'wait') step.params.delayMs = Math.max(0, parseInt(editorWaitMs.value, 10) || 500);
     if (action === 'user_action') step.params.message = (editorUserActionMessage?.value || '').trim() || 'Выполните действие и нажмите Продолжить';
     if (action === 'file_upload') {
@@ -1089,6 +1190,11 @@ function applyEditorStep() {
     if (action === 'separator') {
         step.params.label = (editorSeparatorLabel.value || '').trim();
         step.params.color = editorSeparatorColors?.querySelector('.separator-color-btn.selected')?.dataset.color || SEPARATOR_COLORS[0];
+    }
+    if (action !== 'separator') {
+        step.params.stepColor = editorStepColorColors?.querySelector('.step-color-btn.selected')?.dataset.color || step.params.stepColor || STEP_COLORS[0];
+    } else {
+        delete step.params.stepColor;
     }
     if (action === 'assert') {
         step.params.condition = editorAssertCondition?.value || 'element_exists';
@@ -1376,7 +1482,9 @@ function renderExecutionList() {
     filtered.forEach((step, displayIdx) => {
         const actualIdx = executionList.indexOf(step);
         const li = document.createElement('li');
-        li.className = 'execution-item' + (step.id === currentExecutingStepId ? ' current' : '') + (step.action === 'separator' ? ' execution-item-separator' : '');
+        const stepColor = step?.params?.stepColor;
+        li.className = 'execution-item' + (step.id === currentExecutingStepId ? ' current' : '') + (step.action === 'separator' ? ' execution-item-separator' : '') + (stepColor ? ' has-step-color' : '');
+        if (stepColor) li.style.setProperty('--step-color', stepColor);
         li.dataset.stepId = step.id;
         if (step.action === 'separator') {
             const color = step.params?.color || SEPARATOR_COLORS[0];
@@ -1400,7 +1508,7 @@ function renderExecutionList() {
                 ? `<span class="execution-item-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>${s?.state === 'error' ? `<button type="button" class="btn-icon btn-copy-xpath" data-step-id="${escapeHtml(step.id)}" title="Копировать XPath/URL">📋</button>` : ''}`
                 : '';
             let paramsText = '';
-            if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
+            if ((step.action === 'input' || step.action === 'set_date') && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 30))}${step.params.value.length > 30 ? '…' : ''}"`;
             else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
             else if (step.action === 'wait_for_element') paramsText = `до ${step.params?.timeoutMs ?? 5000}мс`;
             else if (step.action === 'file_upload' && step.params?.fileName) paramsText = step.params.fileContentBase64 ? `📎 ${escapeHtml(step.params.fileName)}` : `📎 ${escapeHtml(step.params.fileName)} (пустой)`;
@@ -1507,7 +1615,9 @@ function renderFlowCanvas() {
         wrapper.dataset.idx = String(idx);
 
         const card = document.createElement('div');
-        card.className = 'flow-card' + (step.action === 'separator' ? ' separator-card' : '') + (step.id === currentExecutingStepId ? ' current' : '');
+        const stepColor = step?.params?.stepColor;
+        card.className = 'flow-card' + (step.action === 'separator' ? ' separator-card' : '') + (stepColor ? ' has-step-color' : '') + (step.id === currentExecutingStepId ? ' current' : '');
+        if (stepColor) card.style.setProperty('--step-color', stepColor);
         card.dataset.stepId = step.id;
         card.dataset.idx = String(idx);
         card.draggable = true;
@@ -1529,7 +1639,7 @@ function renderFlowCanvas() {
             const s = stepRunStatus[step.id];
             const statusBadge = s?.state ? `<span class="flow-card-badge ${s.state === 'ok' ? 'click' : s.state === 'error' ? 'file_upload' : 'wait'}" title="${escapeHtml(s.message || '')}">${escapeHtml(s.state.toUpperCase())}</span>` : '';
             let paramsText = '';
-            if (step.action === 'input' && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 25))}${step.params.value.length > 25 ? '…' : ''}"`;
+            if ((step.action === 'input' || step.action === 'set_date') && step.params?.value) paramsText = `"${escapeHtml(step.params.value.substring(0, 25))}${step.params.value.length > 25 ? '…' : ''}"`;
             else if (step.action === 'wait') paramsText = `${step.params?.delayMs ?? 500} мс`;
             else if (step.action === 'wait_for_element') paramsText = `до ${step.params?.timeoutMs ?? 5000}мс`;
             else if (step.action === 'file_upload' && step.params?.fileName) paramsText = `📎 ${escapeHtml(step.params.fileName)}`;
@@ -1649,11 +1759,14 @@ function showStepModal(step, insertAt) {
         stepTitle.value = (step?.title || suggested || '').toString();
     }
     if (stepTags) stepTags.value = Array.isArray(step?.tags) ? step.tags.join(', ') : '';
+    renderStepColorButtons(step?.params?.stepColor || STEP_COLORS[0]);
     const sepColor = step?.params?.color || SEPARATOR_COLORS[0];
     const sepLabel = step?.params?.label || '';
     if (stepSeparatorLabel) stepSeparatorLabel.value = sepLabel;
     renderSeparatorColorButtons(sepColor);
     stepInputValue.value = (step?.params?.value) || '';
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+    if (stepDateValue) stepDateValue.value = (step?.action === 'set_date' && step?.params?.value && isoDate.test(String(step.params.value))) ? step.params.value : new Date().toISOString().slice(0, 10);
     stepWaitMs.value = (step?.params?.delayMs) ?? 500;
     stepFileName.value = (step?.params?.fileName) || '';
     stepFileBase64 = (step?.params?.fileContentBase64) || null;
@@ -1696,8 +1809,13 @@ function hideStepModal() {
 function toggleStepParams() {
     const action = stepAction.value;
     const isSeparator = action === 'separator';
+    const hideStepColor = isSeparator;
+    if (stepColorRow) { stepColorRow.classList.toggle('hidden', hideStepColor); stepColorRow.style.display = hideStepColor ? 'none' : ''; }
     stepParamsInput.classList.toggle('hidden', action !== 'input');
     stepParamsInput.style.display = action === 'input' ? '' : 'none';
+    const isSetDate = action === 'set_date';
+    if (stepParamsSetDate) { stepParamsSetDate.classList.toggle('hidden', !isSetDate); stepParamsSetDate.style.display = isSetDate ? '' : 'none'; }
+    if (isSetDate && stepDateValue && !stepDateValue.value) stepDateValue.value = new Date().toISOString().slice(0, 10);
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
     const isWaitForElement = action === 'wait_for_element';
@@ -1761,6 +1879,7 @@ if (stepAssertCondition) stepAssertCondition.addEventListener('change', toggleSt
 if (stepBranchCondition) stepBranchCondition.addEventListener('change', toggleStepParams);
 
 let selectedSeparatorColor = SEPARATOR_COLORS[0];
+let selectedStepColor = STEP_COLORS[0];
 
 function renderSeparatorColorButtons(selected) {
     if (!stepSeparatorColors) return;
@@ -1772,6 +1891,20 @@ function renderSeparatorColorButtons(selected) {
         btn.addEventListener('click', () => {
             selectedSeparatorColor = btn.dataset.color;
             renderSeparatorColorButtons(selectedSeparatorColor);
+        });
+    });
+}
+
+function renderStepColorButtons(selected) {
+    if (!stepColorColors) return;
+    selectedStepColor = selected || selectedStepColor || STEP_COLORS[0];
+    stepColorColors.innerHTML = STEP_COLORS.map((c) =>
+        `<button type="button" class="step-color-btn ${c === selectedStepColor ? 'selected' : ''}" data-color="${escapeHtml(c)}" style="background:${c}" title="${escapeHtml(c)}"></button>`
+    ).join('');
+    stepColorColors.querySelectorAll('.step-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            selectedStepColor = btn.dataset.color;
+            renderStepColorButtons(selectedStepColor);
         });
     });
 }
@@ -1813,10 +1946,14 @@ function upsertStepFromModal({ alsoAddAssert = false } = {}) {
     if (timeoutVal > 0) params.timeoutMs = timeoutVal;
     params.mandatory = stepMandatory?.checked !== false;
     if (action === 'input') params.value = stepInputValue.value;
+    if (action === 'set_date') params.value = (stepDateValue?.value || new Date().toISOString().slice(0, 10)).trim();
     if (action === 'wait') params.delayMs = Math.max(0, parseInt(stepWaitMs.value, 10) || 500);
     if (action === 'separator') {
         params.color = selectedSeparatorColor || SEPARATOR_COLORS[0];
         params.label = (stepSeparatorLabel?.value || '').trim();
+    }
+    if (action !== 'separator') {
+        params.stepColor = selectedStepColor || STEP_COLORS[0];
     }
     if (action === 'file_upload') {
         params.fileName = stepFileName.value.trim() || 'file';
@@ -1928,13 +2065,20 @@ stepModalSave.addEventListener('click', () => upsertStepFromModal({ alsoAddAsser
 if (stepModalSaveAddAssert) stepModalSaveAddAssert.addEventListener('click', () => upsertStepFromModal({ alsoAddAssert: true }));
 
 addStepBtn.addEventListener('click', () => {
-    const xpath = (currentResult?.primary?.xpath || (primaryXpathEl && primaryXpathEl.textContent) || '').trim();
+    let xpath = (currentResult?.primary?.xpath || (primaryXpathEl && primaryXpathEl.textContent) || '').trim();
+    let action = 'click';
+    let params = {};
+    if (currentResult?.linkedControl?.xpath) {
+        xpath = currentResult.linkedControl.xpath;
+        action = currentResult.linkedControl.type === 'date' ? 'set_date' : 'input';
+        if (action === 'set_date') params = { value: new Date().toISOString().slice(0, 10) };
+    }
     if (!xpath) {
         addStepBtn.textContent = 'Сначала выберите элемент';
         setTimeout(() => { addStepBtn.textContent = '+ Добавить текущий'; }, 2000);
         return;
     }
-    showStepModal({ xpath, action: 'click', params: {} });
+    showStepModal({ xpath, action, params });
 });
 
 addStepManualBtn.addEventListener('click', () => {
@@ -2039,7 +2183,7 @@ document.addEventListener('click', (e) => {
                 return;
             }
             const stepWithVars = replaceVariablesInStep(step, getCurrentVariables());
-            sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true }).then((resp) => {
+            sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true, ...getWaitAfterStepOptions() }).then((resp) => {
                 const r = resp?.results?.[0];
                 if (r?.ok) setStepStatus(step.id, 'ok', '');
                 else setStepStatus(step.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -2132,13 +2276,20 @@ if (addUserActionBtn) {
 // ——— Flow tab toolbar ———
 if (flowAddStepBtn) {
     flowAddStepBtn.addEventListener('click', () => {
-        const xpath = (currentResult?.primary?.xpath || (primaryXpathEl && primaryXpathEl.textContent) || '').trim();
+        let xpath = (currentResult?.primary?.xpath || (primaryXpathEl && primaryXpathEl.textContent) || '').trim();
+        let action = 'click';
+        let params = {};
+        if (currentResult?.linkedControl?.xpath) {
+            xpath = currentResult.linkedControl.xpath;
+            action = currentResult.linkedControl.type === 'date' ? 'set_date' : 'input';
+            if (action === 'set_date') params = { value: new Date().toISOString().slice(0, 10) };
+        }
         if (!xpath) {
             flowAddStepBtn.textContent = 'Сначала выберите элемент';
             setTimeout(() => { flowAddStepBtn.textContent = '+ Добавить текущий'; }, 2000);
             return;
         }
-        showStepModal({ xpath, action: 'click', params: {} });
+        showStepModal({ xpath, action, params });
     });
 }
 if (flowAddManualBtn) flowAddManualBtn.addEventListener('click', () => showStepModal(null));
@@ -2187,7 +2338,7 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
         renderExecutionList();
         renderEditorStepList();
         const stepWithVars = replaceVariablesInStep(stepToRun, getCurrentVariables());
-        sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true }).then((resp) => {
+        sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true, ...getWaitAfterStepOptions() }).then((resp) => {
             const r = resp?.results?.[0];
             if (r?.ok) setStepStatus(stepToRun.id, 'ok', '');
             else setStepStatus(stepToRun.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -2294,7 +2445,7 @@ function parseImportFile(data) {
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
-        action: ['click', 'click_if_exists', 'input', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
+        action: ['click', 'click_if_exists', 'input', 'set_date', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
         title: typeof s.title === 'string' ? s.title : '',
         tags: Array.isArray(s.tags) ? s.tags.map((t) => String(t)).filter(Boolean).slice(0, 12) : [],
         params: s.params && typeof s.params === 'object' ? s.params : {}
@@ -2397,7 +2548,7 @@ function exportToTemplates() {
         if (s.action === 'click' || s.action === 'click_if_exists') return s.action === 'click_if_exists'
             ? `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').click({ timeout: 500 }).catch(() => {});`
             : `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').click();`;
-        if (s.action === 'input') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').fill('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
+        if (s.action === 'input' || s.action === 'set_date') return `  await page.locator('xpath=${s.xpath.replace(/'/g, "\\'")}').fill('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'wait') return `  await page.waitForTimeout(${s.params?.delayMs ?? 500});`;
         if (s.action === 'branch') return `  // branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
         if (s.action === 'assert') return `  // assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
@@ -2409,7 +2560,7 @@ function exportToTemplates() {
         if (s.action === 'click' || s.action === 'click_if_exists') return s.action === 'click_if_exists'
             ? `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').click({ timeout: 500 }).catch(() => {});`
             : `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').click();`;
-        if (s.action === 'input') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').type('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
+        if (s.action === 'input' || s.action === 'set_date') return `  cy.xpath('${s.xpath.replace(/'/g, "\\'")}').type('${(s.params?.value || '').replace(/'/g, "\\'")}');`;
         if (s.action === 'wait') return `  cy.wait(${s.params?.delayMs ?? 500});`;
         if (s.action === 'branch') return `  // branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
         if (s.action === 'assert') return `  // assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
@@ -2421,7 +2572,7 @@ function exportToTemplates() {
         if (s.action === 'click' || s.action === 'click_if_exists') return s.action === 'click_if_exists'
             ? `  try { driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).click(); } catch (Exception e) {}`
             : `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).click();`;
-        if (s.action === 'input') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).sendKeys("${(s.params?.value || '').replace(/"/g, '\\"')}");`;
+        if (s.action === 'input' || s.action === 'set_date') return `  driver.findElement(By.xpath("${s.xpath.replace(/"/g, '\\"')}")).sendKeys("${(s.params?.value || '').replace(/"/g, '\\"')}");`;
         if (s.action === 'wait') return `  Thread.sleep(${s.params?.delayMs ?? 500});`;
         if (s.action === 'branch') return `  // branch: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
         if (s.action === 'assert') return `  // assert: ${s.params?.condition || '?'} ${s.params?.expectedValue ? `"${s.params.expectedValue}"` : ''}`;
@@ -2494,7 +2645,7 @@ function stepToPythonPlaywright(s) {
     const pad = '            ';
     if (s.action === 'click') return `${pad}page.locator("xpath=${esc(s.xpath)}").click()`;
     if (s.action === 'click_if_exists') return `${pad}try:\n${pad}    page.locator("xpath=${esc(s.xpath)}").click(timeout=500)\n${pad}except Exception:\n${pad}    pass`;
-    if (s.action === 'input') return `${pad}page.locator("xpath=${esc(s.xpath)}").fill("${esc(s.params?.value || '')}")`;
+    if (s.action === 'input' || s.action === 'set_date') return `${pad}page.locator("xpath=${esc(s.xpath)}").fill("${esc(s.params?.value || '')}")`;
     if (s.action === 'wait') return `${pad}page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
     if (s.action === 'wait_for_element') return `${pad}page.locator("xpath=${esc(s.xpath)}").wait_for(timeout=${s.params?.timeoutMs ?? 5000})`;
     if (s.action === 'navigate') return `${pad}page.goto("${esc(s.params?.url || '')}")`;
@@ -2546,7 +2697,7 @@ def page():
             const pad = '    ';
             if (s.action === 'click') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").click()`;
             if (s.action === 'click_if_exists') return `${pad}try:\n${pad}    page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").click(timeout=500)\n${pad}except Exception:\n${pad}    pass`;
-            if (s.action === 'input') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").fill(_sub("${esc(s.params?.value || '')}", data))`;
+            if (s.action === 'input' || s.action === 'set_date') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").fill(_sub("${esc(s.params?.value || '')}", data))`;
             if (s.action === 'wait') return `${pad}page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
             if (s.action === 'wait_for_element') return `${pad}page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").wait_for(timeout=${s.params?.timeoutMs ?? 5000})`;
             if (s.action === 'navigate') return `${pad}page.goto(_sub("${esc(s.params?.url || '')}", data))`;
@@ -2664,7 +2815,7 @@ function stepToPomAction(s) {
     const pad = '        ';
     if (s.action === 'click') return `${pad}self.click_with_wait("xpath=${esc(s.xpath)}", "${esc((s.xpath || '').substring(0, 40))}")`;
     if (s.action === 'click_if_exists') return `${pad}self.click_if_exists("xpath=${esc(s.xpath)}")`;
-    if (s.action === 'input') return `${pad}self.fill_with_validation("xpath=${esc(s.xpath)}", "${esc(s.params?.value || '')}")`;
+    if (s.action === 'input' || s.action === 'set_date') return `${pad}self.fill_with_validation("xpath=${esc(s.xpath)}", "${esc(s.params?.value || '')}")`;
     if (s.action === 'wait') return `${pad}self.page.wait_for_timeout(${s.params?.delayMs ?? 500})`;
     if (s.action === 'wait_for_element') return `${pad}self.wait_for_element("xpath=${esc(s.xpath)}", ${s.params?.timeoutMs ?? 5000})`;
     if (s.action === 'navigate') return `${pad}self.page.goto("${esc(s.params?.url || '')}")`;
@@ -2690,7 +2841,7 @@ function exportToPomTemplate() {
     const stepsCodeData = hasData ? steps.map((s) => {
         const pad = '        ';
         if (s.action === 'click') return `${pad}self.click_with_wait("xpath=" + _sub("${esc(s.xpath)}", data), "click")`;
-        if (s.action === 'input') return `${pad}self.fill_with_validation("xpath=" + _sub("${esc(s.xpath)}", data), _sub("${esc(s.params?.value || '')}", data))`;
+        if (s.action === 'input' || s.action === 'set_date') return `${pad}self.fill_with_validation("xpath=" + _sub("${esc(s.xpath)}", data), _sub("${esc(s.params?.value || '')}", data))`;
         if (s.action === 'navigate') return `${pad}self.page.goto(_sub("${esc(s.params?.url || '')}", data))`;
         if (s.action === 'file_upload') return `${pad}self.page.locator("xpath=" + _sub("${esc(s.xpath)}", data) + "").set_input_files(_sub("${esc(s.params?.fileName || 'file')}", data))`;
         return stepToPomAction(s);
@@ -3151,7 +3302,8 @@ async function runDataDrivenExecution(tabId) {
                 action: 'executeList',
                 steps: stepsWithVars,
                 continueOnError: !stopOnErrorEl?.checked,
-                stepDelayMs: Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT)
+                stepDelayMs: Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT),
+                ...getWaitAfterStepOptions()
             });
             const results = resp?.results || [];
             results.forEach((r) => {
@@ -3211,7 +3363,7 @@ async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, origina
                 continue;
             }
             const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
-            const resp = await sendToContentAndWait(tabId, { action: 'executeStep', step, selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout }, stepTimeout);
+            const resp = await sendToContentAndWait(tabId, { action: 'executeStep', step, selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout, ...getWaitAfterStepOptions() }, stepTimeout);
             if (!resp?.ok) {
                 lastExecutionReport.push({ stepId: step.id, step, ok: false, error: resp?.error, durationMs: 0, timestamp: new Date().toISOString() });
                 highlightElementOnError(tabId, step);
@@ -3334,7 +3486,8 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             const resp = await sendToContentAndWait(tabId, {
                 action: 'executeStep',
                 step: stepWithVars,
-                selectorTimeoutMs: stepWithVars.params?.timeoutMs ?? selectorTimeout
+                selectorTimeoutMs: stepWithVars.params?.timeoutMs ?? selectorTimeout,
+                ...getWaitAfterStepOptions()
             }, stepTimeout);
             if (!resp?.ok) {
                 const errMsg = resp?.error || 'Ошибка';

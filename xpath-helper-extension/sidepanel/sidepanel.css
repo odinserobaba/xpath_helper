@@ -47,6 +47,7 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 
 .settings-section { background: var(--bg2); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #2a2a4a; }
 .settings-title { font-size: 11px; color: var(--text2); text-transform: uppercase; margin-bottom: 8px; }
+.settings-subtitle { font-size: 11px; color: var(--accent); margin: 12px 0 6px; }
 .setting-row { margin-bottom: 8px; }
 .setting-row label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
 .setting-input-row { display: flex; align-items: center; gap: 10px; }
@@ -60,6 +61,7 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .filter-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); cursor: pointer; }
 .filter-check input { cursor: pointer; }
 
+.primary-linked-hint { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
 .primary-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .primary-actions .btn-copy { flex: 1; min-width: 100px; }
 .btn-console { padding: 8px 12px; background: var(--bg2); border: 1px solid #2a2a4a; border-radius: 4px; color: var(--text); font-size: 12px; cursor: pointer; }
@@ -154,6 +156,33 @@ body { font-family: sans-serif; background: var(--bg); color: var(--text); font-
 .separator-color-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
 .separator-color-btn:hover { transform: scale(1.1); }
 .separator-color-btn.selected { border-color: #fff; box-shadow: 0 0 0 1px var(--bg); }
+.step-color-colors { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.step-color-btn { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; background: #2a2a4a; }
+.step-color-btn:hover { transform: translateY(-1px); }
+.step-color-btn.selected { border-color: #fff; box-shadow: 0 0 0 1px var(--bg); }
+
+.execution-item.has-step-color { position: relative; }
+.execution-item.has-step-color::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    border-radius: 6px 0 0 6px;
+    background: var(--step-color, transparent);
+}
+.flow-card.has-step-color { position: relative; }
+.flow-card.has-step-color::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    border-radius: 8px 0 0 8px;
+    background: var(--step-color, transparent);
+}
 .list-setting { margin-top: 8px; }
 .execution-item-drag { cursor: grab; color: var(--text2); font-size: 14px; padding: 0 4px; user-select: none; }
 .execution-item-drag:active { cursor: grabbing; }

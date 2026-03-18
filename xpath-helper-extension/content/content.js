@@ -146,7 +146,15 @@ function init() {
                 const steps = Array.isArray(request.steps) ? request.steps : [];
                 const continueOnError = request.continueOnError !== false;
                 const stepDelayMs = request.stepDelayMs ?? 100;
-                runExecutionList(steps, token, { continueOnError, stepDelayMs })
+                const waitOpts = {
+                    waitReadyMs: Math.max(0, request.waitReadyMs ?? 80),
+                    waitNetworkQuietMs: Math.max(0, request.waitNetworkQuietMs ?? 150),
+                    waitNetworkTimeoutMs: Math.max(0, request.waitNetworkTimeoutMs ?? 2500),
+                    waitDomQuietMs: Math.max(0, request.waitDomQuietMs ?? 100),
+                    waitDomTimeoutMs: Math.max(0, request.waitDomTimeoutMs ?? 1500),
+                    waitPostActionMs: Math.max(0, request.waitPostActionMs ?? 50),
+                };
+                runExecutionList(steps, token, { continueOnError, stepDelayMs, ...waitOpts })
                     .then((results) => {
                         try { chrome.runtime.sendMessage({ action: 'executionResult', requestId, result: { ok: true, results } }); } catch (_) {}
                     })
@@ -160,7 +168,15 @@ function init() {
                 const step = request.step;
                 const token = ++runToken;
                 const selectorTimeoutMs = Math.max(0, request.selectorTimeoutMs ?? SELECTOR_TIMEOUT_DEFAULT);
-                runExecutionList([step], token, { continueOnError: false, stepDelayMs: 0, selectorTimeoutMs })
+                const waitOpts = {
+                    waitReadyMs: Math.max(0, request.waitReadyMs ?? 80),
+                    waitNetworkQuietMs: Math.max(0, request.waitNetworkQuietMs ?? 150),
+                    waitNetworkTimeoutMs: Math.max(0, request.waitNetworkTimeoutMs ?? 2500),
+                    waitDomQuietMs: Math.max(0, request.waitDomQuietMs ?? 100),
+                    waitDomTimeoutMs: Math.max(0, request.waitDomTimeoutMs ?? 1500),
+                    waitPostActionMs: Math.max(0, request.waitPostActionMs ?? 50),
+                };
+                runExecutionList([step], token, { continueOnError: false, stepDelayMs: 0, selectorTimeoutMs, ...waitOpts })
                     .then((results) => {
                         const r = results[0];
                         const res = r ? { ok: r.soft ? true : r.ok, error: r.error, conditionResult: r.conditionResult } : { ok: false, error: 'No result' };
@@ -250,17 +266,45 @@ function init() {
                 text: el.textContent?.trim().substring(0, 50) || '',
                 attributes: Array.from(el.attributes).map(a => ({ name: a.name, value: a.value }))
             };
-            generator.generateAll(el).then(result => {
+            generator.generateAll(el).then(async (result) => {
+                // Если наведён <label for="id"> — подставляем связанный input/textarea для ввода/даты
+                if (result && el.tagName === 'LABEL' && el.htmlFor) {
+                    const control = document.getElementById(el.htmlFor);
+                    if (control && (control.tagName === 'INPUT' || control.tagName === 'TEXTAREA')) {
+                        try {
+                            const controlResult = await generator.generateAll(control);
+                            const primary = controlResult?.primary?.xpath;
+                            if (primary) {
+                                result = { ...result, linkedControl: { xpath: primary, tagName: control.tagName.toLowerCase(), type: (control.type || '').toLowerCase() } };
+                            }
+                        } catch (_) {}
+                    }
+                }
                 sendToPanel({ action: 'elementHovered', element: info, xpathResult: result });
             });
         }, getDebounceMs());
     }, true);
 
     /** Выполняет список шагов на странице по очереди и возвращает результаты по каждому шагу */
-    async function runExecutionList(steps, token, { continueOnError, stepDelayMs = 100, selectorTimeoutMs: defaultTimeout } = { continueOnError: true }) {
+    async function runExecutionList(
+        steps,
+        token,
+        {
+            continueOnError,
+            stepDelayMs = 100,
+            selectorTimeoutMs: defaultTimeout,
+            waitReadyMs = 80,
+            waitNetworkQuietMs = 150,
+            waitNetworkTimeoutMs = 2500,
+            waitDomQuietMs = 100,
+            waitDomTimeoutMs = 1500,
+            waitPostActionMs = 50,
+        } = { continueOnError: true }
+    ) {
         const baseTimeout = defaultTimeout ?? selectorTimeoutMs;
         const results = [];
-        async function waitForNetworkIdle(quietMs = 500, timeoutMs = 10000) {
+        // Настройки ожидания приходят из панели (см. executeList/executeStep)
+        async function waitForNetworkIdle(quietMs = waitNetworkQuietMs, timeoutMs = waitNetworkTimeoutMs) {
             let lastCount = -1;
             let stableSince = Date.now();
             const deadline = Date.now() + timeoutMs;
@@ -276,10 +320,10 @@ function init() {
                         stableSince = Date.now();
                     }
                 } catch (_) {}
-                await new Promise((r) => setTimeout(r, 100));
+                await new Promise((r) => setTimeout(r, 50));
             }
         }
-        async function waitForDomStable(quietMs = 300, timeoutMs = 5000) {
+        async function waitForDomStable(quietMs = waitDomQuietMs, timeoutMs = waitDomTimeoutMs) {
             return new Promise((resolve) => {
                 let timer = null;
                 const observer = new MutationObserver(() => {
@@ -296,12 +340,12 @@ function init() {
         async function waitForPageLoad(timeoutMs = 10000, { networkIdle = false, domStable = false } = {}) {
             const deadline = Date.now() + timeoutMs;
             while (document.readyState !== 'complete' && Date.now() < deadline) {
-                await new Promise((r) => setTimeout(r, 100));
+                await new Promise((r) => setTimeout(r, 50));
                 if (!isContextValid() || token !== runToken) return;
             }
-            await new Promise((r) => setTimeout(r, 300));
-            if (networkIdle) await waitForNetworkIdle(500, 5000);
-            if (domStable) await waitForDomStable(300, 3000);
+            await new Promise((r) => setTimeout(r, Math.max(0, waitReadyMs)));
+            if (networkIdle) await waitForNetworkIdle(waitNetworkQuietMs, waitNetworkTimeoutMs);
+            if (domStable) await waitForDomStable(waitDomQuietMs, waitDomTimeoutMs);
         }
         async function findElementByXPath(xpath, timeoutMs) {
             const deadline = Date.now() + Math.max(0, timeoutMs || 0);
@@ -356,7 +400,7 @@ function init() {
                     if (elOpt) {
                         elOpt.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         elOpt.click();
-                        await new Promise((r) => setTimeout(r, 150));
+                        await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
                         if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
                     }
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
@@ -468,7 +512,7 @@ function init() {
                 if (step.action === 'click') {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     el.click();
-                    await new Promise((r) => setTimeout(r, 150));
+                    await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
                     if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
@@ -516,7 +560,7 @@ function init() {
                     fileInput.files = dt.files;
                     fileInput.dispatchEvent(new Event('input', { bubbles: true }));
                     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    await new Promise((r) => setTimeout(r, 150));
+                    await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
                     if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
@@ -524,7 +568,7 @@ function init() {
                     break;
                 }
 
-                if (step.action === 'input') {
+                if (step.action === 'input' || step.action === 'set_date') {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     const value = step.params?.value ?? '';
                     const tag = (el.tagName || '').toLowerCase();
@@ -543,7 +587,7 @@ function init() {
                         el.dispatchEvent(new Event('input', { bubbles: true }));
                         el.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                    await new Promise((r) => setTimeout(r, 100));
+                    await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
                     if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
