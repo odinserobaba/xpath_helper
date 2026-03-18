@@ -1,0 +1,23 @@
+# Python venv / caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runner outputs / artifacts
+outputs/
+
+# Local logs (JSONL/txt/html)
+*.log
+tests/logs/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+

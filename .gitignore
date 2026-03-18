@@ -53,6 +53,8 @@ coverage/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+venv/
 
 # Exported artifacts (if downloaded into repo)
 report*.html
@@ -64,3 +66,4 @@ conftest.py
 
 # Web runner outputs
 web-runner/outputs/
+web-runner/.venv/
