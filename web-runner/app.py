@@ -1482,6 +1482,88 @@ def run_live_page(run_id: str, request: Request) -> HTMLResponse:
     return templates.TemplateResponse("run.html", {"request": request, "run_id": run_id})
 
 
+@app.post("/api/runs/{run_id}/derive-scenario", response_class=JSONResponse)
+async def api_derive_scenario_from_run(run_id: str, request: Request) -> JSONResponse:
+    """Create a new scenario using selectorUsed from a successful run."""
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+
+    run_dir = OUTPUTS_DIR / run_id
+    report_path = run_dir / "report.json"
+    input_path = run_dir / "input.json"
+    meta_path = run_dir / "meta.json"
+    if not report_path.exists() or not input_path.exists():
+        return JSONResponse({"ok": False, "error": "Run not found"}, status_code=404)
+
+    report = _read_json(report_path)
+    if isinstance(report, dict) and report.get("failCount", 1) != 0:
+        return JSONResponse({"ok": False, "error": "Run is not successful (failCount>0)"}, status_code=400)
+
+    raw = _read_json(input_path)
+    if not isinstance(raw, dict) or not isinstance(raw.get("steps"), list):
+        return JSONResponse({"ok": False, "error": "Invalid input.json"}, status_code=400)
+
+    used_by_step: Dict[int, str] = {}
+    for s in (report.get("steps") or []):
+        if not isinstance(s, dict):
+            continue
+        try:
+            no = int(s.get("step") or 0)
+        except Exception:
+            continue
+        sel = str(s.get("selectorUsed") or "").strip()
+        if no > 0 and sel and sel != "—":
+            used_by_step[no] = sel
+
+    new_steps = []
+    for s in raw.get("steps") or []:
+        if not isinstance(s, dict):
+            continue
+        step_no = int(s.get("step") or 0)
+        action = str(s.get("action") or "")
+        xpath = str(s.get("xpath") or "")
+        params = s.get("params") if isinstance(s.get("params"), dict) else {}
+        sel_used = used_by_step.get(step_no, "").strip()
+        if sel_used and action not in {"navigate", "wait", "user_action", "separator"}:
+            if xpath.strip() and xpath.strip() != sel_used:
+                fx = params.get("fallbackXPaths")
+                if not isinstance(fx, list):
+                    fx = []
+                if xpath not in fx:
+                    fx = [xpath] + [x for x in fx if isinstance(x, str)]
+                params["fallbackXPaths"] = fx[:30]
+            s = {**s, "xpath": sel_used, "params": params}
+        new_steps.append(s)
+
+    scenario_id = "derived_" + run_id + "_" + time.strftime("%Y%m%d_%H%M%S")
+    base_name = str(raw.get("name") or "scenario")
+    new_name = f"{base_name} — stabilized ({time.strftime('%Y-%m-%d %H:%M')})"
+
+    derived = dict(raw)
+    derived["id"] = scenario_id
+    derived["name"] = new_name
+    derived["exportedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    scenario_source_id = None
+    if meta_path.exists():
+        try:
+            scenario_source_id = json.loads(meta_path.read_text(encoding="utf-8")).get("scenarioId")
+        except Exception:
+            scenario_source_id = None
+    derived["derivedFrom"] = {
+        "runId": run_id,
+        "scenarioId": scenario_source_id,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "type": "stabilizedSelectors",
+    }
+    derived["steps"] = new_steps
+
+    _write_json(_scenario_path(scenario_id), derived)
+    _snapshot_scenario(scenario_id)
+    _jsonl_append(LOG_DIR / "web-runner.log", {"ts": time.time(), "level": "info", "event": "scenario_derived", "runId": run_id, "scenarioId": scenario_id})
+    return JSONResponse({"ok": True, "scenario": {"id": scenario_id, "name": new_name}})
+
+
 @app.get("/api/runs/{run_id}/events")
 async def api_run_events(run_id: str, request: Request) -> Response:
     unauthorized = _require_token(request)

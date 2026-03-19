@@ -43,6 +43,7 @@
         <span id="counts"><span class="pill ok">OK: 0</span> <span class="pill fail">FAIL: 0</span></span>
         <a id="reportLink" href="/runs/{{ run_id }}/report">report.json</a>
         <a id="logLink" href="/runs/{{ run_id }}/log">log.txt</a>
+        <button id="deriveBtn" type="button" style="margin-left:auto;background:#0a0a14;border:1px solid #2a2a4a;color:var(--text);border-radius:10px;padding:6px 10px;cursor:pointer;font-weight:700;">Create stabilized scenario</button>
       </div>
 
       <div class="grid">
@@ -73,13 +74,17 @@
     const steps = new Map(); // stepNo -> {step, action, ok?, error?, screenshot?}
     let okCount = 0, failCount = 0;
     let currentStep = null;
+    let runFinished = false;
 
     const els = {
       stepsBody: document.getElementById('stepsBody'),
       log: document.getElementById('log'),
       scenarioName: document.getElementById('scenarioName'),
       counts: document.getElementById('counts'),
+      deriveBtn: document.getElementById('deriveBtn'),
     };
+    els.deriveBtn.disabled = true;
+    els.deriveBtn.title = 'Available after successful run (failCount=0)';
 
     function render() {
       const rows = [...steps.values()].sort((a,b) => (a.step||0) - (b.step||0));
@@ -101,6 +106,7 @@
         }
       }
       els.counts.innerHTML = `<span class="pill ok">OK: ${okCount}</span> <span class="pill fail">FAIL: ${failCount}</span>`;
+      els.deriveBtn.disabled = !(runFinished && failCount === 0);
     }
 
     function logLine(line) {
@@ -139,6 +145,7 @@
       } else if (e === 'run_done') {
         okCount = msg.okCount ?? okCount;
         failCount = msg.failCount ?? failCount;
+        runFinished = true;
         logLine(`[run_done] ok=${okCount} fail=${failCount} totalMs=${msg.totalMs ?? ''}`);
         es.close();
       }
@@ -147,6 +154,21 @@
     es.onerror = () => {
       logLine('[sse] disconnected');
     };
+
+    els.deriveBtn.addEventListener('click', async () => {
+      els.deriveBtn.disabled = true;
+      try {
+        const r = await fetch(`/api/runs/${runId}/derive-scenario`, { method: 'POST' });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        logLine(`[derive] created scenarioId=${j.scenario?.id || ''}`);
+        alert('Created: ' + (j.scenario?.id || 'ok'));
+      } catch (e) {
+        alert('Derive failed: ' + (e?.message || e));
+      } finally {
+        els.deriveBtn.disabled = false;
+      }
+    });
   </script>
 </body>
 </html>

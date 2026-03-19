@@ -357,21 +357,5 @@
       }
     }
   ],
-  "id": "pr3_20260318_151012",
-  "runnerSettings": {
-    "startUrl": "",
-    "baseUrl": "",
-    "viewport": "1280x720",
-    "slowMoMs": 0,
-    "headless": true,
-    "defaultTimeoutMs": 2000,
-    "connectOverCdp": true,
-    "cdpEndpoint": "9222",
-    "bringToFront": true,
-    "highlightSteps": true,
-    "variables": {},
-    "dataRows": null,
-    "maxRows": 0,
-    "stopOnFirstFail": true
-  }
+  "id": "pr3_20260318_151012"
 }

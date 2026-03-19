@@ -8,7 +8,9 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -d ".venv" ]; then
+if [ ! -f ".venv/bin/activate" ]; then
+  # If a previous venv creation was interrupted, ".venv" may exist without "bin/activate".
+  rm -rf .venv
   python3 -m venv .venv
 fi
 
