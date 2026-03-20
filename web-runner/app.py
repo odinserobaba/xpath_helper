@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import anyio
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -112,6 +112,16 @@ def _jsonl_append(path: Path, obj: Dict[str, Any]) -> None:
 def _run_events_path(run_dir: Path) -> Path:
     return run_dir / "events.jsonl"
 
+
+RUN_CANCEL_FILENAME = "_cancel_requested"
+
+
+def _run_cancel_requested(check_dir: Path) -> bool:
+    try:
+        return (check_dir / RUN_CANCEL_FILENAME).exists()
+    except Exception:
+        return False
+
 def _emit_run_event(run_dir: Path, obj: Dict[str, Any]) -> None:
     _jsonl_append(_run_events_path(run_dir), obj)
 
@@ -121,8 +131,12 @@ def _is_soft_assert_failure(err: str) -> bool:
     return "soft assert" in t or (t.startswith("soft ") and "assert" in t)
 
 
-def _debug_wait_for_continue(run_dir: Path, step_no: int) -> None:
-    """Пауза до POST /api/runs/{id}/debug-continue (создаётся файл _debug_continue в каталоге прогона)."""
+def _debug_wait_for_continue(
+    run_dir: Path,
+    step_no: int,
+    cancel_check_dir_v: Optional[Path] = None,
+) -> bool:
+    """Пауза до POST /api/runs/{id}/debug-continue. False = прогон остановлен кнопкой Stop."""
     flag = run_dir / "_debug_continue"
     try:
         flag.unlink(missing_ok=True)
@@ -138,16 +152,20 @@ def _debug_wait_for_continue(run_dir: Path, step_no: int) -> None:
             "hint": "Отправьте POST /api/runs/{runId}/debug-continue или кнопку в UI",
         },
     )
+    _chk = cancel_check_dir_v if cancel_check_dir_v is not None else run_dir
     deadline = time.time() + 7200
     while time.time() < deadline:
+        if _run_cancel_requested(_chk):
+            return False
         if flag.exists():
             try:
                 flag.unlink(missing_ok=True)
             except Exception:
                 pass
             _emit_run_event(run_dir, {"ts": time.time(), "event": "debug_resume", "step": step_no})
-            return
+            return True
         time.sleep(0.2)
+    return True
 
 
 def _require_token(request: Request) -> Optional[JSONResponse]:
@@ -157,6 +175,17 @@ def _require_token(request: Request) -> Optional[JSONResponse]:
     if token != RUNNER_TOKEN:
         return JSONResponse({"ok": False, "error": "Unauthorized"}, status_code=401)
     return None
+
+
+def _require_token_sse(request: Request, query_token: Optional[str] = None) -> Optional[JSONResponse]:
+    """Для SSE браузер не шлёт кастомные заголовки — допускаем тот же токен в query (?token=)."""
+    if not RUNNER_TOKEN:
+        return None
+    hdr = (request.headers.get("x-runner-token") or "").strip()
+    q = (query_token or "").strip()
+    if hdr == RUNNER_TOKEN or q == RUNNER_TOKEN:
+        return None
+    return JSONResponse({"ok": False, "error": "Unauthorized"}, status_code=401)
 
 
 def _slugify(s: str) -> str:
@@ -561,11 +590,14 @@ def run_scenario(
     start_step_no: Optional[int] = None,
     debug_breakpoints: Optional[Any] = None,
     capture_console: bool = False,
+    cancel_request_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     logs: List[str] = []
     results: List[Dict[str, Any]] = []
     t0 = time.time()
     variables = dict(variables or {})
+    run_cancelled = False
+    _cancel_chk = cancel_request_dir if cancel_request_dir is not None else run_dir
 
     width, height = 1280, 720
     try:
@@ -840,8 +872,23 @@ def run_scenario(
             idx = entry_idx
             while idx < len(steps):
                 s = steps[idx]
+                if _run_cancel_requested(_cancel_chk):
+                    run_cancelled = True
+                    _log_line(logs, "■ Остановка по запросу (Stop) перед шагом #%s" % s.step)
+                    _emit_run_event(
+                        run_dir,
+                        {"ts": time.time(), "event": "run_cancelled", "step": s.step, "reason": "user_stop"},
+                    )
+                    break
                 if bp and s.step in bp:
-                    _debug_wait_for_continue(run_dir, s.step)
+                    if not _debug_wait_for_continue(run_dir, s.step, _cancel_chk):
+                        run_cancelled = True
+                        _log_line(logs, "■ Остановка по запросу (Stop) во время отладочной паузы")
+                        _emit_run_event(
+                            run_dir,
+                            {"ts": time.time(), "event": "run_cancelled", "step": s.step, "reason": "user_stop_debug"},
+                        )
+                        break
                 step_t0 = time.time()
                 ok = True
                 err = ""
@@ -1562,7 +1609,17 @@ def run_scenario(
             else:
                 r["failReason"] = "error"
 
-    _emit_run_event(run_dir, {"ts": time.time(), "event": "run_done", "okCount": ok_count, "failCount": fail_count, "totalMs": total_ms})
+    _emit_run_event(
+        run_dir,
+        {
+            "ts": time.time(),
+            "event": "run_done",
+            "okCount": ok_count,
+            "failCount": fail_count,
+            "totalMs": total_ms,
+            "cancelled": run_cancelled,
+        },
+    )
     return {
         "scenario": scenario_name,
         "okCount": ok_count,
@@ -1570,6 +1627,7 @@ def run_scenario(
         "totalMs": total_ms,
         "steps": results,
         "log": logs,
+        "cancelled": run_cancelled,
         "summary": {
             "topSlowSteps": [{"step": x["step"], "action": x["action"], "durationMs": x.get("durationMs")} for x in slow],
         },
@@ -2020,6 +2078,7 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                             start_step_no=start_step_no,
                             debug_breakpoints=dbg_bp,
                             capture_console=capture_console,
+                            cancel_request_dir=run_dir,
                         )
                     )
                     row_reports.append({"rowIndex": i, "okCount": rep.get("okCount"), "failCount": rep.get("failCount"), "totalMs": rep.get("totalMs")})
@@ -2268,6 +2327,23 @@ def api_debug_continue(run_id: str, request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+@app.post("/api/runs/{run_id}/stop", response_class=JSONResponse)
+def api_run_stop(run_id: str, request: Request) -> JSONResponse:
+    """Запросить мягкую остановку прогона (между шагами или во время debug_pause)."""
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    rid = run_id.strip()
+    run_dir = OUTPUTS_DIR / rid
+    if not run_dir.is_dir():
+        return JSONResponse({"ok": False, "error": "Run not found"}, status_code=404)
+    try:
+        (run_dir / RUN_CANCEL_FILENAME).write_text("1", encoding="utf-8")
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    return JSONResponse({"ok": True, "runId": rid})
+
+
 @app.get("/runs/compare", response_class=HTMLResponse)
 def runs_compare_page(request: Request, a: str = "", b: str = "") -> HTMLResponse:
     return templates.TemplateResponse("compare_runs.html", {"request": request, "run_a": a.strip(), "run_b": b.strip()})
@@ -2275,7 +2351,10 @@ def runs_compare_page(request: Request, a: str = "", b: str = "") -> HTMLRespons
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
 def run_live_page(run_id: str, request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("run.html", {"request": request, "run_id": run_id})
+    return templates.TemplateResponse(
+        "run.html",
+        {"request": request, "run_id": run_id, "runner_token": RUNNER_TOKEN or ""},
+    )
 
 
 @app.post("/api/runs/{run_id}/derive-scenario", response_class=JSONResponse)
@@ -2361,8 +2440,12 @@ async def api_derive_scenario_from_run(run_id: str, request: Request) -> JSONRes
 
 
 @app.get("/api/runs/{run_id}/events")
-async def api_run_events(run_id: str, request: Request) -> Response:
-    unauthorized = _require_token(request)
+async def api_run_events(
+    run_id: str,
+    request: Request,
+    token: Optional[str] = Query(default=None, description="Same as x-runner-token (for EventSource)"),
+) -> Response:
+    unauthorized = _require_token_sse(request, query_token=token)
     if unauthorized:
         return unauthorized
 
@@ -2435,7 +2518,10 @@ def index(request: Request) -> HTMLResponse:
 
 @app.get("/flow-editor", response_class=HTMLResponse)
 def flow_editor_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("flow_editor.html", {"request": request})
+    return templates.TemplateResponse(
+        "flow_editor.html",
+        {"request": request, "runner_token": RUNNER_TOKEN or ""},
+    )
 
 
 @app.post("/run", response_class=HTMLResponse)

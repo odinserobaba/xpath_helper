@@ -8,27 +8,47 @@
   <style>
     :root { --bg:#0f0f1a; --bg2:#1a1a2e; --bg3:#16213e; --text:#eee; --muted:#c4cad8; --accent:#00d4aa; --err:#e74c3c; --ok:#2ecc71; }
     * { box-sizing:border-box; }
-    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .app { display:grid; grid-template-columns: 320px 1fr 360px; height:100vh; gap:10px; padding:10px; }
-    .panel { background:var(--bg2); border:1px solid #2a2a4a; border-radius:10px; padding:12px; overflow:auto; }
-    .panel-flow { display:flex; flex-direction:column; min-height:0; }
-    .title { margin:0 0 8px 0; color:var(--accent); font-size:16px; }
-    .hint { color:var(--muted); font-size:12px; line-height:1.4; margin:6px 0; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .btn { display:inline-flex; align-items:center; gap:8px; background: linear-gradient(135deg, var(--accent), #00b894); color:#000; border:0; border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; }
-    .btn2 { background:var(--bg3); color:var(--text); border:1px solid #2a2a4a; border-radius:10px; padding:8px 10px; font-weight:600; cursor:pointer; text-decoration:none; }
+    html, body { margin:0; height:100%; max-height:100%; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; overflow:hidden; }
+    .app {
+      display:grid;
+      grid-template-columns: minmax(210px, 24vw) 1fr;
+      height:100vh;
+      max-height:100vh;
+      gap:8px;
+      padding:8px;
+      box-sizing:border-box;
+      overflow:hidden;
+    }
+    .panel {
+      background:var(--bg2);
+      border:1px solid #2a2a4a;
+      border-radius:10px;
+      padding:8px 10px;
+      overflow:hidden;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+    }
+    .panel-flow { display:flex; flex-direction:column; min-height:0; flex:1; overflow:hidden; }
+    .panel-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding-right:2px; }
+    .panel-side-left .title { flex-shrink:0; }
+    .title { margin:0 0 6px 0; color:var(--accent); font-size:14px; }
+    .hint { color:var(--muted); font-size:11px; line-height:1.35; margin:5px 0; }
+    .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; background: linear-gradient(135deg, var(--accent), #00b894); color:#000; border:0; border-radius:8px; padding:6px 10px; font-weight:700; font-size:12px; cursor:pointer; }
+    .btn2 { background:var(--bg3); color:var(--text); border:1px solid #2a2a4a; border-radius:8px; padding:6px 8px; font-weight:600; font-size:12px; cursor:pointer; text-decoration:none; }
     .btn2:hover { border-color:var(--accent); }
-    input, textarea, select { width:100%; background:var(--bg3); border:1px solid #2a2a4a; border-radius:8px; padding:8px; color:var(--text); font-size:13px; }
-    textarea { min-height:90px; resize:vertical; }
-    .scenarioList { display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow:auto; margin-top:8px; }
-    .item { border:1px solid #2a2a4a; border-radius:8px; padding:8px; background:#0a0a14; cursor:pointer; }
+    input, textarea, select { width:100%; background:var(--bg3); border:1px solid #2a2a4a; border-radius:8px; padding:6px 8px; color:var(--text); font-size:12px; }
+    textarea { min-height:72px; resize:vertical; }
+    .scenarioList { display:flex; flex-direction:column; gap:6px; margin-top:6px; flex:0 1 auto; min-height:0; max-height:36vh; overflow-y:auto; }
+    .item { border:1px solid #2a2a4a; border-radius:8px; padding:6px 8px; background:#0a0a14; cursor:pointer; }
     .item:hover, .item.sel { border-color:var(--accent); }
-    .small { font-size:12px; color:var(--muted); }
+    .small { font-size:11px; color:var(--muted); }
     /* React Flow требует ненулевую высоту: % часто даёт 0 в grid */
     .flowHost {
       flex: 1;
-      min-height: 480px;
-      height: 58vh;
+      min-height: 0;
+      height: auto;
       border: 1px solid #2a2a4a;
       border-radius: 10px;
       overflow: hidden;
@@ -37,7 +57,8 @@
     .groupItem { border:1px solid #2a2a4a; border-radius:8px; padding:8px; margin-top:8px; background:#0a0a14; }
     .inlineColor { width:38px; padding:0; height:32px; border-radius:6px; border:1px solid #2a2a4a; }
     code { color: var(--accent); }
-    .flow-toolbar { gap: 8px; flex-wrap: wrap; padding-bottom: 4px; border-bottom: 1px solid #2a2a4a; }
+    .flow-toolbar { gap: 6px; flex-wrap: wrap; padding-bottom: 4px; border-bottom: 1px solid #2a2a4a; flex-shrink: 0; }
+    .flow-ctx-menu button { white-space: nowrap; }
     .checkrow { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
     /* Выбранная связь на канве */
     .react-flow__edge.selected .react-flow__edge-path {
@@ -67,8 +88,17 @@
       background: #00d4aa !important;
       border: 2px solid #0f0f1a !important;
     }
+    @keyframes flow-live-pulse {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 255, 204, 0.45)); }
+      50% { filter: drop-shadow(0 0 18px rgba(0, 255, 204, 0.85)); }
+    }
+    .flowHost .react-flow__node.flow-node-live-exec {
+      animation: flow-live-pulse 1.5s ease-in-out infinite;
+    }
     @media (max-width: 1200px) {
-      .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height:auto; min-height:100vh; }
+      html, body { overflow:auto; max-height:none; }
+      .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(320px, 55vh); height:auto; min-height:100vh; max-height:none; overflow:visible; }
+      .flowHost { min-height: 320px; }
     }
   </style>
 </head>
@@ -81,6 +111,10 @@
     </div>
   </div>
 
+  {# Тот же токен, что и для /api/* при XPATH_RUNNER_TOKEN (см. README). #}
+  <script>
+    window.__XPATH_RUNNER_TOKEN__ = {{ runner_token | tojson }};
+  </script>
   <script type="module" src="/static/flow-editor.bundle.js"></script>
 </body>
 </html>

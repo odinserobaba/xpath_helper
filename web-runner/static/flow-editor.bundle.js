@@ -31104,12 +31104,26 @@ function NodeResizer({ nodeId, isVisible = true, handleClassName, handleStyle, l
 
 // main.js
 var API_ORIGIN = typeof window !== "undefined" ? window.location.origin : "";
+function apiFetch(url, init2 = {}) {
+  const tok = typeof window !== "undefined" && window.__XPATH_RUNNER_TOKEN__ ? String(window.__XPATH_RUNNER_TOKEN__).trim() : "";
+  const headers = { ...init2.headers && typeof init2.headers === "object" ? init2.headers : {} };
+  if (tok) headers["x-runner-token"] = tok;
+  return fetch(url, { ...init2, headers });
+}
+function buildRunEventsSseUrl(runId) {
+  const id2 = String(runId || "").trim();
+  if (!id2) return "";
+  const tok = typeof window !== "undefined" && window.__XPATH_RUNNER_TOKEN__ ? String(window.__XPATH_RUNNER_TOKEN__).trim() : "";
+  const base = `${API_ORIGIN}/api/runs/${encodeURIComponent(id2)}/events`;
+  if (tok) return `${base}?token=${encodeURIComponent(tok)}`;
+  return base;
+}
 var STEP_GAP_X = 380;
 var STEP_GAP_Y = 240;
 var FLOW_GRID_COLS = 2;
 var FLOW_EDGE_TYPE = "simplebezier";
 var FLOW_GROUP_TYPE = "flowGroup";
-var ANNOTATION_TYPES = /* @__PURE__ */ new Set(["annotationRect", "annotationEllipse", "annotationText"]);
+var ANNOTATION_TYPES = /* @__PURE__ */ new Set(["annotationRect", "annotationEllipse", "annotationText", "annotationImage"]);
 var ANNOTATION_STROKE_SWATCHES = [
   "#00d4aa",
   "#00b0ff",
@@ -31155,6 +31169,17 @@ function decorateEdgeDataDefaults() {
 }
 function isAnnotationNode(n) {
   return !!(n && ANNOTATION_TYPES.has(n.type));
+}
+function annotationIsImage(n) {
+  if (!isAnnotationNode(n)) return false;
+  const d = n.data || {};
+  return d.annKind === "image" || n.type === "annotationImage";
+}
+function nodeSupportsRunFromHere(n) {
+  if (!n || isAnnotationNode(n)) return false;
+  if (n.type === FLOW_GROUP_TYPE) return false;
+  const sr = Number(n?.data?.stepRef ?? 0);
+  return Number.isFinite(sr) && sr > 0;
 }
 function edgeKindIsDecorate(e) {
   return String(e?.data?.kind || "") === "decorate";
@@ -31226,14 +31251,14 @@ function partitionStrippedNodes(prev) {
 function annotationSpecToNode(a, idx) {
   const id2 = String(a.id || `ann-${idx}-${Date.now()}`);
   const kind = String(a.kind || "rect");
-  const type = kind === "ellipse" ? "annotationEllipse" : kind === "text" ? "annotationText" : "annotationRect";
-  const w = Math.max(40, Number(a.width) || (kind === "text" ? 240 : 280));
-  const h = Math.max(32, Number(a.height) || (kind === "text" ? 64 : 140));
+  const type = kind === "ellipse" ? "annotationEllipse" : kind === "text" ? "annotationText" : kind === "image" ? "annotationImage" : "annotationRect";
+  const w = Math.max(40, Number(a.width) || (kind === "text" ? 240 : kind === "image" ? 200 : 280));
+  const h = Math.max(32, Number(a.height) || (kind === "text" ? 64 : kind === "image" ? 150 : 140));
   return {
     id: id2,
     type,
     position: { x: Number(a.x ?? 48 + idx * 16), y: Number(a.y ?? 48 + idx * 16) },
-    zIndex: -150,
+    zIndex: -400,
     style: { width: w, height: h },
     draggable: true,
     selectable: true,
@@ -31244,16 +31269,19 @@ function annotationSpecToNode(a, idx) {
       stroke: String(a.stroke ?? "#00d4aa"),
       fill: String(a.fill ?? "rgba(0,212,170,0.07)"),
       fontSize: Number(a.fontSize) > 0 ? Number(a.fontSize) : kind === "text" ? 15 : 13,
-      textColor: String(a.textColor ?? "#e8eaf6")
+      textColor: String(a.textColor ?? "#e8eaf6"),
+      imageUrl: String(a.imageUrl ?? a.src ?? ""),
+      objectFit: ["cover", "fill", "none", "scale-down"].includes(String(a.objectFit)) ? String(a.objectFit) : "contain",
+      imageOpacity: clamp01(a.imageOpacity ?? 1)
     }
   };
 }
 function annotationsToPayload(nodes) {
   return nodes.filter(isAnnotationNode).map((n) => {
     const d = n.data || {};
-    const kind = d.annKind || (n.type === "annotationText" ? "text" : n.type === "annotationEllipse" ? "ellipse" : "rect");
+    const kind = d.annKind || (n.type === "annotationText" ? "text" : n.type === "annotationEllipse" ? "ellipse" : n.type === "annotationImage" ? "image" : "rect");
     const st = n.style || {};
-    return {
+    const row = {
       id: n.id,
       kind,
       x: Number(n.position?.x ?? 0),
@@ -31266,6 +31294,12 @@ function annotationsToPayload(nodes) {
       fontSize: Number(d.fontSize) || void 0,
       textColor: String(d.textColor ?? "")
     };
+    if (kind === "image") {
+      row.imageUrl = String(d.imageUrl ?? "").trim();
+      row.objectFit = String(d.objectFit || "contain");
+      row.imageOpacity = clamp01(d.imageOpacity ?? 1);
+    }
+    return row;
   });
 }
 var GROUP_FRAME_PAD = 72;
@@ -31329,12 +31363,19 @@ function computeGroupFrameNode(group, stepNodes) {
   };
 }
 function withGroupFrameNodes(stepNodes, groupsList) {
-  const steps = stripGroupFrameNodes(stepNodes).map((n) => {
-    if (n.zIndex !== void 0 && n.zIndex < 0) return n;
-    return { ...n, zIndex: n.zIndex ?? 0 };
-  });
-  const frames = safeArray(groupsList).map((g) => computeGroupFrameNode(g, steps)).filter(Boolean);
-  return [...frames, ...steps];
+  const stripped = stripGroupFrameNodes(stepNodes);
+  const annotations = stripped.filter(isAnnotationNode);
+  const stepsOnly = stripped.filter((n) => !isAnnotationNode(n));
+  const annNorm = annotations.map((n) => ({
+    ...n,
+    zIndex: typeof n.zIndex === "number" && n.zIndex < 0 ? n.zIndex : -400
+  }));
+  const stepsNorm = stepsOnly.map((n) => ({
+    ...n,
+    zIndex: Math.max(1, Number(n.zIndex) >= 1 ? Number(n.zIndex) : 1)
+  }));
+  const frames = safeArray(groupsList).map((g) => computeGroupFrameNode(g, stepsNorm)).filter(Boolean);
+  return [...frames, ...annNorm, ...stepsNorm];
 }
 function FlowGroupNode({ data }) {
   const color2 = String(data?.color || "#00d4aa");
@@ -32138,6 +32179,63 @@ function AnnotationTextNode({ data, selected }) {
     String(data.label ?? "\u0422\u0435\u043A\u0441\u0442")
   );
 }
+function AnnotationImageNode({ data, selected }) {
+  const stroke = data.stroke || "#00d4aa";
+  const url = String(data.imageUrl || "").trim();
+  const fit = String(data.objectFit || "contain");
+  const op = clamp01(data.imageOpacity ?? 1);
+  return import_react8.default.createElement(
+    "div",
+    {
+      className: "flow-annotation-image" + (selected ? " flow-annotation-selected" : ""),
+      style: {
+        width: "100%",
+        height: "100%",
+        boxSizing: "border-box",
+        border: `2px dashed ${stroke}`,
+        borderRadius: 10,
+        background: data.fill || "rgba(0,212,170,0.07)",
+        overflow: "hidden",
+        position: "relative",
+        pointerEvents: "auto"
+      }
+    },
+    import_react8.default.createElement(NodeResizer, {
+      isVisible: selected,
+      minWidth: 48,
+      minHeight: 48,
+      color: stroke,
+      lineClassName: "flow-ann-resize-line",
+      handleClassName: "flow-ann-resize-handle"
+    }),
+    ...annotationConnectionHandles(stroke),
+    url ? import_react8.default.createElement("img", {
+      src: url,
+      alt: String(data.label || "annotation"),
+      draggable: false,
+      style: {
+        width: "100%",
+        height: "100%",
+        objectFit: fit,
+        opacity: op,
+        pointerEvents: "none",
+        userSelect: "none",
+        display: "block"
+      }
+    }) : import_react8.default.createElement(
+      "div",
+      {
+        style: {
+          padding: 10,
+          fontSize: 11,
+          color: "#7a8299",
+          lineHeight: 1.35
+        }
+      },
+      "\u041D\u0435\u0442 URL \xB7 \u041F\u041A\u041C \u2192 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043C\u0438\u0442\u0438\u0432\u0430"
+    )
+  );
+}
 var nodeTypesStatic = {
   scenarioStep: ScenarioStepNode,
   branchDiamond: BranchDiamondNode,
@@ -32146,7 +32244,8 @@ var nodeTypesStatic = {
   flowGroup: FlowGroupNode,
   annotationRect: AnnotationRectNode,
   annotationEllipse: AnnotationEllipseNode,
-  annotationText: AnnotationTextNode
+  annotationText: AnnotationTextNode,
+  annotationImage: AnnotationImageNode
 };
 function buildInitialFlowFromSteps(steps) {
   const sorted = [...safeArray(steps)].sort((a, b) => Number(a.step) - Number(b.step));
@@ -32592,6 +32691,17 @@ function App() {
   const [canvasSearch, setCanvasSearch] = (0, import_react8.useState)("");
   const [historyItems, setHistoryItems] = (0, import_react8.useState)([]);
   const [historyPick, setHistoryPick] = (0, import_react8.useState)("");
+  const [liveRunInput, setLiveRunInput] = (0, import_react8.useState)("");
+  const [liveRunTrackingId, setLiveRunTrackingId] = (0, import_react8.useState)("");
+  const [liveExecutingStep, setLiveExecutingStep] = (0, import_react8.useState)(null);
+  const [liveRunActionHint, setLiveRunActionHint] = (0, import_react8.useState)("");
+  const [liveRunStreamEnded, setLiveRunStreamEnded] = (0, import_react8.useState)(false);
+  const [stepSettingsModalNodeId, setStepSettingsModalNodeId] = (0, import_react8.useState)(null);
+  const [annSettingsModalNodeId, setAnnSettingsModalNodeId] = (0, import_react8.useState)(null);
+  const [decorateEdgeModalId, setDecorateEdgeModalId] = (0, import_react8.useState)(null);
+  const [scenarioSettingsOpen, setScenarioSettingsOpen] = (0, import_react8.useState)(false);
+  const [canvasContextMenu, setCanvasContextMenu] = (0, import_react8.useState)(null);
+  const [edgeContextMenu, setEdgeContextMenu] = (0, import_react8.useState)(null);
   const [annotationDrawTool, setAnnotationDrawTool] = (0, import_react8.useState)(null);
   const [rubberBandClient, setRubberBandClient] = (0, import_react8.useState)(null);
   const [annNewStrokeI, setAnnNewStrokeI] = (0, import_react8.useState)(0);
@@ -32644,7 +32754,7 @@ function App() {
   );
   const loadScenarios = (0, import_react8.useCallback)(async () => {
     try {
-      const r = await fetch(`${API_ORIGIN}/api/scenarios`);
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios`);
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "Failed to load scenarios");
       setScenarios(j.scenarios || []);
@@ -32658,7 +32768,7 @@ function App() {
       return;
     }
     try {
-      const r = await fetch(`${API_ORIGIN}/api/scenarios/${id2}/history`);
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${id2}/history`);
       const j = await r.json();
       setHistoryItems(j.history || []);
     } catch {
@@ -32670,7 +32780,7 @@ function App() {
       if (!id2) return;
       setLoading(true);
       try {
-        const r = await fetch(`${API_ORIGIN}/api/scenarios/${id2}`);
+        const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${id2}`);
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || "Failed to load scenario");
         const srcRaw = j.scenario || {};
@@ -32718,7 +32828,7 @@ function App() {
     }
     try {
       const body = createEmptyScenarioPayload(trimmed);
-      const r = await fetch(`${API_ORIGIN}/api/scenarios`, {
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
@@ -32747,14 +32857,14 @@ function App() {
       return;
     }
     try {
-      const r0 = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`);
+      const r0 = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`);
       const j0 = await r0.json();
       if (!j0.ok) throw new Error(j0.error || "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
       const data = deepClone(j0.scenario || {});
       delete data.id;
       data.name = trimmed;
       data.exportedAt = (/* @__PURE__ */ new Date()).toISOString();
-      const r = await fetch(`${API_ORIGIN}/api/scenarios`, {
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
@@ -32779,7 +32889,7 @@ function App() {
       return;
     }
     try {
-      const r = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, { method: "DELETE" });
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, { method: "DELETE" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0443\u0434\u0430\u043B\u0438\u0442\u044C");
       setSelectedScenarioId("");
@@ -32857,26 +32967,28 @@ function App() {
     if (eLast) setSelectedNodeId("");
     else setSelectedNodeId(nLast);
   }, []);
-  const updateSelectedDecorateEdge = (0, import_react8.useCallback)(
-    (patch) => {
-      if (!selectedEdgeId) return;
-      setEdges(
-        (eds) => eds.map(
-          (e) => e.id !== selectedEdgeId ? e : {
-            ...e,
-            data: {
-              ...e.data,
-              ...patch.label !== void 0 ? { label: String(patch.label) } : {},
-              ...patch.labelColor !== void 0 ? { labelColor: String(patch.labelColor) } : {},
-              ...patch.labelOpacity !== void 0 ? { labelOpacity: clamp01(patch.labelOpacity) } : {},
-              ...patch.labelBgColor !== void 0 ? { labelBgColor: String(patch.labelBgColor) } : {},
-              ...patch.labelBgOpacity !== void 0 ? { labelBgOpacity: clamp01(patch.labelBgOpacity) } : {}
-            }
+  const updateDecorateEdgeById = (0, import_react8.useCallback)((edgeId, patch) => {
+    if (!edgeId) return;
+    setEdges(
+      (eds) => eds.map((e) => {
+        if (e.id !== edgeId || !edgeKindIsDecorate(e)) return e;
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            ...patch.label !== void 0 ? { label: String(patch.label) } : {},
+            ...patch.labelColor !== void 0 ? { labelColor: String(patch.labelColor) } : {},
+            ...patch.labelOpacity !== void 0 ? { labelOpacity: clamp01(patch.labelOpacity) } : {},
+            ...patch.labelBgColor !== void 0 ? { labelBgColor: String(patch.labelBgColor) } : {},
+            ...patch.labelBgOpacity !== void 0 ? { labelBgOpacity: clamp01(patch.labelBgOpacity) } : {}
           }
-        )
-      );
-    },
-    [selectedEdgeId, setEdges]
+        };
+      })
+    );
+  }, [setEdges]);
+  const updateSelectedDecorateEdge = (0, import_react8.useCallback)(
+    (patch) => updateDecorateEdgeById(selectedEdgeId, patch),
+    [selectedEdgeId, updateDecorateEdgeById]
   );
   const layoutGridAll = (0, import_react8.useCallback)(() => {
     setNodes((prev) => {
@@ -32908,13 +33020,13 @@ function App() {
       return refreshNodePreview(withGroupFrameNodes([...annotations, ...laid], groupsRef.current));
     });
   }, [setNodes, refreshNodePreview]);
-  const updateSelectedNodeData = (0, import_react8.useCallback)(
-    (patch) => {
-      if (!selectedNodeId) return;
+  const updateNodeDataById = (0, import_react8.useCallback)(
+    (nodeId, patch) => {
+      if (!nodeId) return;
       setNodes(
         (prev) => refreshNodePreview(
           prev.map((n) => {
-            if (n.id !== selectedNodeId) return n;
+            if (n.id !== nodeId) return n;
             if (isAnnotationNode(n)) {
               const d0 = n.data || {};
               const nextData = { ...d0 };
@@ -32926,6 +33038,9 @@ function App() {
                 nextData.fontSize = fs > 0 ? fs : d0.fontSize;
               }
               if (patch.annTextColor !== void 0) nextData.textColor = String(patch.annTextColor);
+              if (patch.imageUrl !== void 0) nextData.imageUrl = String(patch.imageUrl);
+              if (patch.objectFit !== void 0) nextData.objectFit = String(patch.objectFit);
+              if (patch.imageOpacity !== void 0) nextData.imageOpacity = clamp01(patch.imageOpacity);
               let style2 = { ...n.style || {} };
               if (patch.annWidth !== void 0) {
                 const w = Math.max(40, Number(patch.annWidth) || 80);
@@ -32946,7 +33061,7 @@ function App() {
         )
       );
     },
-    [selectedNodeId, setNodes, refreshNodePreview]
+    [setNodes, refreshNodePreview]
   );
   const addGroup = (0, import_react8.useCallback)(() => {
     const id2 = `group-${Date.now()}`;
@@ -32990,6 +33105,22 @@ function App() {
       return next;
     });
   }, [nodes, selectedNodeId, selectedGroupId, setNodes]);
+  const assignNodeIdToSelectedGroup = (0, import_react8.useCallback)(
+    (nodeId) => {
+      if (!selectedGroupId || !nodeId) return;
+      setGroups((prev) => {
+        const next = prev.map((g) => {
+          if (g.id !== selectedGroupId) return g;
+          const set3 = new Set(g.nodeIds || []);
+          set3.add(nodeId);
+          return { ...g, nodeIds: [...set3] };
+        });
+        setNodes((p) => withGroupFrameNodes(stripGroupFrameNodes(p), next));
+        return next;
+      });
+    },
+    [selectedGroupId, setNodes]
+  );
   const removeNodeFromGroup = (0, import_react8.useCallback)(
     (groupId, nodeId) => {
       setGroups((prev) => {
@@ -33003,7 +33134,7 @@ function App() {
     [setNodes]
   );
   const saveScenario = (0, import_react8.useCallback)(async () => {
-    if (!selectedScenarioId || !scenario) return;
+    if (!selectedScenarioId || !scenario) return false;
     try {
       const stepNodesOnly = stripGroupFrameNodes(nodes);
       let steps = nodesDataToSteps(stepNodesOnly, scenario.steps);
@@ -33011,7 +33142,7 @@ function App() {
       const startBlocks = steps.filter((s) => s.action === "start");
       if (startBlocks.length === 0) {
         toast("\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u043E\u0434\u0438\u043D \u0448\u0430\u0433 \xAB\u041D\u0430\u0447\u0430\u043B\u043E\xBB (action: start) \u2014 \u0442\u043E\u0447\u043A\u0430 \u0432\u0445\u043E\u0434\u0430 \u043F\u0440\u0438 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0438. \u0421\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0435 \u043E\u0442\u043C\u0435\u043D\u0435\u043D\u043E.");
-        return;
+        return false;
       }
       if (startBlocks.length > 1) {
         toast(
@@ -33028,7 +33159,7 @@ function App() {
         }
       } catch {
         toast("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 JSON \u0432 \xAB\u041C\u0435\u0442\u043A\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F\xBB \u2014 \u0438\u0441\u043F\u0440\u0430\u0432\u044C\u0442\u0435 \u0438\u043B\u0438 \u043E\u0447\u0438\u0441\u0442\u0438\u0442\u0435.");
-        return;
+        return false;
       }
       const payload = {
         ...scenario,
@@ -33040,7 +33171,7 @@ function App() {
         exportedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       delete payload.labelsText;
-      const r = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, {
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -33057,10 +33188,81 @@ function App() {
         toast("\u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0439 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D");
       }
       loadScenarios();
+      return true;
     } catch (e) {
       toast(`\u041E\u0448\u0438\u0431\u043A\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u044F: ${e?.message || e}`);
+      return false;
     }
   }, [selectedScenarioId, scenario, nodes, edges, groups, loadScenarios, setNodes, setEdges]);
+  const startScenarioRun = (0, import_react8.useCallback)(
+    async (opts = {}) => {
+      const startStepOpt = opts.startStep;
+      if (!selectedScenarioId || !scenario) {
+        toast("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
+        return;
+      }
+      if (loading) return;
+      setLoading(true);
+      try {
+        const saved = await saveScenario();
+        if (!saved) {
+          return;
+        }
+        let labelsObj = {};
+        try {
+          if (scenario.labelsText != null && String(scenario.labelsText).trim()) {
+            labelsObj = JSON.parse(String(scenario.labelsText));
+          } else if (scenario.labels && typeof scenario.labels === "object") {
+            labelsObj = scenario.labels;
+          }
+        } catch {
+          labelsObj = {};
+        }
+        const body = {
+          scenarioId: selectedScenarioId,
+          labels: labelsObj
+        };
+        const ss = startStepOpt != null ? Number(startStepOpt) : NaN;
+        if (Number.isFinite(ss) && ss > 0) {
+          body.startStep = ss;
+        }
+        const r = await apiFetch(`${API_ORIGIN}/api/runs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "Run failed");
+        const runId = j.runId;
+        setLiveRunInput(runId);
+        setLiveRunTrackingId(runId);
+        const fromHint = Number.isFinite(ss) && ss > 0 ? ` \u0441 \u0448\u0430\u0433\u0430 #${ss}` : "";
+        toast(`\u041F\u0440\u043E\u0433\u043E\u043D \u0437\u0430\u043F\u0443\u0449\u0435\u043D${fromHint}: ${runId}. \u041F\u043E\u0434\u0441\u0432\u0435\u0442\u043A\u0430 \u043D\u0430 \u0441\u0445\u0435\u043C\u0435 \xB7 live-\u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430.`);
+        window.open(`${API_ORIGIN}/runs/${runId}`, "_blank", "noopener,noreferrer");
+      } catch (e) {
+        toast(`\u041E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u043F\u0443\u0441\u043A\u0430: ${e?.message || e}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedScenarioId, scenario, saveScenario, loading]
+  );
+  const saveAndRunScenario = (0, import_react8.useCallback)(() => startScenarioRun({}), [startScenarioRun]);
+  const requestStopRun = (0, import_react8.useCallback)(async () => {
+    const id2 = String(liveRunTrackingId || liveRunInput || "").trim();
+    if (!id2) {
+      toast("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 runId \u0432 \u043F\u043E\u043B\u0435 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 \u0438\u043B\u0438 \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u043F\u0440\u043E\u0433\u043E\u043D");
+      return;
+    }
+    try {
+      const r = await apiFetch(`${API_ORIGIN}/api/runs/${encodeURIComponent(id2)}/stop`, { method: "POST" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "stop failed");
+      toast("\u0421\u0442\u043E\u043F: \u043F\u0440\u043E\u0433\u043E\u043D \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u0448\u0430\u0433\u0430 (\u0438\u043B\u0438 \u0441\u043D\u0438\u043C\u0435\u0442 debug-\u043F\u0430\u0443\u0437\u0443).");
+    } catch (e) {
+      toast(`\u0421\u0442\u043E\u043F: ${e?.message || e}`);
+    }
+  }, [liveRunTrackingId, liveRunInput]);
   const restoreFromHistory = (0, import_react8.useCallback)(
     async (file) => {
       if (!selectedScenarioId || !file) return;
@@ -33070,7 +33272,7 @@ function App() {
         return;
       }
       try {
-        const r = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}/restore-history`, {
+        const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}/restore-history`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ file })
@@ -33087,6 +33289,65 @@ function App() {
     [selectedScenarioId, loadScenario]
   );
   (0, import_react8.useEffect)(() => {
+    try {
+      const r = new URLSearchParams(window.location.search).get("run");
+      if (r && String(r).trim()) {
+        const id2 = String(r).trim();
+        setLiveRunInput(id2);
+        setLiveRunTrackingId(id2);
+      }
+    } catch (_) {
+    }
+  }, []);
+  (0, import_react8.useEffect)(() => {
+    const id2 = String(liveRunTrackingId || "").trim();
+    if (!id2) {
+      setLiveExecutingStep(null);
+      setLiveRunActionHint("");
+      setLiveRunStreamEnded(false);
+      return;
+    }
+    setLiveRunStreamEnded(false);
+    const url = buildRunEventsSseUrl(id2);
+    if (!url) return;
+    let closed = false;
+    const es = new EventSource(url);
+    const apply = (msg) => {
+      if (closed || !msg || typeof msg !== "object") return;
+      const e = msg.event;
+      if (e === "step_start") {
+        const sn = Number(msg.step);
+        if (Number.isFinite(sn)) {
+          setLiveExecutingStep(sn);
+          setLiveRunActionHint(String(msg.action || ""));
+        }
+      } else if (e === "step_done") {
+        const sn = Number(msg.step);
+        if (Number.isFinite(sn)) {
+          setLiveExecutingStep((cur) => cur === sn ? null : cur);
+        }
+      } else if (e === "run_cancelled") {
+        setLiveExecutingStep(null);
+        setLiveRunActionHint("\u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E");
+      } else if (e === "run_done") {
+        setLiveExecutingStep(null);
+        setLiveRunActionHint("");
+        setLiveRunStreamEnded(true);
+        es.close();
+      }
+    };
+    es.onmessage = (ev) => {
+      try {
+        apply(JSON.parse(ev.data));
+      } catch (_) {
+      }
+    };
+    return () => {
+      closed = true;
+      es.close();
+    };
+  }, [liveRunTrackingId]);
+  (0, import_react8.useEffect)(() => {
     const h = (e) => {
       if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === "s") {
         e.preventDefault();
@@ -33099,6 +33360,12 @@ function App() {
   (0, import_react8.useEffect)(() => {
     const esc = (e) => {
       if (e.key === "Escape") {
+        setStepSettingsModalNodeId(null);
+        setAnnSettingsModalNodeId(null);
+        setDecorateEdgeModalId(null);
+        setScenarioSettingsOpen(false);
+        setCanvasContextMenu(null);
+        setEdgeContextMenu(null);
         setAnnotationDrawTool(null);
         setRubberBandClient(null);
       }
@@ -33106,6 +33373,32 @@ function App() {
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, []);
+  (0, import_react8.useEffect)(() => {
+    if (!stepSettingsModalNodeId) return;
+    if (!nodes.some((n) => n.id === stepSettingsModalNodeId)) {
+      setStepSettingsModalNodeId(null);
+    }
+  }, [nodes, stepSettingsModalNodeId]);
+  (0, import_react8.useEffect)(() => {
+    if (!canvasContextMenu && !edgeContextMenu) return;
+    const onDocClick = () => {
+      setCanvasContextMenu(null);
+      setEdgeContextMenu(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [canvasContextMenu, edgeContextMenu]);
+  (0, import_react8.useEffect)(() => {
+    if (!annSettingsModalNodeId) return;
+    if (!nodes.some((n) => n.id === annSettingsModalNodeId)) {
+      setAnnSettingsModalNodeId(null);
+    }
+  }, [nodes, annSettingsModalNodeId]);
+  (0, import_react8.useEffect)(() => {
+    if (!decorateEdgeModalId) return;
+    const e0 = edges.find((e) => e.id === decorateEdgeModalId);
+    if (!e0 || !edgeKindIsDecorate(e0)) setDecorateEdgeModalId(null);
+  }, [edges, decorateEdgeModalId]);
   (0, import_react8.useEffect)(() => {
     if (!annotationDrawTool || !scenario) return;
     const host = flowHostRef.current;
@@ -33179,7 +33472,7 @@ function App() {
       const { si, fi } = annStylePickRef.current;
       const stroke = ANNOTATION_STROKE_SWATCHES[si] ?? ANNOTATION_STROKE_SWATCHES[0];
       const fill = ANNOTATION_FILL_SWATCHES[fi] ?? ANNOTATION_FILL_SWATCHES[0];
-      const ak = tool === "ellipse" ? "ellipse" : tool === "text" ? "text" : "rect";
+      const ak = tool === "ellipse" ? "ellipse" : tool === "text" ? "text" : tool === "image" ? "image" : "rect";
       const spec = {
         id: `ann-${Date.now()}`,
         kind: ak,
@@ -33187,11 +33480,14 @@ function App() {
         y: pos.y,
         width: fw,
         height: fh,
-        label: ak === "text" ? "\u041F\u043E\u0434\u043F\u0438\u0441\u044C" : "",
+        label: ak === "text" ? "\u041F\u043E\u0434\u043F\u0438\u0441\u044C" : ak === "image" ? "" : "",
         stroke,
         fill,
         fontSize: ak === "text" ? 15 : 13,
-        textColor: stroke
+        textColor: stroke,
+        imageUrl: ak === "image" ? "" : void 0,
+        objectFit: ak === "image" ? "contain" : void 0,
+        imageOpacity: ak === "image" ? 1 : void 0
       };
       const node = annotationSpecToNode(spec, 0);
       setNodes((prevNodes) => {
@@ -33317,279 +33613,821 @@ function App() {
     setScenario({ ...scenario, steps: newSteps });
     setSelectedNodeId(newNodes[0]?.id || "");
   }, [selectedNodeId, scenario, nodes, edges, setNodes, setEdges, refreshNodePreview]);
-  const duplicateSelectedBlock = (0, import_react8.useCallback)(() => {
-    if (!selectedNodeId || !scenario) return;
-    const stripped = stripGroupFrameNodes(nodes);
-    const src = stripped.find((n) => n.id === selectedNodeId);
-    if (!src) return;
-    if (isAnnotationNode(src)) {
-      const d3 = src.data || {};
-      const kind = d3.annKind || (src.type === "annotationText" ? "text" : src.type === "annotationEllipse" ? "ellipse" : "rect");
-      const st = src.style || {};
-      const w = typeof st.width === "number" ? st.width : parseInt(String(st.width || 280), 10) || 280;
-      const h = typeof st.height === "number" ? st.height : parseInt(String(st.height || 140), 10) || 140;
-      const copy = annotationSpecToNode(
-        {
-          id: `ann-${Date.now()}`,
-          kind,
-          x: (src.position?.x || 0) + 48,
-          y: (src.position?.y || 0) + 48,
-          width: w,
-          height: h,
-          label: d3.label != null ? String(d3.label) : "",
-          stroke: d3.stroke,
-          fill: d3.fill,
-          fontSize: d3.fontSize,
-          textColor: d3.textColor
-        },
-        0
-      );
+  const duplicateNodeById = (0, import_react8.useCallback)(
+    (nodeId) => {
+      if (!nodeId) return;
+      const stripped = stripGroupFrameNodes(nodes);
+      const src = stripped.find((n) => n.id === nodeId);
+      if (!src) return;
+      if (isAnnotationNode(src)) {
+        const d2 = src.data || {};
+        const kind = d2.annKind || (src.type === "annotationText" ? "text" : src.type === "annotationEllipse" ? "ellipse" : src.type === "annotationImage" ? "image" : "rect");
+        const st = src.style || {};
+        const w = typeof st.width === "number" ? st.width : parseInt(String(st.width || 280), 10) || 280;
+        const h = typeof st.height === "number" ? st.height : parseInt(String(st.height || 140), 10) || 140;
+        const copy = annotationSpecToNode(
+          {
+            id: `ann-${Date.now()}`,
+            kind,
+            x: (src.position?.x || 0) + 48,
+            y: (src.position?.y || 0) + 48,
+            width: w,
+            height: h,
+            label: d2.label != null ? String(d2.label) : "",
+            stroke: d2.stroke,
+            fill: d2.fill,
+            fontSize: d2.fontSize,
+            textColor: d2.textColor,
+            imageUrl: kind === "image" ? d2.imageUrl : void 0,
+            objectFit: kind === "image" ? d2.objectFit : void 0,
+            imageOpacity: kind === "image" ? d2.imageOpacity : void 0
+          },
+          0
+        );
+        setNodes((prev) => {
+          const { annotations, steps } = partitionStrippedNodes(prev);
+          return refreshNodePreview(withGroupFrameNodes([...annotations, ...steps, copy], groupsRef.current));
+        });
+        setSelectedNodeId(copy.id);
+        return;
+      }
+      if (!scenario) {
+        toast("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
+        return;
+      }
+      const d = src.data || {};
+      const maxRef = stripped.filter((n) => !isAnnotationNode(n)).reduce((m, n) => Math.max(m, Number(n.data?.stepRef || 0)), 0);
+      const nextRef = maxRef + 1;
+      const dupStep = {
+        step: nextRef,
+        xpath: d.xpath != null ? String(d.xpath) : "",
+        action: d.action || "click",
+        title: `${d.title || "\u0428\u0430\u0433"} (\u043A\u043E\u043F\u0438\u044F)`,
+        tags: [...safeArray(d.tags)],
+        params: deepClone(d.params || {}),
+        note: d.note != null ? String(d.note) : "",
+        ticket: d.ticket != null ? String(d.ticket) : "",
+        qaStatus: d.qaStatus || ""
+      };
+      if (d.comment) dupStep.comment = d.comment;
+      const dupData = stepToNodeData(dupStep);
+      const newNode = {
+        id: `step-${nextRef}-${Date.now()}`,
+        type: nodeTypeForAction(dupData.action),
+        position: { x: (src.position?.x || 0) + 50, y: (src.position?.y || 0) + 40 },
+        data: dupData
+      };
+      newNode.data.stepRef = nextRef;
       setNodes((prev) => {
         const { annotations, steps } = partitionStrippedNodes(prev);
-        return refreshNodePreview(withGroupFrameNodes([...annotations, ...steps, copy], groupsRef.current));
+        return refreshNodePreview(
+          withGroupFrameNodes([...annotations, ...steps, newNode], groupsRef.current)
+        );
       });
-      setSelectedNodeId(copy.id);
-      return;
-    }
-    const d2 = src.data || {};
-    const maxRef = stripped.filter((n) => !isAnnotationNode(n)).reduce((m, n) => Math.max(m, Number(n.data?.stepRef || 0)), 0);
-    const nextRef = maxRef + 1;
-    const dupStep = {
-      step: nextRef,
-      xpath: d2.xpath != null ? String(d2.xpath) : "",
-      action: d2.action || "click",
-      title: `${d2.title || "\u0428\u0430\u0433"} (\u043A\u043E\u043F\u0438\u044F)`,
-      tags: [...safeArray(d2.tags)],
-      params: deepClone(d2.params || {}),
-      note: d2.note != null ? String(d2.note) : "",
-      ticket: d2.ticket != null ? String(d2.ticket) : "",
-      qaStatus: d2.qaStatus || ""
-    };
-    if (d2.comment) dupStep.comment = d2.comment;
-    const dupData = stepToNodeData(dupStep);
-    const newNode = {
-      id: `step-${nextRef}-${Date.now()}`,
-      type: nodeTypeForAction(dupData.action),
-      position: { x: (src.position?.x || 0) + 50, y: (src.position?.y || 0) + 40 },
-      data: dupData
-    };
-    newNode.data.stepRef = nextRef;
-    setNodes((prev) => {
-      const { annotations, steps } = partitionStrippedNodes(prev);
-      return refreshNodePreview(
-        withGroupFrameNodes([...annotations, ...steps, newNode], groupsRef.current)
-      );
-    });
-    setSelectedNodeId(newNode.id);
-  }, [selectedNodeId, scenario, nodes, setNodes, refreshNodePreview]);
+      setSelectedNodeId(newNode.id);
+    },
+    [scenario, nodes, setNodes, refreshNodePreview]
+  );
+  const duplicateSelectedBlock = (0, import_react8.useCallback)(() => {
+    if (!selectedNodeId) return;
+    duplicateNodeById(selectedNodeId);
+  }, [selectedNodeId, duplicateNodeById]);
   const selectedGroup = (0, import_react8.useMemo)(
     () => groups.find((g) => g.id === selectedGroupId) || null,
     [groups, selectedGroupId]
   );
   const nodesForCanvas = (0, import_react8.useMemo)(() => {
     const q = canvasSearch.trim().toLowerCase();
-    if (!q) return nodes;
     return nodes.map((n) => {
-      if (n.type === FLOW_GROUP_TYPE) return n;
-      const d0 = n.data || {};
-      const hay = [
-        String(d0.title || ""),
-        String(d0.action || ""),
-        String(d0.xpath || ""),
-        String(d0.comment || ""),
-        String(d0.note || ""),
-        String(d0.ticket || ""),
-        String(d0.qaStatus || ""),
-        ...safeArray(d0.tags).map(String),
-        String(d0.stepRef || ""),
-        ...isAnnotationNode(n) ? [String(d0.label || "")] : []
-      ].join(" ").toLowerCase();
-      const hit = hay.includes(q);
-      if (!hit) return n;
-      return {
-        ...n,
-        style: {
-          ...n.style || {},
-          outline: "2px solid #ffc857",
-          boxShadow: "0 0 14px rgba(255,200,87,0.4)"
+      let out = n;
+      if (q && n.type !== FLOW_GROUP_TYPE) {
+        const d0 = n.data || {};
+        const hay = [
+          String(d0.title || ""),
+          String(d0.action || ""),
+          String(d0.xpath || ""),
+          String(d0.comment || ""),
+          String(d0.note || ""),
+          String(d0.ticket || ""),
+          String(d0.qaStatus || ""),
+          ...safeArray(d0.tags).map(String),
+          String(d0.stepRef || ""),
+          ...isAnnotationNode(n) ? [String(d0.label || ""), String(d0.imageUrl || "")] : []
+        ].join(" ").toLowerCase();
+        const hit = hay.includes(q);
+        if (hit) {
+          out = {
+            ...out,
+            style: {
+              ...out.style || {},
+              outline: "2px solid #ffc857",
+              boxShadow: "0 0 14px rgba(255,200,87,0.4)"
+            }
+          };
         }
-      };
+      }
+      if (liveExecutingStep != null && !isAnnotationNode(out) && out.type !== FLOW_GROUP_TYPE && Number(out.data?.stepRef || 0) === liveExecutingStep) {
+        out = {
+          ...out,
+          className: [out.className, "flow-node-live-exec"].filter(Boolean).join(" "),
+          style: {
+            ...out.style || {},
+            outline: "3px solid #00ffcc",
+            boxShadow: "0 0 28px rgba(0,255,204,0.55)",
+            zIndex: 520
+          }
+        };
+      }
+      return out;
     });
-  }, [nodes, canvasSearch]);
-  const d = selectedNode?.data;
-  const params = d?.params || {};
+  }, [nodes, canvasSearch, liveExecutingStep]);
+  const renderStepSettingsForm = (0, import_react8.useCallback)((node, applyPatch) => {
+    if (!node || isAnnotationNode(node) || node.type === FLOW_GROUP_TYPE) return null;
+    const d = node.data || {};
+    const params = d.params || {};
+    const addThisToGroup = () => assignNodeIdToSelectedGroup(node.id);
+    return import_react8.default.createElement(
+      import_react8.default.Fragment,
+      null,
+      import_react8.default.createElement("div", { className: "small" }, `\u0423\u0437\u0435\u043B: ${node.id}`),
+      import_react8.default.createElement(
+        "div",
+        { className: "small" },
+        `\u041D\u043E\u043C\u0435\u0440 (\u043F\u043E\u0441\u043B\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u044F \u043F\u0435\u0440\u0435\u043D\u0443\u043C\u0435\u0440\u0443\u0435\u0442\u0441\u044F \u043F\u043E \u043F\u043E\u0440\u044F\u0434\u043A\u0443 \u0431\u043B\u043E\u043A\u043E\u0432): ${node.data?.stepRef || "-"}`
+      ),
+      import_react8.default.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 (title)"),
+      import_react8.default.createElement("input", {
+        value: d.title || "",
+        onChange: (e) => applyPatch({ title: e.target.value })
+      }),
+      import_react8.default.createElement("label", null, "\u0422\u0438\u043F (action)"),
+      import_react8.default.createElement(
+        "select",
+        {
+          value: d.action || "click",
+          onChange: (e) => applyPatch({ action: e.target.value })
+        },
+        ...RUNNER_ACTIONS.map(
+          (a) => import_react8.default.createElement("option", { key: a, value: a }, `${ACTION_LABELS[a] || a} (${a})`)
+        )
+      ),
+      import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442 \u0448\u0430\u0433\u0430 (params.stepColor)"),
+      import_react8.default.createElement(
+        "div",
+        { className: "row", style: { flexWrap: "wrap", gap: 6 } },
+        ...STEP_COLORS.map(
+          (c) => import_react8.default.createElement("button", {
+            key: c,
+            type: "button",
+            title: c,
+            onClick: () => applyPatch({ stepColor: c, params: { stepColor: c } }),
+            style: {
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: d.stepColor === c || params.stepColor === c ? "2px solid #fff" : "1px solid #2a2a4a",
+              background: c,
+              cursor: "pointer"
+            }
+          })
+        )
+      ),
+      import_react8.default.createElement("label", null, "\u0422\u0435\u0433\u0438 (\u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043F\u044F\u0442\u0443\u044E)"),
+      import_react8.default.createElement("input", {
+        value: (d.tags || []).join(", "),
+        onChange: (e) => applyPatch({
+          tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean)
+        })
+      }),
+      import_react8.default.createElement("label", null, "\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u0434\u043B\u044F QA (note)"),
+      import_react8.default.createElement("textarea", {
+        value: d.note || "",
+        placeholder: "\u0417\u0430\u0447\u0435\u043C \u044D\u0442\u043E\u0442 \u0448\u0430\u0433, \u0447\u0442\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C",
+        style: { minHeight: 56 },
+        onChange: (e) => applyPatch({ note: e.target.value })
+      }),
+      import_react8.default.createElement("label", null, "\u0422\u0438\u043A\u0435\u0442 / \u0441\u0441\u044B\u043B\u043A\u0430 (ticket)"),
+      import_react8.default.createElement("input", {
+        value: d.ticket || "",
+        placeholder: "JIRA-123 \u0438\u043B\u0438 URL \u0441\u043F\u0435\u043A\u0438",
+        onChange: (e) => applyPatch({ ticket: e.target.value })
+      }),
+      import_react8.default.createElement("label", null, "\u0421\u0442\u0430\u0442\u0443\u0441 \u0448\u0430\u0433\u0430 (qaStatus)"),
+      import_react8.default.createElement(
+        "select",
+        {
+          value: d.qaStatus || "",
+          onChange: (e) => applyPatch({ qaStatus: e.target.value })
+        },
+        import_react8.default.createElement("option", { value: "" }, "\u2014 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D \u2014"),
+        import_react8.default.createElement("option", { value: "draft" }, "\u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A"),
+        import_react8.default.createElement("option", { value: "stable" }, "\u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439"),
+        import_react8.default.createElement("option", { value: "flaky" }, "Flaky")
+      ),
+      d.action !== "start" && d.action !== "end" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "XPath"),
+        import_react8.default.createElement("textarea", {
+          value: d.xpath === "\u2014" ? "" : d.xpath || "",
+          placeholder: "\u2014",
+          onChange: (e) => applyPatch({ xpath: e.target.value || "" })
+        })
+      ) : null,
+      import_react8.default.createElement("label", null, "\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439 \u043A \u0431\u043B\u043E\u043A\u0443"),
+      import_react8.default.createElement("textarea", {
+        value: d.comment || "",
+        onChange: (e) => applyPatch({ comment: e.target.value })
+      }),
+      import_react8.default.createElement(
+        "div",
+        { className: "row", style: { marginTop: 8 } },
+        import_react8.default.createElement("label", { className: "checkrow" }, import_react8.default.createElement("input", {
+          type: "checkbox",
+          checked: params.mandatory !== false,
+          onChange: (e) => applyPatch({ params: { mandatory: e.target.checked } })
+        }), " mandatory"),
+        import_react8.default.createElement("label", { className: "checkrow" }, import_react8.default.createElement("input", {
+          type: "checkbox",
+          checked: !!params.waitForLoad,
+          onChange: (e) => applyPatch({ params: { waitForLoad: e.target.checked } })
+        }), " waitForLoad")
+      ),
+      import_react8.default.createElement("label", null, "timeoutMs"),
+      import_react8.default.createElement("input", {
+        type: "number",
+        value: params.timeoutMs ?? "",
+        placeholder: "\u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E \u0438\u0437 \u0440\u0430\u043D\u043D\u0435\u0440\u0430",
+        onChange: (e) => {
+          const v = e.target.value;
+          applyPatch({ params: v === "" ? { timeoutMs: void 0 } : { timeoutMs: parseInt(v, 10) || 0 } });
+        }
+      }),
+      d.action === "navigate" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "URL (navigate.params.url)"),
+        import_react8.default.createElement("input", {
+          value: params.url || "",
+          onChange: (e) => applyPatch({ params: { url: e.target.value } })
+        })
+      ) : null,
+      ["input", "set_date"].includes(d.action) ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 (value)"),
+        import_react8.default.createElement("input", {
+          value: params.value ?? "",
+          onChange: (e) => applyPatch({ params: { value: e.target.value } })
+        })
+      ) : null,
+      d.action === "wait" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u0417\u0430\u0434\u0435\u0440\u0436\u043A\u0430 delayMs"),
+        import_react8.default.createElement("input", {
+          type: "number",
+          value: params.delayMs ?? 500,
+          onChange: (e) => applyPatch({ params: { delayMs: parseInt(e.target.value, 10) || 0 } })
+        })
+      ) : null,
+      d.action === "user_action" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044E"),
+        import_react8.default.createElement("input", {
+          value: params.message || "",
+          onChange: (e) => applyPatch({ params: { message: e.target.value } })
+        })
+      ) : null,
+      d.action === "start" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C (\u0432 \u043B\u043E\u0433 \u0440\u0430\u043D\u043D\u0435\u0440\u0430, params.message)"),
+        import_react8.default.createElement("input", {
+          value: params.message || "",
+          placeholder: "\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439",
+          onChange: (e) => applyPatch({ params: { message: e.target.value } })
+        }),
+        import_react8.default.createElement(
+          "p",
+          { className: "small", style: { marginTop: 6 } },
+          "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u0432\u0441\u0435\u0433\u0434\u0430 \u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0442\u0441\u044F \u0441 \u044D\u0442\u043E\u0433\u043E \u0431\u043B\u043E\u043A\u0430 (\u043F\u0435\u0440\u0432\u044B\u0439 start \u0432 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u043E\u043C \u0441\u043F\u0438\u0441\u043A\u0435 \u0448\u0430\u0433\u043E\u0432)."
+        )
+      ) : null,
+      d.action === "end" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C (\u0432 \u043B\u043E\u0433 \u0440\u0430\u043D\u043D\u0435\u0440\u0430, params.message)"),
+        import_react8.default.createElement("input", {
+          value: params.message || "",
+          placeholder: "\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0432\u044B\u0445\u043E\u0434 \u043F\u043E \u0432\u0435\u0442\u043A\u0435 \xAB\u041D\u0435\u0442\xBB",
+          onChange: (e) => applyPatch({ params: { message: e.target.value } })
+        }),
+        import_react8.default.createElement(
+          "p",
+          { className: "small", style: { marginTop: 6 } },
+          "\u041F\u043E\u0441\u043B\u0435 \u044D\u0442\u043E\u0433\u043E \u0448\u0430\u0433\u0430 \u043F\u0440\u043E\u0433\u043E\u043D \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u043E\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u0435\u0442\u0441\u044F. \u0421\u043E\u0435\u0434\u0438\u043D\u044F\u0439\u0442\u0435 \u0441\u044E\u0434\u0430 \u0432\u0435\u0442\u043A\u0443 \xAB\u041D\u0435\u0442\xBB \u0438\u043B\u0438 \u043B\u044E\u0431\u043E\u0439 \u0437\u0430\u0432\u0435\u0440\u0448\u0430\u044E\u0449\u0438\u0439 \u043F\u0443\u0442\u044C."
+        )
+      ) : null,
+      d.action === "separator" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u0440\u0430\u0437\u0434\u0435\u043B\u0438\u0442\u0435\u043B\u044F (params.label)"),
+        import_react8.default.createElement("input", {
+          value: params.label || "",
+          onChange: (e) => applyPatch({ params: { label: e.target.value } })
+        })
+      ) : null,
+      d.action === "branch" || d.action === "assert" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u0423\u0441\u043B\u043E\u0432\u0438\u0435 (params.condition)"),
+        import_react8.default.createElement(
+          "select",
+          {
+            value: params.condition || "element_exists",
+            onChange: (e) => applyPatch({ params: { condition: e.target.value } })
+          },
+          ...BRANCH_CONDITIONS.map(
+            (bc) => import_react8.default.createElement("option", { key: bc.value, value: bc.value }, bc.label)
+          )
+        ),
+        import_react8.default.createElement("label", null, "expectedValue"),
+        import_react8.default.createElement("input", {
+          value: params.expectedValue ?? "",
+          onChange: (e) => applyPatch({ params: { expectedValue: e.target.value } })
+        }),
+        params.condition === "attribute_equals" ? import_react8.default.createElement(
+          import_react8.default.Fragment,
+          null,
+          import_react8.default.createElement("label", null, "attributeName"),
+          import_react8.default.createElement("input", {
+            value: params.attributeName || "",
+            onChange: (e) => applyPatch({ params: { attributeName: e.target.value } })
+          })
+        ) : null,
+        d.action === "assert" ? import_react8.default.createElement(
+          import_react8.default.Fragment,
+          null,
+          import_react8.default.createElement(
+            "div",
+            { className: "row", style: { marginTop: 6 } },
+            import_react8.default.createElement(
+              "label",
+              { className: "checkrow" },
+              import_react8.default.createElement("input", {
+                type: "checkbox",
+                checked: !!params.waitMode,
+                onChange: (e) => applyPatch({ params: { waitMode: e.target.checked } })
+              }),
+              " waitMode"
+            ),
+            import_react8.default.createElement(
+              "label",
+              { className: "checkrow" },
+              import_react8.default.createElement("input", {
+                type: "checkbox",
+                checked: !!params.softAssert,
+                onChange: (e) => applyPatch({ params: { softAssert: e.target.checked } })
+              }),
+              " softAssert"
+            )
+          )
+        ) : null
+      ) : null,
+      import_react8.default.createElement("label", null, "fallbackXPaths (\u043F\u043E \u043E\u0434\u043D\u043E\u043C\u0443 \u0432 \u0441\u0442\u0440\u043E\u043A\u0435)"),
+      import_react8.default.createElement("textarea", {
+        placeholder: "//button[1]",
+        value: safeArray(params.fallbackXPaths).join("\n"),
+        onChange: (e) => applyPatch({
+          params: {
+            fallbackXPaths: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean)
+          }
+        })
+      }),
+      import_react8.default.createElement(
+        "div",
+        { className: "row", style: { marginTop: 8 } },
+        import_react8.default.createElement(
+          "select",
+          {
+            value: selectedGroupId,
+            onChange: (e) => setSelectedGroupId(e.target.value),
+            style: { flex: 1 }
+          },
+          import_react8.default.createElement("option", { value: "" }, "\u0413\u0440\u0443\u043F\u043F\u0430\u2026"),
+          ...groups.map((g) => import_react8.default.createElement("option", { key: g.id, value: g.id }, g.title))
+        ),
+        import_react8.default.createElement(
+          "button",
+          { className: "btn2", type: "button", onClick: addThisToGroup },
+          "\u0412 \u0433\u0440\u0443\u043F\u043F\u0443"
+        )
+      )
+    );
+  }, [assignNodeIdToSelectedGroup, groups, selectedGroupId, setSelectedGroupId]);
+  const renderAnnotationSettingsForm = (0, import_react8.useCallback)((node, applyPatch) => {
+    if (!node || !isAnnotationNode(node)) return null;
+    const d = node.data || {};
+    const isImg = annotationIsImage(node);
+    const st = node.style || {};
+    const widthVal = typeof st.width === "number" ? st.width : parseInt(String(st.width || 280), 10) || 280;
+    const heightVal = typeof st.height === "number" ? st.height : parseInt(String(st.height || 140), 10) || 140;
+    const ioPct = Math.round(clamp01(d.imageOpacity != null ? Number(d.imageOpacity) : 1) * 100);
+    return import_react8.default.createElement(
+      import_react8.default.Fragment,
+      null,
+      import_react8.default.createElement("div", { className: "small" }, `\u042D\u043B\u0435\u043C\u0435\u043D\u0442: ${node.id}`),
+      import_react8.default.createElement(
+        "p",
+        { className: "hint" },
+        "\u0412\u0438\u0437\u0443\u0430\u043B\u044C\u043D\u0430\u044F \u0440\u0430\u0437\u043C\u0435\u0442\u043A\u0430 \u043A\u0430\u043D\u0432\u044B (flow.annotations). \u0420\u0430\u0437\u043C\u0435\u0440 \u043C\u043E\u0436\u043D\u043E \u043C\u0435\u043D\u044F\u0442\u044C \u043C\u044B\u0448\u044C\u044E \u043D\u0430 \u043A\u043E\u043D\u0442\u0443\u0440\u0435."
+      ),
+      isImg ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "URL \u043A\u0430\u0440\u0442\u0438\u043D\u043A\u0438"),
+        import_react8.default.createElement("input", {
+          type: "url",
+          placeholder: "https://\u2026",
+          value: String(d.imageUrl ?? ""),
+          onChange: (e) => applyPatch({ imageUrl: e.target.value })
+        }),
+        import_react8.default.createElement("label", { style: { marginTop: 8 } }, "objectFit"),
+        import_react8.default.createElement(
+          "select",
+          {
+            value: String(d.objectFit || "contain"),
+            onChange: (e) => applyPatch({ objectFit: e.target.value })
+          },
+          import_react8.default.createElement("option", { value: "contain" }, "contain"),
+          import_react8.default.createElement("option", { value: "cover" }, "cover"),
+          import_react8.default.createElement("option", { value: "fill" }, "fill"),
+          import_react8.default.createElement("option", { value: "none" }, "none"),
+          import_react8.default.createElement("option", { value: "scale-down" }, "scale-down")
+        ),
+        import_react8.default.createElement("label", null, `\u041F\u0440\u043E\u0437\u0440\u0430\u0447\u043D\u043E\u0441\u0442\u044C: ${ioPct}%`),
+        import_react8.default.createElement("input", {
+          type: "range",
+          min: 0,
+          max: 100,
+          step: 1,
+          value: ioPct,
+          onChange: (e) => applyPatch({ imageOpacity: parseInt(e.target.value, 10) / 100 })
+        })
+      ) : null,
+      import_react8.default.createElement("label", { style: { marginTop: isImg ? 10 : 0 } }, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C / alt"),
+      import_react8.default.createElement("textarea", {
+        value: String(d.label ?? ""),
+        style: { minHeight: 64 },
+        onChange: (e) => applyPatch({ annLabel: e.target.value })
+      }),
+      import_react8.default.createElement("label", null, "\u0428\u0438\u0440\u0438\u043D\u0430 (px)"),
+      import_react8.default.createElement("input", {
+        type: "number",
+        value: widthVal,
+        min: 40,
+        onChange: (e) => applyPatch({ annWidth: parseInt(e.target.value, 10) || 40 })
+      }),
+      import_react8.default.createElement("label", null, "\u0412\u044B\u0441\u043E\u0442\u0430 (px)"),
+      import_react8.default.createElement("input", {
+        type: "number",
+        value: heightVal,
+        min: 32,
+        onChange: (e) => applyPatch({ annHeight: parseInt(e.target.value, 10) || 32 })
+      }),
+      isImg ? null : import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement("label", null, "\u041E\u0431\u0432\u043E\u0434\u043A\u0430"),
+        import_react8.default.createElement(
+          "div",
+          { className: "row", style: { gap: 4, flexWrap: "wrap" } },
+          ...ANNOTATION_STROKE_SWATCHES.map(
+            (c) => import_react8.default.createElement("button", {
+              key: `s-${c}`,
+              type: "button",
+              title: c,
+              onClick: () => applyPatch({ stroke: c }),
+              style: {
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: String(d.stroke || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
+                background: c,
+                padding: 0,
+                cursor: "pointer"
+              }
+            })
+          )
+        ),
+        import_react8.default.createElement("label", { style: { marginTop: 8 } }, "\u0417\u0430\u043B\u0438\u0432\u043A\u0430"),
+        import_react8.default.createElement(
+          "div",
+          { className: "row", style: { gap: 4, flexWrap: "wrap" } },
+          ...ANNOTATION_FILL_SWATCHES.map(
+            (c) => import_react8.default.createElement("button", {
+              key: `f-${c}`,
+              type: "button",
+              title: c,
+              onClick: () => applyPatch({ annFill: c }),
+              style: {
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: String(d.fill || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
+                background: c,
+                padding: 0,
+                cursor: "pointer"
+              }
+            })
+          )
+        ),
+        import_react8.default.createElement("label", null, "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430"),
+        import_react8.default.createElement("input", {
+          type: "number",
+          value: Number(d.fontSize) > 0 ? Number(d.fontSize) : 13,
+          min: 8,
+          max: 64,
+          onChange: (e) => applyPatch({ annFontSize: parseInt(e.target.value, 10) || 13 })
+        }),
+        import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u0430"),
+        import_react8.default.createElement(
+          "div",
+          { className: "row", style: { gap: 4, flexWrap: "wrap" } },
+          ...ANNOTATION_STROKE_SWATCHES.map(
+            (c) => import_react8.default.createElement("button", {
+              key: `t-${c}`,
+              type: "button",
+              title: c,
+              onClick: () => applyPatch({ annTextColor: c }),
+              style: {
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: String(d.textColor || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
+                background: c,
+                padding: 0,
+                cursor: "pointer"
+              }
+            })
+          )
+        )
+      )
+    );
+  }, []);
+  const renderDecorateEdgeForm = (0, import_react8.useCallback)((edge, applyPatch) => {
+    if (!edge || !edgeKindIsDecorate(edge)) return null;
+    const dd = edge.data || {};
+    const def = decorateEdgeDataDefaults();
+    const lc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelColor || "")) ? dd.labelColor : def.labelColor;
+    const lbc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelBgColor || "")) ? dd.labelBgColor : def.labelBgColor;
+    const loPct = Math.round(clamp01(dd.labelOpacity ?? def.labelOpacity) * 100);
+    const lboPct = Math.round(clamp01(dd.labelBgOpacity ?? def.labelBgOpacity) * 100);
+    return import_react8.default.createElement(
+      import_react8.default.Fragment,
+      null,
+      import_react8.default.createElement("div", { className: "small" }, `\u0421\u0432\u044F\u0437\u044C: ${edge.id}`),
+      import_react8.default.createElement(
+        "p",
+        { className: "hint" },
+        "\u041F\u0443\u043D\u043A\u0442\u0438\u0440 \u0438 \u043F\u043E\u0434\u043F\u0438\u0441\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u0441\u0445\u0435\u043C\u0435 (kind \xABdecorate\xBB \u0432 flow.edges). \u041D\u0430 \u043F\u0440\u043E\u0433\u043E\u043D \u043D\u0435 \u0432\u043B\u0438\u044F\u0435\u0442."
+      ),
+      import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u043D\u0430 \u0441\u0442\u0440\u0435\u043B\u043A\u0435"),
+      import_react8.default.createElement("textarea", {
+        value: String(dd.label ?? ""),
+        placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0437\u043E\u043D\u0430 \u0440\u0435\u0433\u0440\u0435\u0441\u0441\u0430",
+        style: { minHeight: 52 },
+        onChange: (e) => applyPatch({ label: e.target.value })
+      }),
+      import_react8.default.createElement("label", { style: { marginTop: 10 } }, "\u0426\u0432\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u043E\u0434\u043F\u0438\u0441\u0438"),
+      import_react8.default.createElement("input", {
+        type: "color",
+        value: lc,
+        onChange: (e) => applyPatch({ labelColor: e.target.value })
+      }),
+      import_react8.default.createElement("label", null, `\u041F\u0440\u043E\u0437\u0440\u0430\u0447\u043D\u043E\u0441\u0442\u044C \u0442\u0435\u043A\u0441\u0442\u0430: ${loPct}%`),
+      import_react8.default.createElement("input", {
+        type: "range",
+        min: 0,
+        max: 100,
+        step: 1,
+        value: loPct,
+        onChange: (e) => applyPatch({ labelOpacity: parseInt(e.target.value, 10) / 100 })
+      }),
+      import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442 \u0444\u043E\u043D\u0430 \u043F\u043E\u0434\u043F\u0438\u0441\u0438"),
+      import_react8.default.createElement("input", {
+        type: "color",
+        value: lbc,
+        onChange: (e) => applyPatch({ labelBgColor: e.target.value })
+      }),
+      import_react8.default.createElement("label", null, `\u041F\u0440\u043E\u0437\u0440\u0430\u0447\u043D\u043E\u0441\u0442\u044C \u0444\u043E\u043D\u0430: ${lboPct}%`),
+      import_react8.default.createElement("input", {
+        type: "range",
+        min: 0,
+        max: 100,
+        step: 1,
+        value: lboPct,
+        onChange: (e) => applyPatch({ labelBgOpacity: parseInt(e.target.value, 10) / 100 })
+      })
+    );
+  }, []);
   return import_react8.default.createElement(
     "div",
     { className: "app" },
     import_react8.default.createElement(
       "section",
-      { className: "panel" },
+      { className: "panel panel-side panel-side-left" },
       import_react8.default.createElement("h1", { className: "title" }, "Flow Editor"),
       import_react8.default.createElement(
         "div",
-        { className: "row" },
-        import_react8.default.createElement("a", { className: "btn2", href: `${API_ORIGIN}/` }, "\u2190 Web Runner"),
-        import_react8.default.createElement(
-          "button",
-          { className: "btn2", type: "button", onClick: loadScenarios },
-          "\u21BB \u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0438"
-        )
-      ),
-      import_react8.default.createElement(
-        "p",
-        { className: "hint" },
-        "\u0411\u043B\u043E\u043A\u0438 = \u0448\u0430\u0433\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F: \u0446\u0432\u0435\u0442, \u0442\u0438\u043F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0438 params \u043A\u0430\u043A \u0432 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u0438\u0438."
-      ),
-      import_react8.default.createElement(
-        "div",
-        { className: "row", style: { marginTop: 8, flexWrap: "wrap", gap: 8 } },
-        import_react8.default.createElement(
-          "button",
-          { type: "button", className: "btn", disabled: loading, onClick: createScenario },
-          "\u2795 \u041D\u043E\u0432\u044B\u0439\u2026"
-        ),
-        import_react8.default.createElement(
-          "button",
-          {
-            type: "button",
-            className: "btn2",
-            disabled: loading || !selectedScenarioId,
-            onClick: cloneScenario
-          },
-          "\u{1F4C4} \u041A\u043B\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u2026"
-        ),
-        import_react8.default.createElement(
-          "button",
-          {
-            type: "button",
-            className: "btn2",
-            disabled: loading || !selectedScenarioId,
-            onClick: deleteScenario,
-            title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C JSON \u0441 \u0434\u0438\u0441\u043A\u0430",
-            style: { color: "#e74c3c", borderColor: "#c0392b" }
-          },
-          "\u{1F5D1} \u0423\u0434\u0430\u043B\u0438\u0442\u044C"
-        )
-      ),
-      import_react8.default.createElement(
-        "div",
-        { className: "scenarioList" },
-        scenarios.length === 0 ? import_react8.default.createElement(
-          "div",
-          { className: "hint", style: { lineHeight: 1.55 } },
-          "\u2460 \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u2795 \u041D\u043E\u0432\u044B\u0439\u2026\xBB \xB7 \u2461 \u043F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0438 \u0441\u043E\u0435\u0434\u0438\u043D\u0438\u0442\u0435 \u0448\u0430\u0433\u0438 \xB7 \u2462 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 Ctrl+S. \u0424\u0430\u0439\u043B\u044B \u0438\u0437 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u0438\u044F \u043F\u043E\u044F\u0432\u044F\u0442\u0441\u044F \u0432 tests/scenarios/ \u2192 \xAB\u21BB \u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0438\xBB."
-        ) : scenarios.map(
-          (s) => import_react8.default.createElement(
-            "div",
-            {
-              key: s.id,
-              className: `item ${selectedScenarioId === s.id ? "sel" : ""}`,
-              onClick: () => setSelectedScenarioId(s.id)
-            },
-            import_react8.default.createElement(
-              "div",
-              null,
-              (s.name || s.file || s.id) + (s.smoke ? " \xB7 smoke" : "")
-            ),
-            import_react8.default.createElement(
-              "div",
-              { className: "small" },
-              `${s.file} \u2022 ${s.stepsCount} \u0448\u0430\u0433\u043E\u0432`
-            )
-          )
-        )
-      ),
-      scenario && selectedScenarioId ? import_react8.default.createElement(
-        import_react8.default.Fragment,
-        { key: "meta" },
-        import_react8.default.createElement(
-          "label",
-          { className: "small", style: { display: "block", marginTop: 14 } },
-          "\u0418\u043C\u044F \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F (name)"
-        ),
-        import_react8.default.createElement("input", {
-          value: scenario.name != null ? String(scenario.name) : "",
-          placeholder: selectedScenarioId,
-          onChange: (e) => setScenario((prev) => prev ? { ...prev, name: e.target.value } : null)
-        }),
-        import_react8.default.createElement(
-          "p",
-          { className: "small", style: { marginTop: 4, lineHeight: 1.35 } },
-          `\u0424\u0430\u0439\u043B \u043D\u0430 \u0434\u0438\u0441\u043A\u0435: `,
-          import_react8.default.createElement("code", null, `${selectedScenarioId}.json`),
-          " \u2014 id \u0444\u0430\u0439\u043B\u0430 \u043D\u0435 \u043C\u0435\u043D\u044F\u0435\u0442\u0441\u044F. \u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u0437\u0430\u043F\u0438\u0441\u0430\u0442\u044C \u043D\u043E\u0432\u043E\u0435 \u0438\u043C\u044F."
-        ),
-        import_react8.default.createElement(
-          "label",
-          { className: "checkrow", style: { display: "flex", marginTop: 10, alignItems: "center", gap: 8 } },
-          import_react8.default.createElement("input", {
-            type: "checkbox",
-            checked: !!scenario.smoke,
-            onChange: (e) => setScenario((prev) => prev ? { ...prev, smoke: e.target.checked } : null)
-          }),
-          " \u0414\u044B\u043C\u043E\u0432\u043E\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439 (smoke) \u2014 \u0434\u043B\u044F \u0431\u044B\u0441\u0442\u0440\u044B\u0445 \u043D\u0430\u0431\u043E\u0440\u043E\u0432 \u0432 \u0440\u0430\u043D\u043D\u0435\u0440\u0435"
-        ),
-        import_react8.default.createElement(
-          "label",
-          { className: "small", style: { display: "block", marginTop: 8 } },
-          "\u041C\u0435\u0442\u043A\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F (JSON \u2192 runner / \u043E\u0442\u0447\u0451\u0442\u044B), \u043F\u043E\u043B\u0435 labels"
-        ),
-        import_react8.default.createElement("textarea", {
-          value: scenario.labelsText != null ? String(scenario.labelsText) : "{}",
-          placeholder: '{"suite":"regression","team":"qa"}',
-          style: { minHeight: 72, fontFamily: "ui-monospace, monospace", fontSize: 12 },
-          onChange: (e) => setScenario((prev) => prev ? { ...prev, labelsText: e.target.value } : null)
-        }),
-        import_react8.default.createElement(
-          "label",
-          { className: "small", style: { display: "block", marginTop: 10 } },
-          "\u0412\u0435\u0440\u0441\u0438\u0438 \u0438\u0437 .history"
-        ),
+        { className: "panel-scroll" },
         import_react8.default.createElement(
           "div",
-          { className: "row", style: { alignItems: "center" } },
+          { className: "row" },
+          import_react8.default.createElement("a", { className: "btn2", href: `${API_ORIGIN}/` }, "\u2190 Web Runner"),
           import_react8.default.createElement(
-            "select",
+            "button",
             {
-              value: historyPick,
-              onChange: (e) => setHistoryPick(e.target.value),
-              style: { flex: 1 }
+              type: "button",
+              className: "btn",
+              disabled: loading || !selectedScenarioId,
+              onClick: saveAndRunScenario,
+              title: "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439 \u043D\u0430 \u0434\u0438\u0441\u043A, \u0437\u0430\u0442\u0435\u043C POST /api/runs. \u041E\u0442\u043A\u0440\u043E\u0435\u0442\u0441\u044F live-\u043F\u0440\u043E\u0433\u043E\u043D \u0432 \u043D\u043E\u0432\u043E\u0439 \u0432\u043A\u043B\u0430\u0434\u043A\u0435. Start URL, headless, viewport \u0438 \u0434\u0440. \u2014 \u0432 runnerSettings JSON (\u043A\u043D\u043E\u043F\u043A\u0430 \xAB\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B\xBB \u043D\u0430 \u0433\u043B\u0430\u0432\u043D\u043E\u0439 Web Runner) \u0438\u043B\u0438 \u0432 \u0442\u0435\u043B\u0435 \u0437\u0430\u043F\u0440\u043E\u0441\u0430 \u043D\u0430 \u0433\u043B\u0430\u0432\u043D\u043E\u0439."
             },
-            import_react8.default.createElement("option", { value: "" }, "\u2014 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043D\u0438\u043C\u043E\u043A \u2014"),
-            ...historyItems.map(
-              (h) => import_react8.default.createElement(
-                "option",
-                { key: h.file, value: h.file },
-                `${h.file} \xB7 ${new Date((h.mtime || 0) * 1e3).toLocaleString()}`
-              )
-            )
+            loading ? "\u2026" : "\u25B6 \u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C"
           ),
           import_react8.default.createElement(
             "button",
-            { type: "button", className: "btn2", disabled: !historyPick, onClick: () => restoreFromHistory(historyPick) },
-            "\u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C"
+            { className: "btn2", type: "button", onClick: loadScenarios },
+            "\u21BB \u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0438"
           )
-        )
-      ) : null,
-      import_react8.default.createElement(
-        "div",
-        { className: "row", style: { marginTop: 12 } },
+        ),
         import_react8.default.createElement(
-          "button",
+          "p",
+          { className: "hint" },
+          "\u0411\u043B\u043E\u043A\u0438 = \u0448\u0430\u0433\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F. \xAB\u25B6 \u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C\xBB \u2014 \u0441 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0435\u043C. \u041F\u041A\u041C \u043F\u043E \u0448\u0430\u0433\u0443 \u0438\u043B\u0438 \u043F\u0440\u0438\u043C\u0438\u0442\u0438\u0432\u0443 \u2014 \u043C\u0435\u043D\u044E (\u043A\u043E\u043F\u0438\u044F, \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438). \u041F\u041A\u041C \u043F\u043E \u043F\u0443\u043D\u043A\u0442\u0443 \u0441\u043F\u0438\u0441\u043A\u0430 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0435\u0432 \u2014 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u0438 \u0433\u0440\u0443\u043F\u043F."
+        ),
+        import_react8.default.createElement(
+          "div",
           {
-            className: "btn",
-            type: "button",
-            disabled: !selectedScenarioId || loading,
-            onClick: saveScenario
+            className: "flow-live-panel",
+            style: {
+              marginTop: 6,
+              marginBottom: 8,
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #2a2a4a",
+              background: "#0a0a14"
+            }
           },
-          loading ? "\u2026" : "\u{1F4BE} \u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"
-        )
-      ),
-      selectedScenario ? import_react8.default.createElement(
-        "p",
-        { className: "hint" },
-        `\u0412 \u0441\u043F\u0438\u0441\u043A\u0435: ${selectedScenario.name || selectedScenario.id}`
-      ) : null
+          import_react8.default.createElement("div", { className: "small", style: { marginBottom: 6, fontWeight: 700 } }, "\u0416\u0438\u0432\u0430\u044F \u043F\u043E\u0434\u0441\u0432\u0435\u0442\u043A\u0430 \u0448\u0430\u0433\u0430 \u043D\u0430 \u0441\u0445\u0435\u043C\u0435"),
+          import_react8.default.createElement(
+            "div",
+            { className: "row", style: { gap: 6 } },
+            import_react8.default.createElement("input", {
+              type: "text",
+              placeholder: "runId (\u0438\u043B\u0438 \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 /flow-editor?run=\u2026)",
+              value: liveRunInput,
+              onChange: (e) => setLiveRunInput(e.target.value),
+              style: { flex: "1 1 120px", minWidth: 0 }
+            }),
+            import_react8.default.createElement(
+              "button",
+              {
+                type: "button",
+                className: "btn",
+                style: { flex: "0 0 auto", padding: "8px 10px" },
+                onClick: () => {
+                  const id2 = String(liveRunInput || "").trim();
+                  if (!id2) {
+                    toast("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 runId");
+                    return;
+                  }
+                  setLiveRunTrackingId(id2);
+                  toast(`\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0430 \u043D\u0430 \u043F\u0440\u043E\u0433\u043E\u043D: ${id2}`);
+                }
+              },
+              "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C"
+            ),
+            import_react8.default.createElement(
+              "button",
+              {
+                type: "button",
+                className: "btn2",
+                onClick: () => {
+                  setLiveRunTrackingId("");
+                  setLiveExecutingStep(null);
+                  setLiveRunActionHint("");
+                  setLiveRunStreamEnded(false);
+                }
+              },
+              "\u041E\u0442\u043A\u043B."
+            ),
+            import_react8.default.createElement(
+              "button",
+              {
+                type: "button",
+                className: "btn2",
+                style: { flex: "0 0 auto", color: "#ffb4a8", borderColor: "#8b4513" },
+                title: "POST /api/runs/{runId}/stop \u2014 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430 \u043C\u0435\u0436\u0434\u0443 \u0448\u0430\u0433\u0430\u043C\u0438",
+                onClick: () => requestStopRun()
+              },
+              "\u23F9 \u0421\u0442\u043E\u043F"
+            )
+          ),
+          liveRunTrackingId ? import_react8.default.createElement(
+            "p",
+            { className: "hint", style: { marginTop: 8, marginBottom: 0 } },
+            liveRunStreamEnded ? "\u041F\u0440\u043E\u0433\u043E\u043D \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0442\u043A\u043B.\xBB \u0438\u043B\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u043E\u0439 runId." : liveExecutingStep != null ? `\u0421\u0435\u0439\u0447\u0430\u0441 \u043D\u0430 \u0441\u0445\u0435\u043C\u0435: \u0448\u0430\u0433 #${liveExecutingStep}${liveRunActionHint ? ` \xB7 ${liveRunActionHint}` : ""}` : `\u041E\u0436\u0438\u0434\u0430\u043D\u0438\u0435 \u0448\u0430\u0433\u0430\u2026 (run ${liveRunTrackingId.slice(0, 12)}\u2026)`
+          ) : import_react8.default.createElement("p", { className: "hint", style: { marginTop: 8, marginBottom: 0 } }, "\u0411\u0435\u0437 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 \u043F\u043E\u0434\u0441\u0432\u0435\u0442\u043A\u0430 \u043D\u0435 \u043C\u0435\u043D\u044F\u0435\u0442\u0441\u044F.")
+        ),
+        import_react8.default.createElement(
+          "div",
+          { className: "row", style: { marginTop: 8, flexWrap: "wrap", gap: 8 } },
+          import_react8.default.createElement(
+            "button",
+            { type: "button", className: "btn", disabled: loading, onClick: createScenario },
+            "\u2795 \u041D\u043E\u0432\u044B\u0439\u2026"
+          ),
+          import_react8.default.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn2",
+              disabled: loading || !selectedScenarioId,
+              onClick: cloneScenario
+            },
+            "\u{1F4C4} \u041A\u043B\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u2026"
+          ),
+          import_react8.default.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn2",
+              disabled: loading || !selectedScenarioId,
+              onClick: deleteScenario,
+              title: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C JSON \u0441 \u0434\u0438\u0441\u043A\u0430",
+              style: { color: "#e74c3c", borderColor: "#c0392b" }
+            },
+            "\u{1F5D1} \u0423\u0434\u0430\u043B\u0438\u0442\u044C"
+          )
+        ),
+        import_react8.default.createElement(
+          "div",
+          { className: "scenarioList" },
+          scenarios.length === 0 ? import_react8.default.createElement(
+            "div",
+            { className: "hint", style: { lineHeight: 1.55 } },
+            "\u2460 \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u2795 \u041D\u043E\u0432\u044B\u0439\u2026\xBB \xB7 \u2461 \u043F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0438 \u0441\u043E\u0435\u0434\u0438\u043D\u0438\u0442\u0435 \u0448\u0430\u0433\u0438 \xB7 \u2462 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 Ctrl+S. \u0424\u0430\u0439\u043B\u044B \u0438\u0437 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u0438\u044F \u043F\u043E\u044F\u0432\u044F\u0442\u0441\u044F \u0432 tests/scenarios/ \u2192 \xAB\u21BB \u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0438\xBB."
+          ) : scenarios.map(
+            (s) => import_react8.default.createElement(
+              "div",
+              {
+                key: s.id,
+                className: `item ${selectedScenarioId === s.id ? "sel" : ""}`,
+                onClick: () => setSelectedScenarioId(s.id),
+                onContextMenu: (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedScenarioId(s.id);
+                  setScenarioSettingsOpen(true);
+                }
+              },
+              import_react8.default.createElement(
+                "div",
+                null,
+                (s.name || s.file || s.id) + (s.smoke ? " \xB7 smoke" : "")
+              ),
+              import_react8.default.createElement(
+                "div",
+                { className: "small" },
+                `${s.file} \u2022 ${s.stepsCount} \u0448\u0430\u0433\u043E\u0432`
+              )
+            )
+          )
+        ),
+        import_react8.default.createElement(
+          "div",
+          { className: "row", style: { marginTop: 12 } },
+          import_react8.default.createElement(
+            "button",
+            {
+              className: "btn",
+              type: "button",
+              disabled: !selectedScenarioId || loading,
+              onClick: saveScenario
+            },
+            loading ? "\u2026" : "\u{1F4BE} \u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"
+          )
+        ),
+        selectedScenario ? import_react8.default.createElement(
+          "p",
+          { className: "hint" },
+          `\u0412 \u0441\u043F\u0438\u0441\u043A\u0435: ${selectedScenario.name || selectedScenario.id}`
+        ) : null
+      )
     ),
     import_react8.default.createElement(
       "section",
@@ -33654,6 +34492,23 @@ function App() {
             title: "\u041D\u0430\u0440\u0438\u0441\u043E\u0432\u0430\u0442\u044C \u043E\u0431\u043B\u0430\u0441\u0442\u044C \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u043E\u0439 \u043C\u0435\u0442\u043A\u0438 \u043C\u044B\u0448\u044C\u044E."
           },
           "T \u0422\u0435\u043A\u0441\u0442"
+        ),
+        import_react8.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: annotationDrawTool === "image" ? "btn2 flow-tool-on" : "btn2",
+            disabled: !scenario,
+            onClick: () => {
+              if (!scenario) {
+                toast("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
+                return;
+              }
+              setAnnotationDrawTool((t) => t === "image" ? null : "image");
+            },
+            title: "\u041D\u0430\u0440\u0438\u0441\u043E\u0432\u0430\u0442\u044C \u043E\u0431\u043B\u0430\u0441\u0442\u044C \u043A\u0430\u0440\u0442\u0438\u043D\u043A\u0438 \u043C\u044B\u0448\u044C\u044E; URL \u0438 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u2014 \u041F\u041A\u041C \u043F\u043E \u043F\u0440\u0438\u043C\u0438\u0442\u0438\u0432\u0443."
+          },
+          "\u{1F5BC} \u041A\u0430\u0440\u0442\u0438\u043D\u043A\u0430"
         ),
         import_react8.default.createElement(
           "button",
@@ -33794,9 +34649,52 @@ function App() {
               reactFlowInstanceRef.current = inst;
             },
             onPaneClick: () => {
+              setCanvasContextMenu(null);
+              setEdgeContextMenu(null);
               if (annotationDrawTool) return;
               setSelectedNodeId("");
               setSelectedEdgeId("");
+            },
+            onNodeContextMenu: (ev, node) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (!node || node.type === FLOW_GROUP_TYPE) {
+                setCanvasContextMenu(null);
+                return;
+              }
+              if (isAnnotationNode(node)) {
+                setCanvasContextMenu({
+                  kind: "annotation",
+                  clientX: ev.clientX,
+                  clientY: ev.clientY,
+                  nodeId: node.id
+                });
+                return;
+              }
+              const sr = Number(node.data?.stepRef || 0);
+              setCanvasContextMenu({
+                kind: "step",
+                clientX: ev.clientX,
+                clientY: ev.clientY,
+                nodeId: node.id,
+                stepRef: sr,
+                canRunFrom: nodeSupportsRunFromHere(node)
+              });
+            },
+            onEdgeContextMenu: (ev, edge) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const e = edges.find((x) => x.id === edge.id);
+              if (!e || !edgeKindIsDecorate(e)) {
+                setEdgeContextMenu(null);
+                return;
+              }
+              setSelectedEdgeId(e.id);
+              setEdgeContextMenu({
+                edgeId: e.id,
+                clientX: ev.clientX,
+                clientY: ev.clientY
+              });
             },
             onNodeDragStop: refreshGroupFrames,
             onSelectionChange,
@@ -33853,546 +34751,596 @@ function App() {
         )
       )
     ),
-    import_react8.default.createElement(
-      "section",
-      { className: "panel" },
-      import_react8.default.createElement(
-        "h2",
-        { className: "title", style: { fontSize: 14 } },
-        selectedEdge && edgeKindIsDecorate(selectedEdge) ? "\u0421\u0432\u044F\u0437\u044C (\u0442\u043E\u043B\u044C\u043A\u043E \u0441\u0445\u0435\u043C\u0430)" : selectedNode && isAnnotationNode(selectedNode) ? "\u0420\u0430\u0437\u043C\u0435\u0442\u043A\u0430 \u043A\u0430\u043D\u0432\u044B" : "\u0421\u0432\u043E\u0439\u0441\u0442\u0432\u0430 \u0448\u0430\u0433\u0430"
-      ),
-      selectedEdge && edgeKindIsDecorate(selectedEdge) ? import_react8.default.createElement(
-        import_react8.default.Fragment,
-        null,
-        import_react8.default.createElement("div", { className: "small" }, `\u0421\u0432\u044F\u0437\u044C: ${selectedEdge.id}`),
-        import_react8.default.createElement(
-          "p",
-          { className: "hint" },
-          "\u041F\u0443\u043D\u043A\u0442\u0438\u0440 \u0438 \u043F\u043E\u0434\u043F\u0438\u0441\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u0441\u0445\u0435\u043C\u0435. \u041D\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u043D\u0435 \u0432\u043B\u0438\u044F\u0435\u0442 (\u0432 JSON: kind \xABdecorate\xBB \u0432 flow.edges)."
-        ),
-        import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u043D\u0430 \u0441\u0442\u0440\u0435\u043B\u043A\u0435"),
-        import_react8.default.createElement("textarea", {
-          value: String(selectedEdge.data?.label ?? ""),
-          placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0437\u043E\u043D\u0430 \u0440\u0435\u0433\u0440\u0435\u0441\u0441\u0430",
-          style: { minHeight: 52 },
-          onChange: (e) => updateSelectedDecorateEdge({ label: e.target.value })
-        }),
-        (() => {
-          const dd = selectedEdge.data || {};
-          const def = decorateEdgeDataDefaults();
-          const lc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelColor || "")) ? dd.labelColor : def.labelColor;
-          const lbc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelBgColor || "")) ? dd.labelBgColor : def.labelBgColor;
-          const loPct = Math.round(clamp01(dd.labelOpacity ?? def.labelOpacity) * 100);
-          const lboPct = Math.round(clamp01(dd.labelBgOpacity ?? def.labelBgOpacity) * 100);
-          return import_react8.default.createElement(
-            import_react8.default.Fragment,
-            null,
-            import_react8.default.createElement("label", { style: { marginTop: 10 } }, "\u0426\u0432\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u043E\u0434\u043F\u0438\u0441\u0438"),
-            import_react8.default.createElement("input", {
-              type: "color",
-              value: lc,
-              onChange: (e) => updateSelectedDecorateEdge({ labelColor: e.target.value })
-            }),
-            import_react8.default.createElement("label", null, `\u041F\u0440\u043E\u0437\u0440\u0430\u0447\u043D\u043E\u0441\u0442\u044C \u0442\u0435\u043A\u0441\u0442\u0430: ${loPct}%`),
-            import_react8.default.createElement("input", {
-              type: "range",
-              min: 0,
-              max: 100,
-              step: 1,
-              value: loPct,
-              onChange: (e) => updateSelectedDecorateEdge({ labelOpacity: parseInt(e.target.value, 10) / 100 })
-            }),
-            import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442 \u0444\u043E\u043D\u0430 \u043F\u043E\u0434\u043F\u0438\u0441\u0438"),
-            import_react8.default.createElement("input", {
-              type: "color",
-              value: lbc,
-              onChange: (e) => updateSelectedDecorateEdge({ labelBgColor: e.target.value })
-            }),
-            import_react8.default.createElement("label", null, `\u041F\u0440\u043E\u0437\u0440\u0430\u0447\u043D\u043E\u0441\u0442\u044C \u0444\u043E\u043D\u0430: ${lboPct}%`),
-            import_react8.default.createElement("input", {
-              type: "range",
-              min: 0,
-              max: 100,
-              step: 1,
-              value: lboPct,
-              onChange: (e) => updateSelectedDecorateEdge({ labelBgOpacity: parseInt(e.target.value, 10) / 100 })
-            })
-          );
-        })()
-      ) : selectedNodesCount > 1 ? import_react8.default.createElement(
-        import_react8.default.Fragment,
-        null,
-        import_react8.default.createElement(
-          "p",
-          { className: "small" },
-          `\u0412\u044B\u0431\u0440\u0430\u043D\u043E \u0443\u0437\u043B\u043E\u0432: ${selectedNodesCount}. \u041F\u0430\u043D\u0435\u043B\u044C \u0441\u0432\u043E\u0439\u0441\u0442\u0432 \u2014 \u0434\u043B\u044F \u043E\u0434\u043D\u043E\u0433\u043E \u0443\u0437\u043B\u0430 (\u043A\u043B\u0438\u043A\u043D\u0438\u0442\u0435 \u043F\u043E \u043D\u0435\u043C\u0443 \u043E\u0434\u0438\u043D \u0440\u0430\u0437). \u041C\u043E\u0436\u043D\u043E \u0432\u044B\u0440\u043E\u0432\u043D\u044F\u0442\u044C \u043F\u043E\u0437\u0438\u0446\u0438\u0438 \u043A\u043D\u043E\u043F\u043A\u043E\u0439 \xAB\u{1F4D0} \u0421\u0435\u0442\u043A\u0430 (\u0432\u044B\u0434\u0435\u043B\u0435\u043D\u043D\u044B\u0435)\xBB \u0438\u043B\u0438 \u0443\u0434\u0430\u043B\u0438\u0442\u044C \u0432\u0441\u0435 \xAB\u{1F5D1} \u0423\u0434\u0430\u043B\u0438\u0442\u044C\xBB.`
-        )
-      ) : selectedNode ? isAnnotationNode(selectedNode) ? import_react8.default.createElement(
-        import_react8.default.Fragment,
-        null,
-        import_react8.default.createElement("div", { className: "small" }, `\u042D\u043B\u0435\u043C\u0435\u043D\u0442: ${selectedNode.id}`),
-        import_react8.default.createElement(
-          "p",
-          { className: "hint" },
-          "\u0412\u0438\u0437\u0443\u0430\u043B\u044C\u043D\u0430\u044F \u0440\u0430\u0437\u043C\u0435\u0442\u043A\u0430: \u043D\u0435 \u0448\u0430\u0433 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F, \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u0432 flow.annotations. \u0420\u0430\u0437\u043C\u0435\u0440 \u2014 \u043C\u044B\u0448\u044C\u044E \u0437\u0430 \u043C\u0430\u0440\u043A\u0435\u0440\u044B \u043D\u0430 \u043A\u043E\u043D\u0442\u0443\u0440\u0435 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u043D\u043E\u0433\u043E \u043F\u0440\u0438\u043C\u0438\u0442\u0438\u0432\u0430. \u0421\u0442\u0440\u0435\u043B\u043A\u0438 \u0440\u0430\u0437\u043C\u0435\u0442\u043A\u0438 \u2014 \u043E\u0442 \u0442\u043E\u0447\u0435\u043A \u043F\u043E \u043F\u0435\u0440\u0438\u043C\u0435\u0442\u0440\u0443."
-        ),
-        import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C"),
-        import_react8.default.createElement("textarea", {
-          value: String(selectedNode.data?.label ?? ""),
-          style: { minHeight: 64 },
-          onChange: (e) => updateSelectedNodeData({ annLabel: e.target.value })
-        }),
-        import_react8.default.createElement("label", null, "\u0428\u0438\u0440\u0438\u043D\u0430 (px)"),
-        import_react8.default.createElement("input", {
-          type: "number",
-          value: (() => {
-            const st = selectedNode.style || {};
-            const w = st.width;
-            return typeof w === "number" ? w : parseInt(String(w || 280), 10) || 280;
-          })(),
-          min: 40,
-          onChange: (e) => updateSelectedNodeData({ annWidth: parseInt(e.target.value, 10) || 40 })
-        }),
-        import_react8.default.createElement("label", null, "\u0412\u044B\u0441\u043E\u0442\u0430 (px)"),
-        import_react8.default.createElement("input", {
-          type: "number",
-          value: (() => {
-            const st = selectedNode.style || {};
-            const h = st.height;
-            return typeof h === "number" ? h : parseInt(String(h || 140), 10) || 140;
-          })(),
-          min: 32,
-          onChange: (e) => updateSelectedNodeData({ annHeight: parseInt(e.target.value, 10) || 32 })
-        }),
-        import_react8.default.createElement("label", null, "\u041E\u0431\u0432\u043E\u0434\u043A\u0430"),
-        import_react8.default.createElement(
-          "div",
-          { className: "row", style: { gap: 4, flexWrap: "wrap" } },
-          ...ANNOTATION_STROKE_SWATCHES.map(
-            (c) => import_react8.default.createElement("button", {
-              key: `s-${c}`,
-              type: "button",
-              title: c,
-              onClick: () => updateSelectedNodeData({ stroke: c }),
-              style: {
-                width: 24,
-                height: 24,
-                borderRadius: 6,
-                border: String(selectedNode.data?.stroke || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
-                background: c,
-                padding: 0,
-                cursor: "pointer"
-              }
-            })
-          )
-        ),
-        import_react8.default.createElement("label", { style: { marginTop: 8 } }, "\u0417\u0430\u043B\u0438\u0432\u043A\u0430"),
-        import_react8.default.createElement(
-          "div",
-          { className: "row", style: { gap: 4, flexWrap: "wrap" } },
-          ...ANNOTATION_FILL_SWATCHES.map(
-            (c) => import_react8.default.createElement("button", {
-              key: `f-${c}`,
-              type: "button",
-              title: c,
-              onClick: () => updateSelectedNodeData({ annFill: c }),
-              style: {
-                width: 24,
-                height: 24,
-                borderRadius: 6,
-                border: String(selectedNode.data?.fill || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
-                background: c,
-                padding: 0,
-                cursor: "pointer"
-              }
-            })
-          )
-        ),
-        import_react8.default.createElement("label", null, "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430"),
-        import_react8.default.createElement("input", {
-          type: "number",
-          value: Number(selectedNode.data?.fontSize) > 0 ? Number(selectedNode.data.fontSize) : 13,
-          min: 8,
-          max: 64,
-          onChange: (e) => updateSelectedNodeData({ annFontSize: parseInt(e.target.value, 10) || 13 })
-        }),
-        import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u0430"),
-        import_react8.default.createElement(
-          "div",
-          { className: "row", style: { gap: 4, flexWrap: "wrap" } },
-          ...ANNOTATION_STROKE_SWATCHES.map(
-            (c) => import_react8.default.createElement("button", {
-              key: `t-${c}`,
-              type: "button",
-              title: c,
-              onClick: () => updateSelectedNodeData({ annTextColor: c }),
-              style: {
-                width: 24,
-                height: 24,
-                borderRadius: 6,
-                border: String(selectedNode.data?.textColor || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
-                background: c,
-                padding: 0,
-                cursor: "pointer"
-              }
-            })
-          )
-        )
-      ) : import_react8.default.createElement(
-        import_react8.default.Fragment,
-        null,
-        import_react8.default.createElement("div", { className: "small" }, `\u0423\u0437\u0435\u043B: ${selectedNode.id}`),
-        import_react8.default.createElement(
-          "div",
-          { className: "small" },
-          `\u041D\u043E\u043C\u0435\u0440 (\u043F\u043E\u0441\u043B\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u044F \u043F\u0435\u0440\u0435\u043D\u0443\u043C\u0435\u0440\u0443\u0435\u0442\u0441\u044F \u043F\u043E \u043F\u043E\u0440\u044F\u0434\u043A\u0443 \u0431\u043B\u043E\u043A\u043E\u0432): ${selectedNode?.data?.stepRef || "-"}`
-        ),
-        import_react8.default.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 (title)"),
-        import_react8.default.createElement("input", {
-          value: d.title || "",
-          onChange: (e) => updateSelectedNodeData({ title: e.target.value })
-        }),
-        import_react8.default.createElement("label", null, "\u0422\u0438\u043F (action)"),
-        import_react8.default.createElement(
-          "select",
-          {
-            value: d.action || "click",
-            onChange: (e) => updateSelectedNodeData({ action: e.target.value })
+    stepSettingsModalNodeId ? (() => {
+      const mn = nodes.find((n) => n.id === stepSettingsModalNodeId);
+      if (!mn || isAnnotationNode(mn) || mn.type === FLOW_GROUP_TYPE) return null;
+      const mid = stepSettingsModalNodeId;
+      return import_react8.default.createElement(
+        "div",
+        {
+          className: "flow-modal-backdrop",
+          role: "presentation",
+          style: {
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            zIndex: 11e3,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
           },
-          ...RUNNER_ACTIONS.map(
-            (a) => import_react8.default.createElement("option", { key: a, value: a }, `${ACTION_LABELS[a] || a} (${a})`)
-          )
-        ),
-        import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442 \u0448\u0430\u0433\u0430 (params.stepColor)"),
+          onClick: () => setStepSettingsModalNodeId(null),
+          onContextMenu: (e) => e.preventDefault()
+        },
         import_react8.default.createElement(
           "div",
-          { className: "row", style: { flexWrap: "wrap", gap: 6 } },
-          ...STEP_COLORS.map(
-            (c) => import_react8.default.createElement("button", {
-              key: c,
-              type: "button",
-              title: c,
-              onClick: () => updateSelectedNodeData({ stepColor: c, params: { stepColor: c } }),
-              style: {
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                border: d.stepColor === c || params.stepColor === c ? "2px solid #fff" : "1px solid #2a2a4a",
-                background: c,
-                cursor: "pointer"
-              }
-            })
-          )
-        ),
-        import_react8.default.createElement("label", null, "\u0422\u0435\u0433\u0438 (\u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043F\u044F\u0442\u0443\u044E)"),
-        import_react8.default.createElement("input", {
-          value: (d.tags || []).join(", "),
-          onChange: (e) => updateSelectedNodeData({
-            tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean)
-          })
-        }),
-        import_react8.default.createElement("label", null, "\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u0434\u043B\u044F QA (note)"),
-        import_react8.default.createElement("textarea", {
-          value: d.note || "",
-          placeholder: "\u0417\u0430\u0447\u0435\u043C \u044D\u0442\u043E\u0442 \u0448\u0430\u0433, \u0447\u0442\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C",
-          style: { minHeight: 56 },
-          onChange: (e) => updateSelectedNodeData({ note: e.target.value })
-        }),
-        import_react8.default.createElement("label", null, "\u0422\u0438\u043A\u0435\u0442 / \u0441\u0441\u044B\u043B\u043A\u0430 (ticket)"),
-        import_react8.default.createElement("input", {
-          value: d.ticket || "",
-          placeholder: "JIRA-123 \u0438\u043B\u0438 URL \u0441\u043F\u0435\u043A\u0438",
-          onChange: (e) => updateSelectedNodeData({ ticket: e.target.value })
-        }),
-        import_react8.default.createElement("label", null, "\u0421\u0442\u0430\u0442\u0443\u0441 \u0448\u0430\u0433\u0430 (qaStatus)"),
-        import_react8.default.createElement(
-          "select",
           {
-            value: d.qaStatus || "",
-            onChange: (e) => updateSelectedNodeData({ qaStatus: e.target.value })
-          },
-          import_react8.default.createElement("option", { value: "" }, "\u2014 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D \u2014"),
-          import_react8.default.createElement("option", { value: "draft" }, "\u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A"),
-          import_react8.default.createElement("option", { value: "stable" }, "\u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439"),
-          import_react8.default.createElement("option", { value: "flaky" }, "Flaky")
-        ),
-        d.action !== "start" && d.action !== "end" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "XPath"),
-          import_react8.default.createElement("textarea", {
-            value: d.xpath === "\u2014" ? "" : d.xpath || "",
-            placeholder: "\u2014",
-            onChange: (e) => updateSelectedNodeData({ xpath: e.target.value || "" })
-          })
-        ) : null,
-        import_react8.default.createElement("label", null, "\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439 \u043A \u0431\u043B\u043E\u043A\u0443"),
-        import_react8.default.createElement("textarea", {
-          value: d.comment || "",
-          onChange: (e) => updateSelectedNodeData({ comment: e.target.value })
-        }),
-        import_react8.default.createElement(
-          "div",
-          { className: "row", style: { marginTop: 8 } },
-          import_react8.default.createElement("label", { className: "checkrow" }, import_react8.default.createElement("input", {
-            type: "checkbox",
-            checked: params.mandatory !== false,
-            onChange: (e) => updateSelectedNodeData({ params: { mandatory: e.target.checked } })
-          }), " mandatory"),
-          import_react8.default.createElement("label", { className: "checkrow" }, import_react8.default.createElement("input", {
-            type: "checkbox",
-            checked: !!params.waitForLoad,
-            onChange: (e) => updateSelectedNodeData({ params: { waitForLoad: e.target.checked } })
-          }), " waitForLoad")
-        ),
-        import_react8.default.createElement("label", null, "timeoutMs"),
-        import_react8.default.createElement("input", {
-          type: "number",
-          value: params.timeoutMs ?? "",
-          placeholder: "\u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E \u0438\u0437 \u0440\u0430\u043D\u043D\u0435\u0440\u0430",
-          onChange: (e) => {
-            const v = e.target.value;
-            updateSelectedNodeData({ params: v === "" ? { timeoutMs: void 0 } : { timeoutMs: parseInt(v, 10) || 0 } });
-          }
-        }),
-        d.action === "navigate" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "URL (navigate.params.url)"),
-          import_react8.default.createElement("input", {
-            value: params.url || "",
-            onChange: (e) => updateSelectedNodeData({ params: { url: e.target.value } })
-          })
-        ) : null,
-        ["input", "set_date"].includes(d.action) ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 (value)"),
-          import_react8.default.createElement("input", {
-            value: params.value ?? "",
-            onChange: (e) => updateSelectedNodeData({ params: { value: e.target.value } })
-          })
-        ) : null,
-        d.action === "wait" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u0417\u0430\u0434\u0435\u0440\u0436\u043A\u0430 delayMs"),
-          import_react8.default.createElement("input", {
-            type: "number",
-            value: params.delayMs ?? 500,
-            onChange: (e) => updateSelectedNodeData({ params: { delayMs: parseInt(e.target.value, 10) || 0 } })
-          })
-        ) : null,
-        d.action === "user_action" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044E"),
-          import_react8.default.createElement("input", {
-            value: params.message || "",
-            onChange: (e) => updateSelectedNodeData({ params: { message: e.target.value } })
-          })
-        ) : null,
-        d.action === "start" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C (\u0432 \u043B\u043E\u0433 \u0440\u0430\u043D\u043D\u0435\u0440\u0430, params.message)"),
-          import_react8.default.createElement("input", {
-            value: params.message || "",
-            placeholder: "\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439",
-            onChange: (e) => updateSelectedNodeData({ params: { message: e.target.value } })
-          }),
-          import_react8.default.createElement(
-            "p",
-            { className: "small", style: { marginTop: 6 } },
-            "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u0432\u0441\u0435\u0433\u0434\u0430 \u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0442\u0441\u044F \u0441 \u044D\u0442\u043E\u0433\u043E \u0431\u043B\u043E\u043A\u0430 (\u043F\u0435\u0440\u0432\u044B\u0439 start \u0432 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u043E\u043C \u0441\u043F\u0438\u0441\u043A\u0435 \u0448\u0430\u0433\u043E\u0432)."
-          )
-        ) : null,
-        d.action === "end" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C (\u0432 \u043B\u043E\u0433 \u0440\u0430\u043D\u043D\u0435\u0440\u0430, params.message)"),
-          import_react8.default.createElement("input", {
-            value: params.message || "",
-            placeholder: "\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0432\u044B\u0445\u043E\u0434 \u043F\u043E \u0432\u0435\u0442\u043A\u0435 \xAB\u041D\u0435\u0442\xBB",
-            onChange: (e) => updateSelectedNodeData({ params: { message: e.target.value } })
-          }),
-          import_react8.default.createElement(
-            "p",
-            { className: "small", style: { marginTop: 6 } },
-            "\u041F\u043E\u0441\u043B\u0435 \u044D\u0442\u043E\u0433\u043E \u0448\u0430\u0433\u0430 \u043F\u0440\u043E\u0433\u043E\u043D \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u043E\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u0435\u0442\u0441\u044F. \u0421\u043E\u0435\u0434\u0438\u043D\u044F\u0439\u0442\u0435 \u0441\u044E\u0434\u0430 \u0432\u0435\u0442\u043A\u0443 \xAB\u041D\u0435\u0442\xBB \u0438\u043B\u0438 \u043B\u044E\u0431\u043E\u0439 \u0437\u0430\u0432\u0435\u0440\u0448\u0430\u044E\u0449\u0438\u0439 \u043F\u0443\u0442\u044C."
-          )
-        ) : null,
-        d.action === "separator" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u0440\u0430\u0437\u0434\u0435\u043B\u0438\u0442\u0435\u043B\u044F (params.label)"),
-          import_react8.default.createElement("input", {
-            value: params.label || "",
-            onChange: (e) => updateSelectedNodeData({ params: { label: e.target.value } })
-          })
-        ) : null,
-        d.action === "branch" || d.action === "assert" ? import_react8.default.createElement(
-          import_react8.default.Fragment,
-          null,
-          import_react8.default.createElement("label", null, "\u0423\u0441\u043B\u043E\u0432\u0438\u0435 (params.condition)"),
-          import_react8.default.createElement(
-            "select",
-            {
-              value: params.condition || "element_exists",
-              onChange: (e) => updateSelectedNodeData({ params: { condition: e.target.value } })
+            className: "flow-modal-dialog",
+            role: "dialog",
+            "aria-modal": true,
+            style: {
+              background: "#1a1a2e",
+              border: "1px solid #00d4aa",
+              borderRadius: 12,
+              maxWidth: 520,
+              width: "100%",
+              maxHeight: "90vh",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.55)"
             },
-            ...BRANCH_CONDITIONS.map(
-              (bc) => import_react8.default.createElement("option", { key: bc.value, value: bc.value }, bc.label)
-            )
-          ),
-          import_react8.default.createElement("label", null, "expectedValue"),
-          import_react8.default.createElement("input", {
-            value: params.expectedValue ?? "",
-            onChange: (e) => updateSelectedNodeData({ params: { expectedValue: e.target.value } })
-          }),
-          params.condition === "attribute_equals" ? import_react8.default.createElement(
-            import_react8.default.Fragment,
-            null,
-            import_react8.default.createElement("label", null, "attributeName"),
-            import_react8.default.createElement("input", {
-              value: params.attributeName || "",
-              onChange: (e) => updateSelectedNodeData({ params: { attributeName: e.target.value } })
-            })
-          ) : null,
-          d.action === "assert" ? import_react8.default.createElement(
-            import_react8.default.Fragment,
-            null,
+            onClick: (e) => e.stopPropagation()
+          },
+          import_react8.default.createElement(
+            "div",
+            {
+              className: "row",
+              style: {
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 12px",
+                borderBottom: "1px solid #2a2a4a",
+                flexShrink: 0,
+                gap: 8
+              }
+            },
             import_react8.default.createElement(
-              "div",
-              { className: "row", style: { marginTop: 6 } },
-              import_react8.default.createElement(
-                "label",
-                { className: "checkrow" },
-                import_react8.default.createElement("input", {
-                  type: "checkbox",
-                  checked: !!params.waitMode,
-                  onChange: (e) => updateSelectedNodeData({ params: { waitMode: e.target.checked } })
-                }),
-                " waitMode"
-              ),
-              import_react8.default.createElement(
-                "label",
-                { className: "checkrow" },
-                import_react8.default.createElement("input", {
-                  type: "checkbox",
-                  checked: !!params.softAssert,
-                  onChange: (e) => updateSelectedNodeData({ params: { softAssert: e.target.checked } })
-                }),
-                " softAssert"
-              )
+              "strong",
+              { style: { fontSize: 14 } },
+              `\u0428\u0430\u0433 #${mn.data?.stepRef ?? "?"} \xB7 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438`
+            ),
+            import_react8.default.createElement(
+              "button",
+              { type: "button", className: "btn2", onClick: () => setStepSettingsModalNodeId(null) },
+              "\u2715 \u0417\u0430\u043A\u0440\u044B\u0442\u044C"
             )
-          ) : null
-        ) : null,
-        import_react8.default.createElement("label", null, "fallbackXPaths (\u043F\u043E \u043E\u0434\u043D\u043E\u043C\u0443 \u0432 \u0441\u0442\u0440\u043E\u043A\u0435)"),
-        import_react8.default.createElement("textarea", {
-          placeholder: "//button[1]",
-          value: safeArray(params.fallbackXPaths).join("\n"),
-          onChange: (e) => updateSelectedNodeData({
-            params: {
-              fallbackXPaths: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean)
-            }
-          })
-        }),
-        import_react8.default.createElement(
-          "div",
-          { className: "row", style: { marginTop: 8 } },
-          import_react8.default.createElement(
-            "select",
-            {
-              value: selectedGroupId,
-              onChange: (e) => setSelectedGroupId(e.target.value),
-              style: { flex: 1 }
-            },
-            import_react8.default.createElement("option", { value: "" }, "\u0413\u0440\u0443\u043F\u043F\u0430\u2026"),
-            ...groups.map((g) => import_react8.default.createElement("option", { key: g.id, value: g.id }, g.title))
           ),
           import_react8.default.createElement(
-            "button",
-            { className: "btn2", type: "button", onClick: assignNodeToSelectedGroup },
-            "\u0412 \u0433\u0440\u0443\u043F\u043F\u0443"
+            "div",
+            {
+              className: "flow-modal-body panel-scroll",
+              style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 }
+            },
+            renderStepSettingsForm(mn, (patch) => updateNodeDataById(mid, patch))
           )
         )
-      ) : import_react8.default.createElement(
-        "p",
-        { className: "hint" },
-        "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0431\u043B\u043E\u043A \u043D\u0430 \u0441\u0445\u0435\u043C\u0435"
-      ),
-      import_react8.default.createElement("hr", { style: { borderColor: "#2a2a4a", margin: "14px 0" } }),
+      );
+    })() : null,
+    annSettingsModalNodeId ? (() => {
+      const mn = nodes.find((n) => n.id === annSettingsModalNodeId);
+      if (!mn || !isAnnotationNode(mn)) return null;
+      const mid = annSettingsModalNodeId;
+      return import_react8.default.createElement(
+        "div",
+        {
+          className: "flow-modal-backdrop",
+          role: "presentation",
+          style: {
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            zIndex: 11e3,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          },
+          onClick: () => setAnnSettingsModalNodeId(null),
+          onContextMenu: (e) => e.preventDefault()
+        },
+        import_react8.default.createElement(
+          "div",
+          {
+            className: "flow-modal-dialog",
+            role: "dialog",
+            "aria-modal": true,
+            style: {
+              background: "#1a1a2e",
+              border: "1px solid #00d4aa",
+              borderRadius: 12,
+              maxWidth: 520,
+              width: "100%",
+              maxHeight: "90vh",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.55)"
+            },
+            onClick: (e) => e.stopPropagation()
+          },
+          import_react8.default.createElement(
+            "div",
+            {
+              className: "row",
+              style: {
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 12px",
+                borderBottom: "1px solid #2a2a4a",
+                flexShrink: 0,
+                gap: 8
+              }
+            },
+            import_react8.default.createElement(
+              "strong",
+              { style: { fontSize: 14 } },
+              annotationIsImage(mn) ? "\u{1F5BC} \u041A\u0430\u0440\u0442\u0438\u043D\u043A\u0430 \u2014 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" : "\u041F\u0440\u0438\u043C\u0438\u0442\u0438\u0432 \u2014 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438"
+            ),
+            import_react8.default.createElement(
+              "button",
+              { type: "button", className: "btn2", onClick: () => setAnnSettingsModalNodeId(null) },
+              "\u2715 \u0417\u0430\u043A\u0440\u044B\u0442\u044C"
+            )
+          ),
+          import_react8.default.createElement(
+            "div",
+            {
+              className: "flow-modal-body panel-scroll",
+              style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 }
+            },
+            renderAnnotationSettingsForm(mn, (patch) => updateNodeDataById(mid, patch))
+          )
+        )
+      );
+    })() : null,
+    decorateEdgeModalId ? (() => {
+      const e0 = edges.find((e) => e.id === decorateEdgeModalId);
+      if (!e0 || !edgeKindIsDecorate(e0)) return null;
+      return import_react8.default.createElement(
+        "div",
+        {
+          className: "flow-modal-backdrop",
+          role: "presentation",
+          style: {
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            zIndex: 11e3,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          },
+          onClick: () => setDecorateEdgeModalId(null),
+          onContextMenu: (ev) => ev.preventDefault()
+        },
+        import_react8.default.createElement(
+          "div",
+          {
+            className: "flow-modal-dialog",
+            role: "dialog",
+            "aria-modal": true,
+            style: {
+              background: "#1a1a2e",
+              border: "1px solid #00d4aa",
+              borderRadius: 12,
+              maxWidth: 440,
+              width: "100%",
+              maxHeight: "90vh",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.55)"
+            },
+            onClick: (ev) => ev.stopPropagation()
+          },
+          import_react8.default.createElement(
+            "div",
+            {
+              className: "row",
+              style: {
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 12px",
+                borderBottom: "1px solid #2a2a4a",
+                flexShrink: 0,
+                gap: 8
+              }
+            },
+            import_react8.default.createElement("strong", { style: { fontSize: 14 } }, "\u0421\u0432\u044F\u0437\u044C \u0440\u0430\u0437\u043C\u0435\u0442\u043A\u0438 (decorate)"),
+            import_react8.default.createElement(
+              "button",
+              { type: "button", className: "btn2", onClick: () => setDecorateEdgeModalId(null) },
+              "\u2715 \u0417\u0430\u043A\u0440\u044B\u0442\u044C"
+            )
+          ),
+          import_react8.default.createElement(
+            "div",
+            {
+              className: "flow-modal-body panel-scroll",
+              style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 }
+            },
+            renderDecorateEdgeForm(e0, (patch) => updateDecorateEdgeById(e0.id, patch))
+          )
+        )
+      );
+    })() : null,
+    scenarioSettingsOpen && scenario && selectedScenarioId ? import_react8.default.createElement(
+      "div",
+      {
+        className: "flow-modal-backdrop",
+        role: "presentation",
+        style: {
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          zIndex: 11e3,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16
+        },
+        onClick: () => setScenarioSettingsOpen(false),
+        onContextMenu: (e) => e.preventDefault()
+      },
       import_react8.default.createElement(
         "div",
-        { className: "row", style: { justifyContent: "space-between" } },
+        {
+          className: "flow-modal-dialog",
+          role: "dialog",
+          "aria-modal": true,
+          style: {
+            background: "#1a1a2e",
+            border: "1px solid #00d4aa",
+            borderRadius: 12,
+            maxWidth: 520,
+            width: "100%",
+            maxHeight: "90vh",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.55)"
+          },
+          onClick: (e) => e.stopPropagation()
+        },
         import_react8.default.createElement(
-          "h2",
-          { className: "title", style: { fontSize: 14, margin: 0 } },
-          "\u0413\u0440\u0443\u043F\u043F\u044B"
+          "div",
+          {
+            className: "row",
+            style: {
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "10px 12px",
+              borderBottom: "1px solid #2a2a4a",
+              flexShrink: 0,
+              gap: 8
+            }
+          },
+          import_react8.default.createElement("strong", { style: { fontSize: 14 } }, "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u0438 \u0433\u0440\u0443\u043F\u043F"),
+          import_react8.default.createElement(
+            "button",
+            { type: "button", className: "btn2", onClick: () => setScenarioSettingsOpen(false) },
+            "\u2715 \u0417\u0430\u043A\u0440\u044B\u0442\u044C"
+          )
         ),
         import_react8.default.createElement(
-          "button",
-          { className: "btn2", type: "button", onClick: addGroup },
-          "+ \u0413\u0440\u0443\u043F\u043F\u0430"
-        )
-      ),
-      groups.length === 0 ? import_react8.default.createElement("p", { className: "hint" }, "\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u0433\u0440\u0443\u043F\u043F") : null,
-      ...groups.map(
-        (g) => import_react8.default.createElement(
           "div",
-          { key: g.id, className: "groupItem" },
+          {
+            className: "flow-modal-body panel-scroll",
+            style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 }
+          },
+          import_react8.default.createElement(
+            "label",
+            { className: "small", style: { display: "block" } },
+            "\u0418\u043C\u044F \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F (name)"
+          ),
+          import_react8.default.createElement("input", {
+            value: scenario.name != null ? String(scenario.name) : "",
+            placeholder: selectedScenarioId,
+            onChange: (ev) => setScenario((prev) => prev ? { ...prev, name: ev.target.value } : null)
+          }),
+          import_react8.default.createElement(
+            "p",
+            { className: "small", style: { marginTop: 4, lineHeight: 1.35 } },
+            "\u0424\u0430\u0439\u043B: ",
+            import_react8.default.createElement("code", null, `${selectedScenarioId}.json`),
+            " \u2014 id \u043D\u0435 \u043C\u0435\u043D\u044F\u0435\u0442\u0441\u044F."
+          ),
+          import_react8.default.createElement(
+            "label",
+            {
+              className: "checkrow",
+              style: { display: "flex", marginTop: 10, alignItems: "center", gap: 8 }
+            },
+            import_react8.default.createElement("input", {
+              type: "checkbox",
+              checked: !!scenario.smoke,
+              onChange: (ev) => setScenario((prev) => prev ? { ...prev, smoke: ev.target.checked } : null)
+            }),
+            " \u0414\u044B\u043C\u043E\u0432\u043E\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439 (smoke)"
+          ),
+          import_react8.default.createElement(
+            "label",
+            { className: "small", style: { display: "block", marginTop: 8 } },
+            "\u041C\u0435\u0442\u043A\u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F (labels), JSON"
+          ),
+          import_react8.default.createElement("textarea", {
+            value: scenario.labelsText != null ? String(scenario.labelsText) : "{}",
+            placeholder: '{"suite":"regression","team":"qa"}',
+            style: { minHeight: 72, fontFamily: "ui-monospace, monospace", fontSize: 12 },
+            onChange: (ev) => setScenario((prev) => prev ? { ...prev, labelsText: ev.target.value } : null)
+          }),
+          import_react8.default.createElement(
+            "label",
+            { className: "small", style: { display: "block", marginTop: 10 } },
+            "\u0412\u0435\u0440\u0441\u0438\u0438 \u0438\u0437 .history"
+          ),
+          import_react8.default.createElement(
+            "div",
+            { className: "row", style: { alignItems: "center" } },
+            import_react8.default.createElement(
+              "select",
+              {
+                value: historyPick,
+                onChange: (ev) => setHistoryPick(ev.target.value),
+                style: { flex: 1 }
+              },
+              import_react8.default.createElement("option", { value: "" }, "\u2014 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043D\u0438\u043C\u043E\u043A \u2014"),
+              ...historyItems.map(
+                (h) => import_react8.default.createElement(
+                  "option",
+                  { key: h.file, value: h.file },
+                  `${h.file} \xB7 ${new Date((h.mtime || 0) * 1e3).toLocaleString()}`
+                )
+              )
+            ),
+            import_react8.default.createElement(
+              "button",
+              {
+                type: "button",
+                className: "btn2",
+                disabled: !historyPick,
+                onClick: () => restoreFromHistory(historyPick)
+              },
+              "\u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C"
+            )
+          ),
+          import_react8.default.createElement("hr", { style: { borderColor: "#2a2a4a", margin: "14px 0" } }),
           import_react8.default.createElement(
             "div",
             { className: "row", style: { justifyContent: "space-between" } },
-            import_react8.default.createElement("strong", null, g.title),
+            import_react8.default.createElement(
+              "h2",
+              { className: "title", style: { fontSize: 14, margin: 0 } },
+              "\u0413\u0440\u0443\u043F\u043F\u044B"
+            ),
             import_react8.default.createElement(
               "button",
-              { className: "btn2", type: "button", onClick: () => deleteGroup(g.id) },
-              "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"
+              { className: "btn2", type: "button", onClick: addGroup },
+              "+ \u0413\u0440\u0443\u043F\u043F\u0430"
             )
           ),
-          import_react8.default.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435"),
-          import_react8.default.createElement("input", {
-            value: g.title,
-            onChange: (e) => updateGroup(g.id, { title: e.target.value })
-          }),
-          import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442"),
-          import_react8.default.createElement("input", {
-            className: "inlineColor",
-            type: "color",
-            value: g.color || "#00d4aa",
-            onChange: (e) => updateGroup(g.id, { color: e.target.value })
-          }),
-          import_react8.default.createElement(
-            "div",
-            { className: "hint" },
-            `\u0423\u0437\u043B\u044B: ${(g.nodeIds || []).join(", ") || "\u043D\u0435\u0442"}`
-          ),
-          ...(g.nodeIds || []).map(
-            (nodeId) => import_react8.default.createElement(
+          groups.length === 0 ? import_react8.default.createElement("p", { className: "hint" }, "\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u0433\u0440\u0443\u043F\u043F") : null,
+          ...groups.map(
+            (g) => import_react8.default.createElement(
               "div",
-              { key: `${g.id}-${nodeId}`, className: "row" },
-              import_react8.default.createElement("span", { className: "small", style: { flex: 1 } }, nodeId),
+              { key: g.id, className: "groupItem" },
               import_react8.default.createElement(
-                "button",
-                {
-                  className: "btn2",
-                  type: "button",
-                  onClick: () => removeNodeFromGroup(g.id, nodeId)
-                },
-                "\u0423\u0431\u0440\u0430\u0442\u044C"
+                "div",
+                { className: "row", style: { justifyContent: "space-between" } },
+                import_react8.default.createElement("strong", null, g.title),
+                import_react8.default.createElement(
+                  "button",
+                  { className: "btn2", type: "button", onClick: () => deleteGroup(g.id) },
+                  "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"
+                )
+              ),
+              import_react8.default.createElement("label", null, "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435"),
+              import_react8.default.createElement("input", {
+                value: g.title,
+                onChange: (ev) => updateGroup(g.id, { title: ev.target.value })
+              }),
+              import_react8.default.createElement("label", null, "\u0426\u0432\u0435\u0442"),
+              import_react8.default.createElement("input", {
+                className: "inlineColor",
+                type: "color",
+                value: g.color || "#00d4aa",
+                onChange: (ev) => updateGroup(g.id, { color: ev.target.value })
+              }),
+              import_react8.default.createElement(
+                "div",
+                { className: "hint" },
+                `\u0423\u0437\u043B\u044B: ${(g.nodeIds || []).join(", ") || "\u043D\u0435\u0442"}`
+              ),
+              ...(g.nodeIds || []).map(
+                (nid) => import_react8.default.createElement(
+                  "div",
+                  { key: `${g.id}-${nid}`, className: "row" },
+                  import_react8.default.createElement("span", { className: "small", style: { flex: 1 } }, nid),
+                  import_react8.default.createElement(
+                    "button",
+                    {
+                      className: "btn2",
+                      type: "button",
+                      onClick: () => removeNodeFromGroup(g.id, nid)
+                    },
+                    "\u0423\u0431\u0440\u0430\u0442\u044C"
+                  )
+                )
               )
             )
-          )
+          ),
+          selectedGroup ? import_react8.default.createElement(
+            "p",
+            { className: "hint" },
+            `\u0410\u043A\u0442\u0438\u0432\u043D\u0430\u044F \u0433\u0440\u0443\u043F\u043F\u0430 \u0432 \u0444\u043E\u0440\u043C\u0435 \u0448\u0430\u0433\u0430: ${selectedGroup.title}`
+          ) : null
         )
-      ),
-      selectedGroup ? import_react8.default.createElement(
-        "p",
-        { className: "hint" },
-        `\u0413\u0440\u0443\u043F\u043F\u0430: ${selectedGroup.title}`
-      ) : null
-    )
+      )
+    ) : null,
+    canvasContextMenu ? import_react8.default.createElement(
+      "div",
+      {
+        className: "flow-ctx-menu flow-ctx-menu-col",
+        style: {
+          position: "fixed",
+          left: Math.min(
+            canvasContextMenu.clientX,
+            (typeof window !== "undefined" ? window.innerWidth : 999) - 240
+          ),
+          top: Math.min(
+            canvasContextMenu.clientY,
+            (typeof window !== "undefined" ? window.innerHeight : 999) - 120
+          ),
+          zIndex: 1e4,
+          background: "#1a1a2e",
+          border: "1px solid #00d4aa",
+          borderRadius: 8,
+          boxShadow: "0 8px 28px rgba(0,0,0,0.5)",
+          padding: 6,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          minWidth: 220
+        },
+        onClick: (e) => e.stopPropagation(),
+        onContextMenu: (e) => e.preventDefault()
+      },
+      canvasContextMenu.kind === "step" ? import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn",
+            style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+            onClick: () => {
+              const id2 = canvasContextMenu.nodeId;
+              setCanvasContextMenu(null);
+              setSelectedNodeId(id2);
+              setStepSettingsModalNodeId(id2);
+            }
+          },
+          "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0448\u0430\u0433\u0430\u2026"
+        ),
+        canvasContextMenu.canRunFrom ? import_react8.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn2",
+            style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+            onClick: () => {
+              const sr = canvasContextMenu.stepRef;
+              setCanvasContextMenu(null);
+              startScenarioRun({ startStep: sr });
+            }
+          },
+          `\u25B6 \u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0441 \u0448\u0430\u0433\u0430 #${canvasContextMenu.stepRef}`
+        ) : null,
+        import_react8.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn2",
+            style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+            onClick: () => {
+              const id2 = canvasContextMenu.nodeId;
+              setCanvasContextMenu(null);
+              duplicateNodeById(id2);
+            }
+          },
+          "\u{1F4CB} \u041A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C"
+        )
+      ) : import_react8.default.createElement(
+        import_react8.default.Fragment,
+        null,
+        import_react8.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn",
+            style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+            onClick: () => {
+              const id2 = canvasContextMenu.nodeId;
+              setCanvasContextMenu(null);
+              setSelectedNodeId(id2);
+              setAnnSettingsModalNodeId(id2);
+            }
+          },
+          "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043C\u0438\u0442\u0438\u0432\u0430\u2026"
+        ),
+        import_react8.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn2",
+            style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+            onClick: () => {
+              const id2 = canvasContextMenu.nodeId;
+              setCanvasContextMenu(null);
+              duplicateNodeById(id2);
+            }
+          },
+          "\u{1F4CB} \u041A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C"
+        )
+      )
+    ) : null,
+    edgeContextMenu ? import_react8.default.createElement(
+      "div",
+      {
+        className: "flow-ctx-menu flow-ctx-menu-col",
+        style: {
+          position: "fixed",
+          left: Math.min(
+            edgeContextMenu.clientX,
+            (typeof window !== "undefined" ? window.innerWidth : 999) - 240
+          ),
+          top: Math.min(
+            edgeContextMenu.clientY,
+            (typeof window !== "undefined" ? window.innerHeight : 999) - 80
+          ),
+          zIndex: 1e4,
+          background: "#1a1a2e",
+          border: "1px solid #00d4aa",
+          borderRadius: 8,
+          boxShadow: "0 8px 28px rgba(0,0,0,0.5)",
+          padding: 6,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          minWidth: 200
+        },
+        onClick: (e) => e.stopPropagation(),
+        onContextMenu: (e) => e.preventDefault()
+      },
+      import_react8.default.createElement(
+        "button",
+        {
+          type: "button",
+          className: "btn",
+          style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+          onClick: () => {
+            const eid = edgeContextMenu.edgeId;
+            setEdgeContextMenu(null);
+            setDecorateEdgeModalId(eid);
+          }
+        },
+        "\u041F\u043E\u0434\u043F\u0438\u0441\u044C \u0438 \u0446\u0432\u0435\u0442\u0430\u2026"
+      )
+    ) : null
   );
 }
 function mount() {

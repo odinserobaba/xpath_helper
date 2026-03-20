@@ -18,6 +18,30 @@ import ReactFlow, {
 
 const API_ORIGIN = typeof window !== "undefined" ? window.location.origin : "";
 
+/** Fetch к API раннера с заголовком x-runner-token, если страница отдана с токеном (см. flow_editor.html). */
+function apiFetch(url, init = {}) {
+  const tok =
+    typeof window !== "undefined" && window.__XPATH_RUNNER_TOKEN__
+      ? String(window.__XPATH_RUNNER_TOKEN__).trim()
+      : "";
+  const headers = { ...(init.headers && typeof init.headers === "object" ? init.headers : {}) };
+  if (tok) headers["x-runner-token"] = tok;
+  return fetch(url, { ...init, headers });
+}
+
+/** URL SSE прогона (EventSource не поддерживает заголовки — токен дублируется query ?token=). */
+function buildRunEventsSseUrl(runId) {
+  const id = String(runId || "").trim();
+  if (!id) return "";
+  const tok =
+    typeof window !== "undefined" && window.__XPATH_RUNNER_TOKEN__
+      ? String(window.__XPATH_RUNNER_TOKEN__).trim()
+      : "";
+  const base = `${API_ORIGIN}/api/runs/${encodeURIComponent(id)}/events`;
+  if (tok) return `${base}?token=${encodeURIComponent(tok)}`;
+  return base;
+}
+
 /** Зазоры между узлами на канве — малые значения дают «слипание» orthogonal/smoothstep-связей в один канал. */
 const STEP_GAP_X = 380;
 const STEP_GAP_Y = 240;
@@ -32,7 +56,7 @@ const FLOW_EDGE_TYPE = "simplebezier";
 const FLOW_GROUP_TYPE = "flowGroup";
 
 /** Примитивы разметки (не попадают в JSON steps). Сохраняются в flow.annotations. */
-const ANNOTATION_TYPES = new Set(["annotationRect", "annotationEllipse", "annotationText"]);
+const ANNOTATION_TYPES = new Set(["annotationRect", "annotationEllipse", "annotationText", "annotationImage"]);
 
 /** Предустановки: обводка (12) и полупрозрачная заливка (12). */
 const ANNOTATION_STROKE_SWATCHES = [
@@ -84,6 +108,20 @@ function decorateEdgeDataDefaults() {
 
 function isAnnotationNode(n) {
   return !!(n && ANNOTATION_TYPES.has(n.type));
+}
+
+function annotationIsImage(n) {
+  if (!isAnnotationNode(n)) return false;
+  const d = n.data || {};
+  return d.annKind === "image" || n.type === "annotationImage";
+}
+
+/** Узел сценария, с которого имеет смысл запуск по startStep (не разметка и не рамка группы). */
+function nodeSupportsRunFromHere(n) {
+  if (!n || isAnnotationNode(n)) return false;
+  if (n.type === FLOW_GROUP_TYPE) return false;
+  const sr = Number(n?.data?.stepRef ?? 0);
+  return Number.isFinite(sr) && sr > 0;
 }
 
 /** Визуальная связь разметки / стрелка к примитиву — не участвует в прогоне сценария. */
@@ -166,14 +204,20 @@ function annotationSpecToNode(a, idx) {
   const id = String(a.id || `ann-${idx}-${Date.now()}`);
   const kind = String(a.kind || "rect");
   const type =
-    kind === "ellipse" ? "annotationEllipse" : kind === "text" ? "annotationText" : "annotationRect";
-  const w = Math.max(40, Number(a.width) || (kind === "text" ? 240 : 280));
-  const h = Math.max(32, Number(a.height) || (kind === "text" ? 64 : 140));
+    kind === "ellipse"
+      ? "annotationEllipse"
+      : kind === "text"
+        ? "annotationText"
+        : kind === "image"
+          ? "annotationImage"
+          : "annotationRect";
+  const w = Math.max(40, Number(a.width) || (kind === "text" ? 240 : kind === "image" ? 200 : 280));
+  const h = Math.max(32, Number(a.height) || (kind === "text" ? 64 : kind === "image" ? 150 : 140));
   return {
     id,
     type,
     position: { x: Number(a.x ?? 48 + idx * 16), y: Number(a.y ?? 48 + idx * 16) },
-    zIndex: -150,
+    zIndex: -400,
     style: { width: w, height: h },
     draggable: true,
     selectable: true,
@@ -185,6 +229,9 @@ function annotationSpecToNode(a, idx) {
       fill: String(a.fill ?? "rgba(0,212,170,0.07)"),
       fontSize: Number(a.fontSize) > 0 ? Number(a.fontSize) : kind === "text" ? 15 : 13,
       textColor: String(a.textColor ?? "#e8eaf6"),
+      imageUrl: String(a.imageUrl ?? a.src ?? ""),
+      objectFit: ["cover", "fill", "none", "scale-down"].includes(String(a.objectFit)) ? String(a.objectFit) : "contain",
+      imageOpacity: clamp01(a.imageOpacity ?? 1),
     },
   };
 }
@@ -194,9 +241,15 @@ function annotationsToPayload(nodes) {
     const d = n.data || {};
     const kind =
       d.annKind ||
-      (n.type === "annotationText" ? "text" : n.type === "annotationEllipse" ? "ellipse" : "rect");
+      (n.type === "annotationText"
+        ? "text"
+        : n.type === "annotationEllipse"
+          ? "ellipse"
+          : n.type === "annotationImage"
+            ? "image"
+            : "rect");
     const st = n.style || {};
-    return {
+    const row = {
       id: n.id,
       kind,
       x: Number(n.position?.x ?? 0),
@@ -209,6 +262,12 @@ function annotationsToPayload(nodes) {
       fontSize: Number(d.fontSize) || undefined,
       textColor: String(d.textColor ?? ""),
     };
+    if (kind === "image") {
+      row.imageUrl = String(d.imageUrl ?? "").trim();
+      row.objectFit = String(d.objectFit || "contain");
+      row.imageOpacity = clamp01(d.imageOpacity ?? 1);
+    }
+    return row;
   });
 }
 /** Внешний отступ рамки группы до ближайших блоков (больше — свободнее визуально). */
@@ -277,16 +336,23 @@ function computeGroupFrameNode(group, stepNodes) {
   };
 }
 
-/** Рамки групп отрисовываются первыми (под шагами), не перекрывают блоки и линии. */
+/** Рамки групп → примитивы разметки разом под шагами (z-index и порядок в массиве), чтобы шаги кликались поверх. */
 function withGroupFrameNodes(stepNodes, groupsList) {
-  const steps = stripGroupFrameNodes(stepNodes).map((n) => {
-    if (n.zIndex !== undefined && n.zIndex < 0) return n;
-    return { ...n, zIndex: n.zIndex ?? 0 };
-  });
+  const stripped = stripGroupFrameNodes(stepNodes);
+  const annotations = stripped.filter(isAnnotationNode);
+  const stepsOnly = stripped.filter((n) => !isAnnotationNode(n));
+  const annNorm = annotations.map((n) => ({
+    ...n,
+    zIndex: typeof n.zIndex === "number" && n.zIndex < 0 ? n.zIndex : -400,
+  }));
+  const stepsNorm = stepsOnly.map((n) => ({
+    ...n,
+    zIndex: Math.max(1, Number(n.zIndex) >= 1 ? Number(n.zIndex) : 1),
+  }));
   const frames = safeArray(groupsList)
-    .map((g) => computeGroupFrameNode(g, steps))
+    .map((g) => computeGroupFrameNode(g, stepsNorm))
     .filter(Boolean);
-  return [...frames, ...steps];
+  return [...frames, ...annNorm, ...stepsNorm];
 }
 
 /** Фон группы: под узлами, без перехвата мыши (линии и блоки сверху). */
@@ -1156,6 +1222,67 @@ function AnnotationTextNode({ data, selected }) {
   );
 }
 
+/** Картинка на канве (URL). Не выполняется раннером. */
+function AnnotationImageNode({ data, selected }) {
+  const stroke = data.stroke || "#00d4aa";
+  const url = String(data.imageUrl || "").trim();
+  const fit = String(data.objectFit || "contain");
+  const op = clamp01(data.imageOpacity ?? 1);
+  return React.createElement(
+    "div",
+    {
+      className: "flow-annotation-image" + (selected ? " flow-annotation-selected" : ""),
+      style: {
+        width: "100%",
+        height: "100%",
+        boxSizing: "border-box",
+        border: `2px dashed ${stroke}`,
+        borderRadius: 10,
+        background: data.fill || "rgba(0,212,170,0.07)",
+        overflow: "hidden",
+        position: "relative",
+        pointerEvents: "auto",
+      },
+    },
+    React.createElement(NodeResizer, {
+      isVisible: selected,
+      minWidth: 48,
+      minHeight: 48,
+      color: stroke,
+      lineClassName: "flow-ann-resize-line",
+      handleClassName: "flow-ann-resize-handle",
+    }),
+    ...annotationConnectionHandles(stroke),
+    url
+      ? React.createElement("img", {
+          src: url,
+          alt: String(data.label || "annotation"),
+          draggable: false,
+          style: {
+            width: "100%",
+            height: "100%",
+            objectFit: fit,
+            opacity: op,
+            pointerEvents: "none",
+            userSelect: "none",
+            display: "block",
+          },
+        })
+      : React.createElement(
+          "div",
+          {
+            style: {
+              padding: 10,
+              fontSize: 11,
+              color: "#7a8299",
+              lineHeight: 1.35,
+            },
+          },
+          "Нет URL · ПКМ → настройки примитива",
+        ),
+  );
+}
+
 const nodeTypesStatic = {
   scenarioStep: ScenarioStepNode,
   branchDiamond: BranchDiamondNode,
@@ -1165,6 +1292,7 @@ const nodeTypesStatic = {
   annotationRect: AnnotationRectNode,
   annotationEllipse: AnnotationEllipseNode,
   annotationText: AnnotationTextNode,
+  annotationImage: AnnotationImageNode,
 };
 
 function buildInitialFlowFromSteps(steps) {
@@ -1669,6 +1797,20 @@ function App() {
   const [canvasSearch, setCanvasSearch] = useState("");
   const [historyItems, setHistoryItems] = useState([]);
   const [historyPick, setHistoryPick] = useState("");
+  /** Live-подсветка шага на схеме по SSE /api/runs/{id}/events */
+  const [liveRunInput, setLiveRunInput] = useState("");
+  const [liveRunTrackingId, setLiveRunTrackingId] = useState("");
+  const [liveExecutingStep, setLiveExecutingStep] = useState(null);
+  const [liveRunActionHint, setLiveRunActionHint] = useState("");
+  const [liveRunStreamEnded, setLiveRunStreamEnded] = useState(false);
+  /** Модальное окно настроек шага (ПКМ → Настройки или кнопка в правой панели) */
+  const [stepSettingsModalNodeId, setStepSettingsModalNodeId] = useState(null);
+  const [annSettingsModalNodeId, setAnnSettingsModalNodeId] = useState(null);
+  const [decorateEdgeModalId, setDecorateEdgeModalId] = useState(null);
+  const [scenarioSettingsOpen, setScenarioSettingsOpen] = useState(false);
+  /** ПКМ по канве: шаг | примитив */
+  const [canvasContextMenu, setCanvasContextMenu] = useState(null);
+  const [edgeContextMenu, setEdgeContextMenu] = useState(null);
   /** Режим рисования примитива мышью: rect | ellipse | text */
   const [annotationDrawTool, setAnnotationDrawTool] = useState(null);
   /** Координаты рамки выделения в clientX/Y для превью */
@@ -1732,7 +1874,7 @@ function App() {
 
   const loadScenarios = useCallback(async () => {
     try {
-      const r = await fetch(`${API_ORIGIN}/api/scenarios`);
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios`);
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "Failed to load scenarios");
       setScenarios(j.scenarios || []);
@@ -1747,7 +1889,7 @@ function App() {
       return;
     }
     try {
-      const r = await fetch(`${API_ORIGIN}/api/scenarios/${id}/history`);
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${id}/history`);
       const j = await r.json();
       setHistoryItems(j.history || []);
     } catch {
@@ -1760,7 +1902,7 @@ function App() {
       if (!id) return;
       setLoading(true);
       try {
-        const r = await fetch(`${API_ORIGIN}/api/scenarios/${id}`);
+        const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${id}`);
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || "Failed to load scenario");
         const srcRaw = j.scenario || {};
@@ -1810,7 +1952,7 @@ function App() {
     }
     try {
       const body = createEmptyScenarioPayload(trimmed);
-      const r = await fetch(`${API_ORIGIN}/api/scenarios`, {
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1840,14 +1982,14 @@ function App() {
       return;
     }
     try {
-      const r0 = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`);
+      const r0 = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`);
       const j0 = await r0.json();
       if (!j0.ok) throw new Error(j0.error || "Не удалось прочитать сценарий");
       const data = deepClone(j0.scenario || {});
       delete data.id;
       data.name = trimmed;
       data.exportedAt = new Date().toISOString();
-      const r = await fetch(`${API_ORIGIN}/api/scenarios`, {
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -1874,7 +2016,7 @@ function App() {
       return;
     }
     try {
-      const r = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, { method: "DELETE" });
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, { method: "DELETE" });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "Не удалось удалить");
       setSelectedScenarioId("");
@@ -1963,28 +2105,29 @@ function App() {
     else setSelectedNodeId(nLast);
   }, []);
 
+  const updateDecorateEdgeById = useCallback((edgeId, patch) => {
+    if (!edgeId) return;
+    setEdges((eds) =>
+      eds.map((e) => {
+        if (e.id !== edgeId || !edgeKindIsDecorate(e)) return e;
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            ...(patch.label !== undefined ? { label: String(patch.label) } : {}),
+            ...(patch.labelColor !== undefined ? { labelColor: String(patch.labelColor) } : {}),
+            ...(patch.labelOpacity !== undefined ? { labelOpacity: clamp01(patch.labelOpacity) } : {}),
+            ...(patch.labelBgColor !== undefined ? { labelBgColor: String(patch.labelBgColor) } : {}),
+            ...(patch.labelBgOpacity !== undefined ? { labelBgOpacity: clamp01(patch.labelBgOpacity) } : {}),
+          },
+        };
+      }),
+    );
+  }, [setEdges]);
+
   const updateSelectedDecorateEdge = useCallback(
-    (patch) => {
-      if (!selectedEdgeId) return;
-      setEdges((eds) =>
-        eds.map((e) =>
-          e.id !== selectedEdgeId
-            ? e
-            : {
-                ...e,
-                data: {
-                  ...e.data,
-                  ...(patch.label !== undefined ? { label: String(patch.label) } : {}),
-                  ...(patch.labelColor !== undefined ? { labelColor: String(patch.labelColor) } : {}),
-                  ...(patch.labelOpacity !== undefined ? { labelOpacity: clamp01(patch.labelOpacity) } : {}),
-                  ...(patch.labelBgColor !== undefined ? { labelBgColor: String(patch.labelBgColor) } : {}),
-                  ...(patch.labelBgOpacity !== undefined ? { labelBgOpacity: clamp01(patch.labelBgOpacity) } : {}),
-                },
-              },
-        ),
-      );
-    },
-    [selectedEdgeId, setEdges],
+    (patch) => updateDecorateEdgeById(selectedEdgeId, patch),
+    [selectedEdgeId, updateDecorateEdgeById],
   );
 
   const layoutGridAll = useCallback(() => {
@@ -2022,13 +2165,13 @@ function App() {
     });
   }, [setNodes, refreshNodePreview]);
 
-  const updateSelectedNodeData = useCallback(
-    (patch) => {
-      if (!selectedNodeId) return;
+  const updateNodeDataById = useCallback(
+    (nodeId, patch) => {
+      if (!nodeId) return;
       setNodes((prev) =>
         refreshNodePreview(
           prev.map((n) => {
-            if (n.id !== selectedNodeId) return n;
+            if (n.id !== nodeId) return n;
             if (isAnnotationNode(n)) {
               const d0 = n.data || {};
               const nextData = { ...d0 };
@@ -2040,6 +2183,9 @@ function App() {
                 nextData.fontSize = fs > 0 ? fs : d0.fontSize;
               }
               if (patch.annTextColor !== undefined) nextData.textColor = String(patch.annTextColor);
+              if (patch.imageUrl !== undefined) nextData.imageUrl = String(patch.imageUrl);
+              if (patch.objectFit !== undefined) nextData.objectFit = String(patch.objectFit);
+              if (patch.imageOpacity !== undefined) nextData.imageOpacity = clamp01(patch.imageOpacity);
               let style = { ...(n.style || {}) };
               if (patch.annWidth !== undefined) {
                 const w = Math.max(40, Number(patch.annWidth) || 80);
@@ -2060,7 +2206,7 @@ function App() {
         ),
       );
     },
-    [selectedNodeId, setNodes, refreshNodePreview],
+    [setNodes, refreshNodePreview],
   );
 
   const addGroup = useCallback(() => {
@@ -2111,6 +2257,23 @@ function App() {
     });
   }, [nodes, selectedNodeId, selectedGroupId, setNodes]);
 
+  const assignNodeIdToSelectedGroup = useCallback(
+    (nodeId) => {
+      if (!selectedGroupId || !nodeId) return;
+      setGroups((prev) => {
+        const next = prev.map((g) => {
+          if (g.id !== selectedGroupId) return g;
+          const set = new Set(g.nodeIds || []);
+          set.add(nodeId);
+          return { ...g, nodeIds: [...set] };
+        });
+        setNodes((p) => withGroupFrameNodes(stripGroupFrameNodes(p), next));
+        return next;
+      });
+    },
+    [selectedGroupId, setNodes],
+  );
+
   const removeNodeFromGroup = useCallback(
     (groupId, nodeId) => {
       setGroups((prev) => {
@@ -2125,7 +2288,7 @@ function App() {
   );
 
   const saveScenario = useCallback(async () => {
-    if (!selectedScenarioId || !scenario) return;
+    if (!selectedScenarioId || !scenario) return false;
     try {
       const stepNodesOnly = stripGroupFrameNodes(nodes);
       let steps = nodesDataToSteps(stepNodesOnly, scenario.steps);
@@ -2133,7 +2296,7 @@ function App() {
       const startBlocks = steps.filter((s) => s.action === "start");
       if (startBlocks.length === 0) {
         toast("Добавьте один шаг «Начало» (action: start) — точка входа при выполнении. Сохранение отменено.");
-        return;
+        return false;
       }
       if (startBlocks.length > 1) {
         toast(
@@ -2150,7 +2313,7 @@ function App() {
         }
       } catch {
         toast("Некорректный JSON в «Метки сценария» — исправьте или очистите.");
-        return;
+        return false;
       }
       const payload = {
         ...scenario,
@@ -2162,7 +2325,7 @@ function App() {
         exportedAt: new Date().toISOString(),
       };
       delete payload.labelsText;
-      const r = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, {
+      const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -2179,10 +2342,84 @@ function App() {
         toast("Сценарий сохранен");
       }
       loadScenarios();
+      return true;
     } catch (e) {
       toast(`Ошибка сохранения: ${e?.message || e}`);
+      return false;
     }
   }, [selectedScenarioId, scenario, nodes, edges, groups, loadScenarios, setNodes, setEdges]);
+
+  const startScenarioRun = useCallback(
+    async (opts = {}) => {
+      const startStepOpt = opts.startStep;
+      if (!selectedScenarioId || !scenario) {
+        toast("Выберите сценарий");
+        return;
+      }
+      if (loading) return;
+      setLoading(true);
+      try {
+        const saved = await saveScenario();
+        if (!saved) {
+          return;
+        }
+        let labelsObj = {};
+        try {
+          if (scenario.labelsText != null && String(scenario.labelsText).trim()) {
+            labelsObj = JSON.parse(String(scenario.labelsText));
+          } else if (scenario.labels && typeof scenario.labels === "object") {
+            labelsObj = scenario.labels;
+          }
+        } catch {
+          labelsObj = {};
+        }
+        const body = {
+          scenarioId: selectedScenarioId,
+          labels: labelsObj,
+        };
+        const ss = startStepOpt != null ? Number(startStepOpt) : NaN;
+        if (Number.isFinite(ss) && ss > 0) {
+          body.startStep = ss;
+        }
+        const r = await apiFetch(`${API_ORIGIN}/api/runs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "Run failed");
+        const runId = j.runId;
+        setLiveRunInput(runId);
+        setLiveRunTrackingId(runId);
+        const fromHint = Number.isFinite(ss) && ss > 0 ? ` с шага #${ss}` : "";
+        toast(`Прогон запущен${fromHint}: ${runId}. Подсветка на схеме · live-страница.`);
+        window.open(`${API_ORIGIN}/runs/${runId}`, "_blank", "noopener,noreferrer");
+      } catch (e) {
+        toast(`Ошибка запуска: ${e?.message || e}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedScenarioId, scenario, saveScenario, loading],
+  );
+
+  const saveAndRunScenario = useCallback(() => startScenarioRun({}), [startScenarioRun]);
+
+  const requestStopRun = useCallback(async () => {
+    const id = String(liveRunTrackingId || liveRunInput || "").trim();
+    if (!id) {
+      toast("Укажите runId в поле подписки или запустите прогон");
+      return;
+    }
+    try {
+      const r = await apiFetch(`${API_ORIGIN}/api/runs/${encodeURIComponent(id)}/stop`, { method: "POST" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "stop failed");
+      toast("Стоп: прогон завершится после текущего шага (или снимет debug-паузу).");
+    } catch (e) {
+      toast(`Стоп: ${e?.message || e}`);
+    }
+  }, [liveRunTrackingId, liveRunInput]);
 
   const restoreFromHistory = useCallback(
     async (file) => {
@@ -2195,7 +2432,7 @@ function App() {
         return;
       }
       try {
-        const r = await fetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}/restore-history`, {
+        const r = await apiFetch(`${API_ORIGIN}/api/scenarios/${selectedScenarioId}/restore-history`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ file }),
@@ -2213,6 +2450,74 @@ function App() {
   );
 
   useEffect(() => {
+    try {
+      const r = new URLSearchParams(window.location.search).get("run");
+      if (r && String(r).trim()) {
+        const id = String(r).trim();
+        setLiveRunInput(id);
+        setLiveRunTrackingId(id);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = String(liveRunTrackingId || "").trim();
+    if (!id) {
+      setLiveExecutingStep(null);
+      setLiveRunActionHint("");
+      setLiveRunStreamEnded(false);
+      return;
+    }
+
+    setLiveRunStreamEnded(false);
+    const url = buildRunEventsSseUrl(id);
+    if (!url) return;
+
+    let closed = false;
+    const es = new EventSource(url);
+
+    const apply = (msg) => {
+      if (closed || !msg || typeof msg !== "object") return;
+      const e = msg.event;
+      if (e === "step_start") {
+        const sn = Number(msg.step);
+        if (Number.isFinite(sn)) {
+          setLiveExecutingStep(sn);
+          setLiveRunActionHint(String(msg.action || ""));
+        }
+      } else if (e === "step_done") {
+        const sn = Number(msg.step);
+        if (Number.isFinite(sn)) {
+          setLiveExecutingStep((cur) => (cur === sn ? null : cur));
+        }
+      } else if (e === "run_cancelled") {
+        setLiveExecutingStep(null);
+        setLiveRunActionHint("остановлено");
+      } else if (e === "run_done") {
+        setLiveExecutingStep(null);
+        setLiveRunActionHint("");
+        setLiveRunStreamEnded(true);
+        es.close();
+      }
+    };
+
+    es.onmessage = (ev) => {
+      try {
+        apply(JSON.parse(ev.data));
+      } catch (_) {
+        /* ignore */
+      }
+    };
+
+    return () => {
+      closed = true;
+      es.close();
+    };
+  }, [liveRunTrackingId]);
+
+  useEffect(() => {
     const h = (e) => {
       if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === "s") {
         e.preventDefault();
@@ -2226,6 +2531,12 @@ function App() {
   useEffect(() => {
     const esc = (e) => {
       if (e.key === "Escape") {
+        setStepSettingsModalNodeId(null);
+        setAnnSettingsModalNodeId(null);
+        setDecorateEdgeModalId(null);
+        setScenarioSettingsOpen(false);
+        setCanvasContextMenu(null);
+        setEdgeContextMenu(null);
         setAnnotationDrawTool(null);
         setRubberBandClient(null);
       }
@@ -2233,6 +2544,36 @@ function App() {
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, []);
+
+  useEffect(() => {
+    if (!stepSettingsModalNodeId) return;
+    if (!nodes.some((n) => n.id === stepSettingsModalNodeId)) {
+      setStepSettingsModalNodeId(null);
+    }
+  }, [nodes, stepSettingsModalNodeId]);
+
+  useEffect(() => {
+    if (!canvasContextMenu && !edgeContextMenu) return;
+    const onDocClick = () => {
+      setCanvasContextMenu(null);
+      setEdgeContextMenu(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [canvasContextMenu, edgeContextMenu]);
+
+  useEffect(() => {
+    if (!annSettingsModalNodeId) return;
+    if (!nodes.some((n) => n.id === annSettingsModalNodeId)) {
+      setAnnSettingsModalNodeId(null);
+    }
+  }, [nodes, annSettingsModalNodeId]);
+
+  useEffect(() => {
+    if (!decorateEdgeModalId) return;
+    const e0 = edges.find((e) => e.id === decorateEdgeModalId);
+    if (!e0 || !edgeKindIsDecorate(e0)) setDecorateEdgeModalId(null);
+  }, [edges, decorateEdgeModalId]);
 
   useEffect(() => {
     if (!annotationDrawTool || !scenario) return;
@@ -2315,7 +2656,8 @@ function App() {
       const { si, fi } = annStylePickRef.current;
       const stroke = ANNOTATION_STROKE_SWATCHES[si] ?? ANNOTATION_STROKE_SWATCHES[0];
       const fill = ANNOTATION_FILL_SWATCHES[fi] ?? ANNOTATION_FILL_SWATCHES[0];
-      const ak = tool === "ellipse" ? "ellipse" : tool === "text" ? "text" : "rect";
+      const ak =
+        tool === "ellipse" ? "ellipse" : tool === "text" ? "text" : tool === "image" ? "image" : "rect";
 
       const spec = {
         id: `ann-${Date.now()}`,
@@ -2324,11 +2666,14 @@ function App() {
         y: pos.y,
         width: fw,
         height: fh,
-        label: ak === "text" ? "Подпись" : "",
+        label: ak === "text" ? "Подпись" : ak === "image" ? "" : "",
         stroke,
         fill,
         fontSize: ak === "text" ? 15 : 13,
         textColor: stroke,
+        imageUrl: ak === "image" ? "" : undefined,
+        objectFit: ak === "image" ? "contain" : undefined,
+        imageOpacity: ak === "image" ? 1 : undefined,
       };
       const node = annotationSpecToNode(spec, 0);
       setNodes((prevNodes) => {
@@ -2472,78 +2817,100 @@ function App() {
     setSelectedNodeId(newNodes[0]?.id || "");
   }, [selectedNodeId, scenario, nodes, edges, setNodes, setEdges, refreshNodePreview]);
 
-  const duplicateSelectedBlock = useCallback(() => {
-    if (!selectedNodeId || !scenario) return;
-    const stripped = stripGroupFrameNodes(nodes);
-    const src = stripped.find((n) => n.id === selectedNodeId);
-    if (!src) return;
+  const duplicateNodeById = useCallback(
+    (nodeId) => {
+      if (!nodeId) return;
+      const stripped = stripGroupFrameNodes(nodes);
+      const src = stripped.find((n) => n.id === nodeId);
+      if (!src) return;
 
-    if (isAnnotationNode(src)) {
+      if (isAnnotationNode(src)) {
+        const d = src.data || {};
+        const kind =
+          d.annKind ||
+          (src.type === "annotationText"
+            ? "text"
+            : src.type === "annotationEllipse"
+              ? "ellipse"
+              : src.type === "annotationImage"
+                ? "image"
+                : "rect");
+        const st = src.style || {};
+        const w = typeof st.width === "number" ? st.width : parseInt(String(st.width || 280), 10) || 280;
+        const h = typeof st.height === "number" ? st.height : parseInt(String(st.height || 140), 10) || 140;
+        const copy = annotationSpecToNode(
+          {
+            id: `ann-${Date.now()}`,
+            kind,
+            x: (src.position?.x || 0) + 48,
+            y: (src.position?.y || 0) + 48,
+            width: w,
+            height: h,
+            label: d.label != null ? String(d.label) : "",
+            stroke: d.stroke,
+            fill: d.fill,
+            fontSize: d.fontSize,
+            textColor: d.textColor,
+            imageUrl: kind === "image" ? d.imageUrl : undefined,
+            objectFit: kind === "image" ? d.objectFit : undefined,
+            imageOpacity: kind === "image" ? d.imageOpacity : undefined,
+          },
+          0,
+        );
+        setNodes((prev) => {
+          const { annotations, steps } = partitionStrippedNodes(prev);
+          return refreshNodePreview(withGroupFrameNodes([...annotations, ...steps, copy], groupsRef.current));
+        });
+        setSelectedNodeId(copy.id);
+        return;
+      }
+
+      if (!scenario) {
+        toast("Выберите сценарий");
+        return;
+      }
+
       const d = src.data || {};
-      const kind =
-        d.annKind ||
-        (src.type === "annotationText" ? "text" : src.type === "annotationEllipse" ? "ellipse" : "rect");
-      const st = src.style || {};
-      const w = typeof st.width === "number" ? st.width : parseInt(String(st.width || 280), 10) || 280;
-      const h = typeof st.height === "number" ? st.height : parseInt(String(st.height || 140), 10) || 140;
-      const copy = annotationSpecToNode(
-        {
-          id: `ann-${Date.now()}`,
-          kind,
-          x: (src.position?.x || 0) + 48,
-          y: (src.position?.y || 0) + 48,
-          width: w,
-          height: h,
-          label: d.label != null ? String(d.label) : "",
-          stroke: d.stroke,
-          fill: d.fill,
-          fontSize: d.fontSize,
-          textColor: d.textColor,
-        },
-        0,
-      );
+      const maxRef = stripped
+        .filter((n) => !isAnnotationNode(n))
+        .reduce((m, n) => Math.max(m, Number(n.data?.stepRef || 0)), 0);
+      const nextRef = maxRef + 1;
+      const dupStep = {
+        step: nextRef,
+        xpath: d.xpath != null ? String(d.xpath) : "",
+        action: d.action || "click",
+        title: `${d.title || "Шаг"} (копия)`,
+        tags: [...safeArray(d.tags)],
+        params: deepClone(d.params || {}),
+        note: d.note != null ? String(d.note) : "",
+        ticket: d.ticket != null ? String(d.ticket) : "",
+        qaStatus: d.qaStatus || "",
+      };
+      if (d.comment) dupStep.comment = d.comment;
+      const dupData = stepToNodeData(dupStep);
+      const newNode = {
+        id: `step-${nextRef}-${Date.now()}`,
+        type: nodeTypeForAction(dupData.action),
+        position: { x: (src.position?.x || 0) + 50, y: (src.position?.y || 0) + 40 },
+        data: dupData,
+      };
+      newNode.data.stepRef = nextRef;
+
       setNodes((prev) => {
         const { annotations, steps } = partitionStrippedNodes(prev);
-        return refreshNodePreview(withGroupFrameNodes([...annotations, ...steps, copy], groupsRef.current));
+        return refreshNodePreview(
+          withGroupFrameNodes([...annotations, ...steps, newNode], groupsRef.current),
+        );
       });
-      setSelectedNodeId(copy.id);
-      return;
-    }
+      setSelectedNodeId(newNode.id);
+    },
+    [scenario, nodes, setNodes, refreshNodePreview],
+  );
 
-    const d = src.data || {};
-    const maxRef = stripped
-      .filter((n) => !isAnnotationNode(n))
-      .reduce((m, n) => Math.max(m, Number(n.data?.stepRef || 0)), 0);
-    const nextRef = maxRef + 1;
-    const dupStep = {
-      step: nextRef,
-      xpath: d.xpath != null ? String(d.xpath) : "",
-      action: d.action || "click",
-      title: `${d.title || "Шаг"} (копия)`,
-      tags: [...safeArray(d.tags)],
-      params: deepClone(d.params || {}),
-      note: d.note != null ? String(d.note) : "",
-      ticket: d.ticket != null ? String(d.ticket) : "",
-      qaStatus: d.qaStatus || "",
-    };
-    if (d.comment) dupStep.comment = d.comment;
-    const dupData = stepToNodeData(dupStep);
-    const newNode = {
-      id: `step-${nextRef}-${Date.now()}`,
-      type: nodeTypeForAction(dupData.action),
-      position: { x: (src.position?.x || 0) + 50, y: (src.position?.y || 0) + 40 },
-      data: dupData,
-    };
-    newNode.data.stepRef = nextRef;
-
-    setNodes((prev) => {
-      const { annotations, steps } = partitionStrippedNodes(prev);
-      return refreshNodePreview(
-        withGroupFrameNodes([...annotations, ...steps, newNode], groupsRef.current),
-      );
-    });
-    setSelectedNodeId(newNode.id);
-  }, [selectedNodeId, scenario, nodes, setNodes, refreshNodePreview]);
+  const duplicateSelectedBlock = useCallback(() => {
+    if (!selectedNodeId) return;
+    duplicateNodeById(selectedNodeId);
+  }, [selectedNodeId, duplicateNodeById]);
 
   const selectedGroup = useMemo(
     () => groups.find((g) => g.id === selectedGroupId) || null,
@@ -2552,51 +2919,620 @@ function App() {
 
   const nodesForCanvas = useMemo(() => {
     const q = canvasSearch.trim().toLowerCase();
-    if (!q) return nodes;
     return nodes.map((n) => {
-      if (n.type === FLOW_GROUP_TYPE) return n;
-      const d0 = n.data || {};
-      const hay = [
-        String(d0.title || ""),
-        String(d0.action || ""),
-        String(d0.xpath || ""),
-        String(d0.comment || ""),
-        String(d0.note || ""),
-        String(d0.ticket || ""),
-        String(d0.qaStatus || ""),
-        ...safeArray(d0.tags).map(String),
-        String(d0.stepRef || ""),
-        ...(isAnnotationNode(n) ? [String(d0.label || "")] : []),
-      ]
-        .join(" ")
-        .toLowerCase();
-      const hit = hay.includes(q);
-      if (!hit) return n;
-      return {
-        ...n,
-        style: {
-          ...(n.style || {}),
-          outline: "2px solid #ffc857",
-          boxShadow: "0 0 14px rgba(255,200,87,0.4)",
-        },
-      };
+      let out = n;
+      if (q && n.type !== FLOW_GROUP_TYPE) {
+        const d0 = n.data || {};
+        const hay = [
+          String(d0.title || ""),
+          String(d0.action || ""),
+          String(d0.xpath || ""),
+          String(d0.comment || ""),
+          String(d0.note || ""),
+          String(d0.ticket || ""),
+          String(d0.qaStatus || ""),
+          ...safeArray(d0.tags).map(String),
+          String(d0.stepRef || ""),
+          ...(isAnnotationNode(n)
+            ? [String(d0.label || ""), String(d0.imageUrl || "")]
+            : []),
+        ]
+          .join(" ")
+          .toLowerCase();
+        const hit = hay.includes(q);
+        if (hit) {
+          out = {
+            ...out,
+            style: {
+              ...(out.style || {}),
+              outline: "2px solid #ffc857",
+              boxShadow: "0 0 14px rgba(255,200,87,0.4)",
+            },
+          };
+        }
+      }
+      if (
+        liveExecutingStep != null &&
+        !isAnnotationNode(out) &&
+        out.type !== FLOW_GROUP_TYPE &&
+        Number(out.data?.stepRef || 0) === liveExecutingStep
+      ) {
+        out = {
+          ...out,
+          className: [out.className, "flow-node-live-exec"].filter(Boolean).join(" "),
+          style: {
+            ...(out.style || {}),
+            outline: "3px solid #00ffcc",
+            boxShadow: "0 0 28px rgba(0,255,204,0.55)",
+            zIndex: 520,
+          },
+        };
+      }
+      return out;
     });
-  }, [nodes, canvasSearch]);
+  }, [nodes, canvasSearch, liveExecutingStep]);
 
-  const d = selectedNode?.data;
-  const params = d?.params || {};
+  const renderStepSettingsForm = useCallback((node, applyPatch) => {
+    if (!node || isAnnotationNode(node) || node.type === FLOW_GROUP_TYPE) return null;
+    const d = node.data || {};
+    const params = d.params || {};
+    const addThisToGroup = () => assignNodeIdToSelectedGroup(node.id);
+    return React.createElement(React.Fragment, null,
+          React.createElement("div", { className: "small" }, `Узел: ${node.id}`),
+      React.createElement(
+        "div",
+        { className: "small" },
+        `Номер (после сохранения перенумеруется по порядку блоков): ${node.data?.stepRef || "-"}`,
+      ),
+      React.createElement("label", null, "Название (title)"),
+      React.createElement("input", {
+        value: d.title || "",
+        onChange: (e) => applyPatch({ title: e.target.value }),
+      }),
+      React.createElement("label", null, "Тип (action)"),
+      React.createElement(
+        "select",
+        {
+          value: d.action || "click",
+          onChange: (e) => applyPatch({ action: e.target.value }),
+        },
+        ...RUNNER_ACTIONS.map((a) =>
+          React.createElement("option", { key: a, value: a }, `${ACTION_LABELS[a] || a} (${a})`),
+        ),
+      ),
+      React.createElement("label", null, "Цвет шага (params.stepColor)"),
+      React.createElement(
+        "div",
+        { className: "row", style: { flexWrap: "wrap", gap: 6 } },
+        ...STEP_COLORS.map((c) =>
+          React.createElement("button", {
+            key: c,
+            type: "button",
+            title: c,
+            onClick: () => applyPatch({ stepColor: c, params: { stepColor: c } }),
+            style: {
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border:
+                (d.stepColor === c || params.stepColor === c) ? "2px solid #fff" : "1px solid #2a2a4a",
+              background: c,
+              cursor: "pointer",
+            },
+          }),
+        ),
+      ),
+      React.createElement("label", null, "Теги (через запятую)"),
+      React.createElement("input", {
+        value: (d.tags || []).join(", "),
+        onChange: (e) =>
+          applyPatch({
+            tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean),
+          }),
+      }),
+      React.createElement("label", null, "Описание для QA (note)"),
+      React.createElement("textarea", {
+        value: d.note || "",
+        placeholder: "Зачем этот шаг, что проверяем",
+        style: { minHeight: 56 },
+        onChange: (e) => applyPatch({ note: e.target.value }),
+      }),
+      React.createElement("label", null, "Тикет / ссылка (ticket)"),
+      React.createElement("input", {
+        value: d.ticket || "",
+        placeholder: "JIRA-123 или URL спеки",
+        onChange: (e) => applyPatch({ ticket: e.target.value }),
+      }),
+      React.createElement("label", null, "Статус шага (qaStatus)"),
+      React.createElement(
+        "select",
+        {
+          value: d.qaStatus || "",
+          onChange: (e) => applyPatch({ qaStatus: e.target.value }),
+        },
+        React.createElement("option", { value: "" }, "— не задан —"),
+        React.createElement("option", { value: "draft" }, "Черновик"),
+        React.createElement("option", { value: "stable" }, "Стабильный"),
+        React.createElement("option", { value: "flaky" }, "Flaky"),
+      ),
+      d.action !== "start" && d.action !== "end"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "XPath"),
+            React.createElement("textarea", {
+              value: d.xpath === "—" ? "" : d.xpath || "",
+              placeholder: "—",
+              onChange: (e) => applyPatch({ xpath: e.target.value || "" }),
+            }),
+          )
+        : null,
+      React.createElement("label", null, "Комментарий к блоку"),
+      React.createElement("textarea", {
+        value: d.comment || "",
+        onChange: (e) => applyPatch({ comment: e.target.value }),
+      }),
+      React.createElement(
+        "div",
+        { className: "row", style: { marginTop: 8 } },
+        React.createElement("label", { className: "checkrow" }, React.createElement("input", {
+          type: "checkbox",
+          checked: params.mandatory !== false,
+          onChange: (e) => applyPatch({ params: { mandatory: e.target.checked } }),
+        }), " mandatory"),
+        React.createElement("label", { className: "checkrow" }, React.createElement("input", {
+          type: "checkbox",
+          checked: !!params.waitForLoad,
+          onChange: (e) => applyPatch({ params: { waitForLoad: e.target.checked } }),
+        }), " waitForLoad"),
+      ),
+      React.createElement("label", null, "timeoutMs"),
+      React.createElement("input", {
+        type: "number",
+        value: params.timeoutMs ?? "",
+        placeholder: "по умолчанию из раннера",
+        onChange: (e) => {
+          const v = e.target.value;
+          applyPatch({ params: v === "" ? { timeoutMs: undefined } : { timeoutMs: parseInt(v, 10) || 0 } });
+        },
+      }),
+      d.action === "navigate"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "URL (navigate.params.url)"),
+            React.createElement("input", {
+              value: params.url || "",
+              onChange: (e) => applyPatch({ params: { url: e.target.value } }),
+            }),
+          )
+        : null,
+      ["input", "set_date"].includes(d.action)
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Значение (value)"),
+            React.createElement("input", {
+              value: params.value ?? "",
+              onChange: (e) => applyPatch({ params: { value: e.target.value } }),
+            }),
+          )
+        : null,
+      d.action === "wait"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Задержка delayMs"),
+            React.createElement("input", {
+              type: "number",
+              value: params.delayMs ?? 500,
+              onChange: (e) =>
+                applyPatch({ params: { delayMs: parseInt(e.target.value, 10) || 0 } }),
+            }),
+          )
+        : null,
+      d.action === "user_action"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Сообщение пользователю"),
+            React.createElement("input", {
+              value: params.message || "",
+              onChange: (e) => applyPatch({ params: { message: e.target.value } }),
+            }),
+          )
+        : null,
+      d.action === "start"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Подпись (в лог раннера, params.message)"),
+            React.createElement("input", {
+              value: params.message || "",
+              placeholder: "например: основной сценарий",
+              onChange: (e) => applyPatch({ params: { message: e.target.value } }),
+            }),
+            React.createElement(
+              "p",
+              { className: "small", style: { marginTop: 6 } },
+              "Выполнение всегда начинается с этого блока (первый start в сохранённом списке шагов).",
+            ),
+          )
+        : null,
+      d.action === "end"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Подпись (в лог раннера, params.message)"),
+            React.createElement("input", {
+              value: params.message || "",
+              placeholder: "например: выход по ветке «Нет»",
+              onChange: (e) => applyPatch({ params: { message: e.target.value } }),
+            }),
+            React.createElement(
+              "p",
+              { className: "small", style: { marginTop: 6 } },
+              "После этого шага прогон сценария останавливается. Соединяйте сюда ветку «Нет» или любой завершающий путь.",
+            ),
+          )
+        : null,
+      d.action === "separator"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Подпись разделителя (params.label)"),
+            React.createElement("input", {
+              value: params.label || "",
+              onChange: (e) => applyPatch({ params: { label: e.target.value } }),
+            }),
+          )
+        : null,
+      d.action === "branch" || d.action === "assert"
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Условие (params.condition)"),
+            React.createElement(
+              "select",
+              {
+                value: params.condition || "element_exists",
+                onChange: (e) =>
+                  applyPatch({ params: { condition: e.target.value } }),
+              },
+              ...BRANCH_CONDITIONS.map((bc) =>
+                React.createElement("option", { key: bc.value, value: bc.value }, bc.label),
+              ),
+            ),
+            React.createElement("label", null, "expectedValue"),
+            React.createElement("input", {
+              value: params.expectedValue ?? "",
+              onChange: (e) =>
+                applyPatch({ params: { expectedValue: e.target.value } }),
+            }),
+            params.condition === "attribute_equals"
+              ? React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement("label", null, "attributeName"),
+                  React.createElement("input", {
+                    value: params.attributeName || "",
+                    onChange: (e) =>
+                      applyPatch({ params: { attributeName: e.target.value } }),
+                  }),
+                )
+              : null,
+            d.action === "assert"
+              ? React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    "div",
+                    { className: "row", style: { marginTop: 6 } },
+                    React.createElement(
+                      "label",
+                      { className: "checkrow" },
+                      React.createElement("input", {
+                        type: "checkbox",
+                        checked: !!params.waitMode,
+                        onChange: (e) =>
+                          applyPatch({ params: { waitMode: e.target.checked } }),
+                      }),
+                      " waitMode",
+                    ),
+                    React.createElement(
+                      "label",
+                      { className: "checkrow" },
+                      React.createElement("input", {
+                        type: "checkbox",
+                        checked: !!params.softAssert,
+                        onChange: (e) =>
+                          applyPatch({ params: { softAssert: e.target.checked } }),
+                      }),
+                      " softAssert",
+                    ),
+                  ),
+                )
+              : null,
+          )
+        : null,
+      React.createElement("label", null, "fallbackXPaths (по одному в строке)"),
+      React.createElement("textarea", {
+        placeholder: "//button[1]",
+        value: safeArray(params.fallbackXPaths).join("\n"),
+        onChange: (e) =>
+          applyPatch({
+            params: {
+              fallbackXPaths: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean),
+            },
+          }),
+      }),
+      React.createElement(
+        "div",
+        { className: "row", style: { marginTop: 8 } },
+        React.createElement(
+          "select",
+          {
+            value: selectedGroupId,
+            onChange: (e) => setSelectedGroupId(e.target.value),
+            style: { flex: 1 },
+          },
+          React.createElement("option", { value: "" }, "Группа…"),
+          ...groups.map((g) => React.createElement("option", { key: g.id, value: g.id }, g.title)),
+        ),
+        React.createElement(
+          "button",
+          { className: "btn2", type: "button", onClick: addThisToGroup },
+          "В группу",
+        ),
+      ),
+    );
+  }, [assignNodeIdToSelectedGroup, groups, selectedGroupId, setSelectedGroupId]);
+
+  const renderAnnotationSettingsForm = useCallback((node, applyPatch) => {
+    if (!node || !isAnnotationNode(node)) return null;
+    const d = node.data || {};
+    const isImg = annotationIsImage(node);
+    const st = node.style || {};
+    const widthVal =
+      typeof st.width === "number" ? st.width : parseInt(String(st.width || 280), 10) || 280;
+    const heightVal =
+      typeof st.height === "number" ? st.height : parseInt(String(st.height || 140), 10) || 140;
+    const ioPct = Math.round(clamp01(d.imageOpacity != null ? Number(d.imageOpacity) : 1) * 100);
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement("div", { className: "small" }, `Элемент: ${node.id}`),
+      React.createElement(
+        "p",
+        { className: "hint" },
+        "Визуальная разметка канвы (flow.annotations). Размер можно менять мышью на контуре.",
+      ),
+      isImg
+        ? React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "URL картинки"),
+            React.createElement("input", {
+              type: "url",
+              placeholder: "https://…",
+              value: String(d.imageUrl ?? ""),
+              onChange: (e) => applyPatch({ imageUrl: e.target.value }),
+            }),
+            React.createElement("label", { style: { marginTop: 8 } }, "objectFit"),
+            React.createElement(
+              "select",
+              {
+                value: String(d.objectFit || "contain"),
+                onChange: (e) => applyPatch({ objectFit: e.target.value }),
+              },
+              React.createElement("option", { value: "contain" }, "contain"),
+              React.createElement("option", { value: "cover" }, "cover"),
+              React.createElement("option", { value: "fill" }, "fill"),
+              React.createElement("option", { value: "none" }, "none"),
+              React.createElement("option", { value: "scale-down" }, "scale-down"),
+            ),
+            React.createElement("label", null, `Прозрачность: ${ioPct}%`),
+            React.createElement("input", {
+              type: "range",
+              min: 0,
+              max: 100,
+              step: 1,
+              value: ioPct,
+              onChange: (e) => applyPatch({ imageOpacity: parseInt(e.target.value, 10) / 100 }),
+            }),
+          )
+        : null,
+      React.createElement("label", { style: { marginTop: isImg ? 10 : 0 } }, "Подпись / alt"),
+      React.createElement("textarea", {
+        value: String(d.label ?? ""),
+        style: { minHeight: 64 },
+        onChange: (e) => applyPatch({ annLabel: e.target.value }),
+      }),
+      React.createElement("label", null, "Ширина (px)"),
+      React.createElement("input", {
+        type: "number",
+        value: widthVal,
+        min: 40,
+        onChange: (e) => applyPatch({ annWidth: parseInt(e.target.value, 10) || 40 }),
+      }),
+      React.createElement("label", null, "Высота (px)"),
+      React.createElement("input", {
+        type: "number",
+        value: heightVal,
+        min: 32,
+        onChange: (e) => applyPatch({ annHeight: parseInt(e.target.value, 10) || 32 }),
+      }),
+      isImg
+        ? null
+        : React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("label", null, "Обводка"),
+            React.createElement(
+              "div",
+              { className: "row", style: { gap: 4, flexWrap: "wrap" } },
+              ...ANNOTATION_STROKE_SWATCHES.map((c) =>
+                React.createElement("button", {
+                  key: `s-${c}`,
+                  type: "button",
+                  title: c,
+                  onClick: () => applyPatch({ stroke: c }),
+                  style: {
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    border:
+                      String(d.stroke || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
+                    background: c,
+                    padding: 0,
+                    cursor: "pointer",
+                  },
+                }),
+              ),
+            ),
+            React.createElement("label", { style: { marginTop: 8 } }, "Заливка"),
+            React.createElement(
+              "div",
+              { className: "row", style: { gap: 4, flexWrap: "wrap" } },
+              ...ANNOTATION_FILL_SWATCHES.map((c) =>
+                React.createElement("button", {
+                  key: `f-${c}`,
+                  type: "button",
+                  title: c,
+                  onClick: () => applyPatch({ annFill: c }),
+                  style: {
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    border:
+                      String(d.fill || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
+                    background: c,
+                    padding: 0,
+                    cursor: "pointer",
+                  },
+                }),
+              ),
+            ),
+            React.createElement("label", null, "Размер шрифта"),
+            React.createElement("input", {
+              type: "number",
+              value: Number(d.fontSize) > 0 ? Number(d.fontSize) : 13,
+              min: 8,
+              max: 64,
+              onChange: (e) => applyPatch({ annFontSize: parseInt(e.target.value, 10) || 13 }),
+            }),
+            React.createElement("label", null, "Цвет текста"),
+            React.createElement(
+              "div",
+              { className: "row", style: { gap: 4, flexWrap: "wrap" } },
+              ...ANNOTATION_STROKE_SWATCHES.map((c) =>
+                React.createElement("button", {
+                  key: `t-${c}`,
+                  type: "button",
+                  title: c,
+                  onClick: () => applyPatch({ annTextColor: c }),
+                  style: {
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    border:
+                      String(d.textColor || "") === c ? "2px solid #fff" : "1px solid #2a2a4a",
+                    background: c,
+                    padding: 0,
+                    cursor: "pointer",
+                  },
+                }),
+              ),
+            ),
+          ),
+    );
+  }, []);
+
+  const renderDecorateEdgeForm = useCallback((edge, applyPatch) => {
+    if (!edge || !edgeKindIsDecorate(edge)) return null;
+    const dd = edge.data || {};
+    const def = decorateEdgeDataDefaults();
+    const lc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelColor || "")) ? dd.labelColor : def.labelColor;
+    const lbc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelBgColor || ""))
+      ? dd.labelBgColor
+      : def.labelBgColor;
+    const loPct = Math.round(clamp01(dd.labelOpacity ?? def.labelOpacity) * 100);
+    const lboPct = Math.round(clamp01(dd.labelBgOpacity ?? def.labelBgOpacity) * 100);
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement("div", { className: "small" }, `Связь: ${edge.id}`),
+      React.createElement(
+        "p",
+        { className: "hint" },
+        "Пунктир и подпись только на схеме (kind «decorate» в flow.edges). На прогон не влияет.",
+      ),
+      React.createElement("label", null, "Подпись на стрелке"),
+      React.createElement("textarea", {
+        value: String(dd.label ?? ""),
+        placeholder: "Например: зона регресса",
+        style: { minHeight: 52 },
+        onChange: (e) => applyPatch({ label: e.target.value }),
+      }),
+      React.createElement("label", { style: { marginTop: 10 } }, "Цвет текста подписи"),
+      React.createElement("input", {
+        type: "color",
+        value: lc,
+        onChange: (e) => applyPatch({ labelColor: e.target.value }),
+      }),
+      React.createElement("label", null, `Прозрачность текста: ${loPct}%`),
+      React.createElement("input", {
+        type: "range",
+        min: 0,
+        max: 100,
+        step: 1,
+        value: loPct,
+        onChange: (e) => applyPatch({ labelOpacity: parseInt(e.target.value, 10) / 100 }),
+      }),
+      React.createElement("label", null, "Цвет фона подписи"),
+      React.createElement("input", {
+        type: "color",
+        value: lbc,
+        onChange: (e) => applyPatch({ labelBgColor: e.target.value }),
+      }),
+      React.createElement("label", null, `Прозрачность фона: ${lboPct}%`),
+      React.createElement("input", {
+        type: "range",
+        min: 0,
+        max: 100,
+        step: 1,
+        value: lboPct,
+        onChange: (e) => applyPatch({ labelBgOpacity: parseInt(e.target.value, 10) / 100 }),
+      }),
+    );
+  }, []);
 
   return React.createElement(
     "div",
     { className: "app" },
     React.createElement(
       "section",
-      { className: "panel" },
+      { className: "panel panel-side panel-side-left" },
       React.createElement("h1", { className: "title" }, "Flow Editor"),
       React.createElement(
         "div",
-        { className: "row" },
-        React.createElement("a", { className: "btn2", href: `${API_ORIGIN}/` }, "← Web Runner"),
+        { className: "panel-scroll" },
+        React.createElement(
+          "div",
+          { className: "row" },
+          React.createElement("a", { className: "btn2", href: `${API_ORIGIN}/` }, "← Web Runner"),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn",
+            disabled: loading || !selectedScenarioId,
+            onClick: saveAndRunScenario,
+            title:
+              "Сначала сохранить сценарий на диск, затем POST /api/runs. Откроется live-прогон в новой вкладке. Start URL, headless, viewport и др. — в runnerSettings JSON (кнопка «Параметры» на главной Web Runner) или в теле запроса на главной.",
+          },
+          loading ? "…" : "▶ Запустить",
+        ),
         React.createElement(
           "button",
           { className: "btn2", type: "button", onClick: loadScenarios },
@@ -2606,7 +3542,87 @@ function App() {
       React.createElement(
         "p",
         { className: "hint" },
-        "Блоки = шаги сценария: цвет, тип действия и params как в расширении.",
+        "Блоки = шаги сценария. «▶ Запустить» — с сохранением. ПКМ по шагу или примитиву — меню (копия, настройки). ПКМ по пункту списка сценариев — настройки сценария и групп.",
+      ),
+      React.createElement(
+        "div",
+        {
+          className: "flow-live-panel",
+          style: {
+            marginTop: 6,
+            marginBottom: 8,
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid #2a2a4a",
+            background: "#0a0a14",
+          },
+        },
+        React.createElement("div", { className: "small", style: { marginBottom: 6, fontWeight: 700 } }, "Живая подсветка шага на схеме"),
+        React.createElement(
+          "div",
+          { className: "row", style: { gap: 6 } },
+          React.createElement("input", {
+            type: "text",
+            placeholder: "runId (или откройте /flow-editor?run=…)",
+            value: liveRunInput,
+            onChange: (e) => setLiveRunInput(e.target.value),
+            style: { flex: "1 1 120px", minWidth: 0 },
+          }),
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn",
+              style: { flex: "0 0 auto", padding: "8px 10px" },
+              onClick: () => {
+                const id = String(liveRunInput || "").trim();
+                if (!id) {
+                  toast("Укажите runId");
+                  return;
+                }
+                setLiveRunTrackingId(id);
+                toast(`Подписка на прогон: ${id}`);
+              },
+            },
+            "Подключить",
+          ),
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn2",
+              onClick: () => {
+                setLiveRunTrackingId("");
+                setLiveExecutingStep(null);
+                setLiveRunActionHint("");
+                setLiveRunStreamEnded(false);
+              },
+            },
+            "Откл.",
+          ),
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn2",
+              style: { flex: "0 0 auto", color: "#ffb4a8", borderColor: "#8b4513" },
+              title: "POST /api/runs/{runId}/stop — остановка между шагами",
+              onClick: () => requestStopRun(),
+            },
+            "⏹ Стоп",
+          ),
+        ),
+        liveRunTrackingId
+          ? React.createElement(
+              "p",
+              { className: "hint", style: { marginTop: 8, marginBottom: 0 } },
+              liveRunStreamEnded
+                ? "Прогон завершён. Нажмите «Откл.» или подключите другой runId."
+                : liveExecutingStep != null
+                  ? `Сейчас на схеме: шаг #${liveExecutingStep}${liveRunActionHint ? ` · ${liveRunActionHint}` : ""}`
+                  : `Ожидание шага… (run ${liveRunTrackingId.slice(0, 12)}…)`,
+            )
+          : React.createElement("p", { className: "hint", style: { marginTop: 8, marginBottom: 0 } }, "Без подписки подсветка не меняется."),
       ),
       React.createElement(
         "div",
@@ -2655,6 +3671,12 @@ function App() {
                   key: s.id,
                   className: `item ${selectedScenarioId === s.id ? "sel" : ""}`,
                   onClick: () => setSelectedScenarioId(s.id),
+                  onContextMenu: (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSelectedScenarioId(s.id);
+                    setScenarioSettingsOpen(true);
+                  },
                 },
                 React.createElement(
                   "div",
@@ -2669,81 +3691,6 @@ function App() {
               ),
             ),
       ),
-      scenario && selectedScenarioId
-        ? React.createElement(
-            React.Fragment,
-            { key: "meta" },
-            React.createElement(
-              "label",
-              { className: "small", style: { display: "block", marginTop: 14 } },
-              "Имя сценария (name)",
-            ),
-            React.createElement("input", {
-              value: scenario.name != null ? String(scenario.name) : "",
-              placeholder: selectedScenarioId,
-              onChange: (e) =>
-                setScenario((prev) => (prev ? { ...prev, name: e.target.value } : null)),
-            }),
-            React.createElement(
-              "p",
-              { className: "small", style: { marginTop: 4, lineHeight: 1.35 } },
-              `Файл на диске: `,
-              React.createElement("code", null, `${selectedScenarioId}.json`),
-              " — id файла не меняется. Сохраните, чтобы записать новое имя.",
-            ),
-            React.createElement(
-              "label",
-              { className: "checkrow", style: { display: "flex", marginTop: 10, alignItems: "center", gap: 8 } },
-              React.createElement("input", {
-                type: "checkbox",
-                checked: !!scenario.smoke,
-                onChange: (e) => setScenario((prev) => (prev ? { ...prev, smoke: e.target.checked } : null)),
-              }),
-              " Дымовой сценарий (smoke) — для быстрых наборов в раннере",
-            ),
-            React.createElement(
-              "label",
-              { className: "small", style: { display: "block", marginTop: 8 } },
-              "Метки сценария (JSON → runner / отчёты), поле labels",
-            ),
-            React.createElement("textarea", {
-              value: scenario.labelsText != null ? String(scenario.labelsText) : "{}",
-              placeholder: '{"suite":"regression","team":"qa"}',
-              style: { minHeight: 72, fontFamily: "ui-monospace, monospace", fontSize: 12 },
-              onChange: (e) => setScenario((prev) => (prev ? { ...prev, labelsText: e.target.value } : null)),
-            }),
-            React.createElement(
-              "label",
-              { className: "small", style: { display: "block", marginTop: 10 } },
-              "Версии из .history",
-            ),
-            React.createElement(
-              "div",
-              { className: "row", style: { alignItems: "center" } },
-              React.createElement(
-                "select",
-                {
-                  value: historyPick,
-                  onChange: (e) => setHistoryPick(e.target.value),
-                  style: { flex: 1 },
-                },
-                React.createElement("option", { value: "" }, "— выберите снимок —"),
-                ...historyItems.map((h) =>
-                  React.createElement(
-                    "option",
-                    { key: h.file, value: h.file },
-                    `${h.file} · ${new Date((h.mtime || 0) * 1000).toLocaleString()}`,
-                  ),
-                ),
-              ),
-              React.createElement(
-                "button",
-                { type: "button", className: "btn2", disabled: !historyPick, onClick: () => restoreFromHistory(historyPick) },
-                "Восстановить",
-              ),
-            ),
-          )
-        : null,
       React.createElement(
         "div",
         { className: "row", style: { marginTop: 12 } },
@@ -2765,6 +3712,7 @@ function App() {
             `В списке: ${selectedScenario.name || selectedScenario.id}`,
           )
         : null,
+      ),
     ),
 
     React.createElement(
@@ -2830,6 +3778,23 @@ function App() {
             title: "Нарисовать область текстовой метки мышью.",
           },
           "T Текст",
+        ),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: annotationDrawTool === "image" ? "btn2 flow-tool-on" : "btn2",
+            disabled: !scenario,
+            onClick: () => {
+              if (!scenario) {
+                toast("Выберите сценарий");
+                return;
+              }
+              setAnnotationDrawTool((t) => (t === "image" ? null : "image"));
+            },
+            title: "Нарисовать область картинки мышью; URL и параметры — ПКМ по примитиву.",
+          },
+          "🖼 Картинка",
         ),
         React.createElement(
           "button",
@@ -2974,9 +3939,52 @@ function App() {
               reactFlowInstanceRef.current = inst;
             },
             onPaneClick: () => {
+              setCanvasContextMenu(null);
+              setEdgeContextMenu(null);
               if (annotationDrawTool) return;
               setSelectedNodeId("");
               setSelectedEdgeId("");
+            },
+            onNodeContextMenu: (ev, node) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (!node || node.type === FLOW_GROUP_TYPE) {
+                setCanvasContextMenu(null);
+                return;
+              }
+              if (isAnnotationNode(node)) {
+                setCanvasContextMenu({
+                  kind: "annotation",
+                  clientX: ev.clientX,
+                  clientY: ev.clientY,
+                  nodeId: node.id,
+                });
+                return;
+              }
+              const sr = Number(node.data?.stepRef || 0);
+              setCanvasContextMenu({
+                kind: "step",
+                clientX: ev.clientX,
+                clientY: ev.clientY,
+                nodeId: node.id,
+                stepRef: sr,
+                canRunFrom: nodeSupportsRunFromHere(node),
+              });
+            },
+            onEdgeContextMenu: (ev, edge) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const e = edges.find((x) => x.id === edge.id);
+              if (!e || !edgeKindIsDecorate(e)) {
+                setEdgeContextMenu(null);
+                return;
+              }
+              setSelectedEdgeId(e.id);
+              setEdgeContextMenu({
+                edgeId: e.id,
+                clientX: ev.clientX,
+                clientY: ev.clientY,
+              });
             },
             onNodeDragStop: refreshGroupFrames,
             onSelectionChange,
@@ -3034,610 +4042,616 @@ function App() {
       ),
     ),
 
-    React.createElement(
-      "section",
-      { className: "panel" },
-      React.createElement(
-        "h2",
-        { className: "title", style: { fontSize: 14 } },
-        selectedEdge && edgeKindIsDecorate(selectedEdge)
-          ? "Связь (только схема)"
-          : selectedNode && isAnnotationNode(selectedNode)
-            ? "Разметка канвы"
-            : "Свойства шага",
-      ),
-      selectedEdge && edgeKindIsDecorate(selectedEdge)
-        ? React.createElement(
-            React.Fragment,
-            null,
-            React.createElement("div", { className: "small" }, `Связь: ${selectedEdge.id}`),
+    stepSettingsModalNodeId
+      ? (() => {
+          const mn = nodes.find((n) => n.id === stepSettingsModalNodeId);
+          if (!mn || isAnnotationNode(mn) || mn.type === FLOW_GROUP_TYPE) return null;
+          const mid = stepSettingsModalNodeId;
+          return React.createElement(
+            "div",
+            {
+              className: "flow-modal-backdrop",
+              role: "presentation",
+              style: {
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                zIndex: 11000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+              },
+              onClick: () => setStepSettingsModalNodeId(null),
+              onContextMenu: (e) => e.preventDefault(),
+            },
             React.createElement(
-              "p",
-              { className: "hint" },
-              "Пунктир и подпись только на схеме. На выполнение сценария не влияет (в JSON: kind «decorate» в flow.edges).",
+              "div",
+              {
+                className: "flow-modal-dialog",
+                role: "dialog",
+                "aria-modal": true,
+                style: {
+                  background: "#1a1a2e",
+                  border: "1px solid #00d4aa",
+                  borderRadius: 12,
+                  maxWidth: 520,
+                  width: "100%",
+                  maxHeight: "90vh",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
+                },
+                onClick: (e) => e.stopPropagation(),
+              },
+              React.createElement(
+                "div",
+                {
+                  className: "row",
+                  style: {
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 12px",
+                    borderBottom: "1px solid #2a2a4a",
+                    flexShrink: 0,
+                    gap: 8,
+                  },
+                },
+                React.createElement(
+                  "strong",
+                  { style: { fontSize: 14 } },
+                  `Шаг #${mn.data?.stepRef ?? "?"} · настройки`,
+                ),
+                React.createElement(
+                  "button",
+                  { type: "button", className: "btn2", onClick: () => setStepSettingsModalNodeId(null) },
+                  "✕ Закрыть",
+                ),
+              ),
+              React.createElement(
+                "div",
+                {
+                  className: "flow-modal-body panel-scroll",
+                  style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 },
+                },
+                renderStepSettingsForm(mn, (patch) => updateNodeDataById(mid, patch)),
+              ),
             ),
-            React.createElement("label", null, "Подпись на стрелке"),
-            React.createElement("textarea", {
-              value: String(selectedEdge.data?.label ?? ""),
-              placeholder: "Например: зона регресса",
-              style: { minHeight: 52 },
-              onChange: (e) => updateSelectedDecorateEdge({ label: e.target.value }),
-            }),
-            (() => {
-              const dd = selectedEdge.data || {};
-              const def = decorateEdgeDataDefaults();
-              const lc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelColor || "")) ? dd.labelColor : def.labelColor;
-              const lbc = /^#[0-9a-fA-F]{6}$/.test(String(dd.labelBgColor || ""))
-                ? dd.labelBgColor
-                : def.labelBgColor;
-              const loPct = Math.round(clamp01(dd.labelOpacity ?? def.labelOpacity) * 100);
-              const lboPct = Math.round(clamp01(dd.labelBgOpacity ?? def.labelBgOpacity) * 100);
-              return React.createElement(
-                React.Fragment,
-                null,
-                React.createElement("label", { style: { marginTop: 10 } }, "Цвет текста подписи"),
-                React.createElement("input", {
-                  type: "color",
-                  value: lc,
-                  onChange: (e) => updateSelectedDecorateEdge({ labelColor: e.target.value }),
-                }),
-                React.createElement("label", null, `Прозрачность текста: ${loPct}%`),
-                React.createElement("input", {
-                  type: "range",
-                  min: 0,
-                  max: 100,
-                  step: 1,
-                  value: loPct,
-                  onChange: (e) =>
-                    updateSelectedDecorateEdge({ labelOpacity: parseInt(e.target.value, 10) / 100 }),
-                }),
-                React.createElement("label", null, "Цвет фона подписи"),
-                React.createElement("input", {
-                  type: "color",
-                  value: lbc,
-                  onChange: (e) => updateSelectedDecorateEdge({ labelBgColor: e.target.value }),
-                }),
-                React.createElement("label", null, `Прозрачность фона: ${lboPct}%`),
-                React.createElement("input", {
-                  type: "range",
-                  min: 0,
-                  max: 100,
-                  step: 1,
-                  value: lboPct,
-                  onChange: (e) =>
-                    updateSelectedDecorateEdge({ labelBgOpacity: parseInt(e.target.value, 10) / 100 }),
-                }),
-              );
-            })(),
-          )
-        : selectedNodesCount > 1
-        ? React.createElement(
-            React.Fragment,
-            null,
+          );
+        })()
+      : null,
+    annSettingsModalNodeId
+      ? (() => {
+          const mn = nodes.find((n) => n.id === annSettingsModalNodeId);
+          if (!mn || !isAnnotationNode(mn)) return null;
+          const mid = annSettingsModalNodeId;
+          return React.createElement(
+            "div",
+            {
+              className: "flow-modal-backdrop",
+              role: "presentation",
+              style: {
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                zIndex: 11000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+              },
+              onClick: () => setAnnSettingsModalNodeId(null),
+              onContextMenu: (e) => e.preventDefault(),
+            },
             React.createElement(
-              "p",
-              { className: "small" },
-              `Выбрано узлов: ${selectedNodesCount}. Панель свойств — для одного узла (кликните по нему один раз). Можно выровнять позиции кнопкой «📐 Сетка (выделенные)» или удалить все «🗑 Удалить».`,
+              "div",
+              {
+                className: "flow-modal-dialog",
+                role: "dialog",
+                "aria-modal": true,
+                style: {
+                  background: "#1a1a2e",
+                  border: "1px solid #00d4aa",
+                  borderRadius: 12,
+                  maxWidth: 520,
+                  width: "100%",
+                  maxHeight: "90vh",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
+                },
+                onClick: (e) => e.stopPropagation(),
+              },
+              React.createElement(
+                "div",
+                {
+                  className: "row",
+                  style: {
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 12px",
+                    borderBottom: "1px solid #2a2a4a",
+                    flexShrink: 0,
+                    gap: 8,
+                  },
+                },
+                React.createElement(
+                  "strong",
+                  { style: { fontSize: 14 } },
+                  annotationIsImage(mn) ? "🖼 Картинка — настройки" : "Примитив — настройки",
+                ),
+                React.createElement(
+                  "button",
+                  { type: "button", className: "btn2", onClick: () => setAnnSettingsModalNodeId(null) },
+                  "✕ Закрыть",
+                ),
+              ),
+              React.createElement(
+                "div",
+                {
+                  className: "flow-modal-body panel-scroll",
+                  style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 },
+                },
+                renderAnnotationSettingsForm(mn, (patch) => updateNodeDataById(mid, patch)),
+              ),
             ),
-          )
-        : selectedNode
-          ? isAnnotationNode(selectedNode)
+          );
+        })()
+      : null,
+    decorateEdgeModalId
+      ? (() => {
+          const e0 = edges.find((e) => e.id === decorateEdgeModalId);
+          if (!e0 || !edgeKindIsDecorate(e0)) return null;
+          return React.createElement(
+            "div",
+            {
+              className: "flow-modal-backdrop",
+              role: "presentation",
+              style: {
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                zIndex: 11000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+              },
+              onClick: () => setDecorateEdgeModalId(null),
+              onContextMenu: (ev) => ev.preventDefault(),
+            },
+            React.createElement(
+              "div",
+              {
+                className: "flow-modal-dialog",
+                role: "dialog",
+                "aria-modal": true,
+                style: {
+                  background: "#1a1a2e",
+                  border: "1px solid #00d4aa",
+                  borderRadius: 12,
+                  maxWidth: 440,
+                  width: "100%",
+                  maxHeight: "90vh",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
+                },
+                onClick: (ev) => ev.stopPropagation(),
+              },
+              React.createElement(
+                "div",
+                {
+                  className: "row",
+                  style: {
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 12px",
+                    borderBottom: "1px solid #2a2a4a",
+                    flexShrink: 0,
+                    gap: 8,
+                  },
+                },
+                React.createElement("strong", { style: { fontSize: 14 } }, "Связь разметки (decorate)"),
+                React.createElement(
+                  "button",
+                  { type: "button", className: "btn2", onClick: () => setDecorateEdgeModalId(null) },
+                  "✕ Закрыть",
+                ),
+              ),
+              React.createElement(
+                "div",
+                {
+                  className: "flow-modal-body panel-scroll",
+                  style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 },
+                },
+                renderDecorateEdgeForm(e0, (patch) => updateDecorateEdgeById(e0.id, patch)),
+              ),
+            ),
+          );
+        })()
+      : null,
+    scenarioSettingsOpen && scenario && selectedScenarioId
+      ? React.createElement(
+          "div",
+          {
+            className: "flow-modal-backdrop",
+            role: "presentation",
+            style: {
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              zIndex: 11000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+            },
+            onClick: () => setScenarioSettingsOpen(false),
+            onContextMenu: (e) => e.preventDefault(),
+          },
+          React.createElement(
+            "div",
+            {
+              className: "flow-modal-dialog",
+              role: "dialog",
+              "aria-modal": true,
+              style: {
+                background: "#1a1a2e",
+                border: "1px solid #00d4aa",
+                borderRadius: 12,
+                maxWidth: 520,
+                width: "100%",
+                maxHeight: "90vh",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
+              },
+              onClick: (e) => e.stopPropagation(),
+            },
+            React.createElement(
+              "div",
+              {
+                className: "row",
+                style: {
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px 12px",
+                  borderBottom: "1px solid #2a2a4a",
+                  flexShrink: 0,
+                  gap: 8,
+                },
+              },
+              React.createElement("strong", { style: { fontSize: 14 } }, "Настройки сценария и групп"),
+              React.createElement(
+                "button",
+                { type: "button", className: "btn2", onClick: () => setScenarioSettingsOpen(false) },
+                "✕ Закрыть",
+              ),
+            ),
+            React.createElement(
+              "div",
+              {
+                className: "flow-modal-body panel-scroll",
+                style: { padding: 12, overflowY: "auto", flex: 1, minHeight: 0 },
+              },
+              React.createElement(
+                "label",
+                { className: "small", style: { display: "block" } },
+                "Имя сценария (name)",
+              ),
+              React.createElement("input", {
+                value: scenario.name != null ? String(scenario.name) : "",
+                placeholder: selectedScenarioId,
+                onChange: (ev) => setScenario((prev) => (prev ? { ...prev, name: ev.target.value } : null)),
+              }),
+              React.createElement(
+                "p",
+                { className: "small", style: { marginTop: 4, lineHeight: 1.35 } },
+                "Файл: ",
+                React.createElement("code", null, `${selectedScenarioId}.json`),
+                " — id не меняется.",
+              ),
+              React.createElement(
+                "label",
+                {
+                  className: "checkrow",
+                  style: { display: "flex", marginTop: 10, alignItems: "center", gap: 8 },
+                },
+                React.createElement("input", {
+                  type: "checkbox",
+                  checked: !!scenario.smoke,
+                  onChange: (ev) => setScenario((prev) => (prev ? { ...prev, smoke: ev.target.checked } : null)),
+                }),
+                " Дымовой сценарий (smoke)",
+              ),
+              React.createElement(
+                "label",
+                { className: "small", style: { display: "block", marginTop: 8 } },
+                "Метки сценария (labels), JSON",
+              ),
+              React.createElement("textarea", {
+                value: scenario.labelsText != null ? String(scenario.labelsText) : "{}",
+                placeholder: '{"suite":"regression","team":"qa"}',
+                style: { minHeight: 72, fontFamily: "ui-monospace, monospace", fontSize: 12 },
+                onChange: (ev) => setScenario((prev) => (prev ? { ...prev, labelsText: ev.target.value } : null)),
+              }),
+              React.createElement(
+                "label",
+                { className: "small", style: { display: "block", marginTop: 10 } },
+                "Версии из .history",
+              ),
+              React.createElement(
+                "div",
+                { className: "row", style: { alignItems: "center" } },
+                React.createElement(
+                  "select",
+                  {
+                    value: historyPick,
+                    onChange: (ev) => setHistoryPick(ev.target.value),
+                    style: { flex: 1 },
+                  },
+                  React.createElement("option", { value: "" }, "— выберите снимок —"),
+                  ...historyItems.map((h) =>
+                    React.createElement(
+                      "option",
+                      { key: h.file, value: h.file },
+                      `${h.file} · ${new Date((h.mtime || 0) * 1000).toLocaleString()}`,
+                    ),
+                  ),
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn2",
+                    disabled: !historyPick,
+                    onClick: () => restoreFromHistory(historyPick),
+                  },
+                  "Восстановить",
+                ),
+              ),
+              React.createElement("hr", { style: { borderColor: "#2a2a4a", margin: "14px 0" } }),
+              React.createElement(
+                "div",
+                { className: "row", style: { justifyContent: "space-between" } },
+                React.createElement(
+                  "h2",
+                  { className: "title", style: { fontSize: 14, margin: 0 } },
+                  "Группы",
+                ),
+                React.createElement(
+                  "button",
+                  { className: "btn2", type: "button", onClick: addGroup },
+                  "+ Группа",
+                ),
+              ),
+              groups.length === 0
+                ? React.createElement("p", { className: "hint" }, "Пока нет групп")
+                : null,
+              ...groups.map((g) =>
+                React.createElement(
+                  "div",
+                  { key: g.id, className: "groupItem" },
+                  React.createElement(
+                    "div",
+                    { className: "row", style: { justifyContent: "space-between" } },
+                    React.createElement("strong", null, g.title),
+                    React.createElement(
+                      "button",
+                      { className: "btn2", type: "button", onClick: () => deleteGroup(g.id) },
+                      "Удалить",
+                    ),
+                  ),
+                  React.createElement("label", null, "Название"),
+                  React.createElement("input", {
+                    value: g.title,
+                    onChange: (ev) => updateGroup(g.id, { title: ev.target.value }),
+                  }),
+                  React.createElement("label", null, "Цвет"),
+                  React.createElement("input", {
+                    className: "inlineColor",
+                    type: "color",
+                    value: g.color || "#00d4aa",
+                    onChange: (ev) => updateGroup(g.id, { color: ev.target.value }),
+                  }),
+                  React.createElement(
+                    "div",
+                    { className: "hint" },
+                    `Узлы: ${(g.nodeIds || []).join(", ") || "нет"}`,
+                  ),
+                  ...(g.nodeIds || []).map((nid) =>
+                    React.createElement(
+                      "div",
+                      { key: `${g.id}-${nid}`, className: "row" },
+                      React.createElement("span", { className: "small", style: { flex: 1 } }, nid),
+                      React.createElement(
+                        "button",
+                        {
+                          className: "btn2",
+                          type: "button",
+                          onClick: () => removeNodeFromGroup(g.id, nid),
+                        },
+                        "Убрать",
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              selectedGroup
+                ? React.createElement(
+                    "p",
+                    { className: "hint" },
+                    `Активная группа в форме шага: ${selectedGroup.title}`,
+                  )
+                : null,
+            ),
+          ),
+        )
+      : null,
+    canvasContextMenu
+      ? React.createElement(
+          "div",
+          {
+            className: "flow-ctx-menu flow-ctx-menu-col",
+            style: {
+              position: "fixed",
+              left: Math.min(
+                canvasContextMenu.clientX,
+                (typeof window !== "undefined" ? window.innerWidth : 999) - 240,
+              ),
+              top: Math.min(
+                canvasContextMenu.clientY,
+                (typeof window !== "undefined" ? window.innerHeight : 999) - 120,
+              ),
+              zIndex: 10000,
+              background: "#1a1a2e",
+              border: "1px solid #00d4aa",
+              borderRadius: 8,
+              boxShadow: "0 8px 28px rgba(0,0,0,0.5)",
+              padding: 6,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            },
+            onClick: (e) => e.stopPropagation(),
+            onContextMenu: (e) => e.preventDefault(),
+          },
+          canvasContextMenu.kind === "step"
             ? React.createElement(
                 React.Fragment,
                 null,
-                React.createElement("div", { className: "small" }, `Элемент: ${selectedNode.id}`),
                 React.createElement(
-                  "p",
-                  { className: "hint" },
-                  "Визуальная разметка: не шаг сценария, сохраняется в flow.annotations. Размер — мышью за маркеры на контуре выделенного примитива. Стрелки разметки — от точек по периметру.",
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn",
+                    style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+                    onClick: () => {
+                      const id = canvasContextMenu.nodeId;
+                      setCanvasContextMenu(null);
+                      setSelectedNodeId(id);
+                      setStepSettingsModalNodeId(id);
+                    },
+                  },
+                  "⚙ Настройки шага…",
                 ),
-                React.createElement("label", null, "Подпись"),
-                React.createElement("textarea", {
-                  value: String(selectedNode.data?.label ?? ""),
-                  style: { minHeight: 64 },
-                  onChange: (e) => updateSelectedNodeData({ annLabel: e.target.value }),
-                }),
-                React.createElement("label", null, "Ширина (px)"),
-                React.createElement("input", {
-                  type: "number",
-                  value: (() => {
-                    const st = selectedNode.style || {};
-                    const w = st.width;
-                    return typeof w === "number" ? w : parseInt(String(w || 280), 10) || 280;
-                  })(),
-                  min: 40,
-                  onChange: (e) =>
-                    updateSelectedNodeData({ annWidth: parseInt(e.target.value, 10) || 40 }),
-                }),
-                React.createElement("label", null, "Высота (px)"),
-                React.createElement("input", {
-                  type: "number",
-                  value: (() => {
-                    const st = selectedNode.style || {};
-                    const h = st.height;
-                    return typeof h === "number" ? h : parseInt(String(h || 140), 10) || 140;
-                  })(),
-                  min: 32,
-                  onChange: (e) =>
-                    updateSelectedNodeData({ annHeight: parseInt(e.target.value, 10) || 32 }),
-                }),
-                React.createElement("label", null, "Обводка"),
-                React.createElement(
-                  "div",
-                  { className: "row", style: { gap: 4, flexWrap: "wrap" } },
-                  ...ANNOTATION_STROKE_SWATCHES.map((c) =>
-                    React.createElement("button", {
-                      key: `s-${c}`,
-                      type: "button",
-                      title: c,
-                      onClick: () => updateSelectedNodeData({ stroke: c }),
-                      style: {
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        border:
-                          String(selectedNode.data?.stroke || "") === c
-                            ? "2px solid #fff"
-                            : "1px solid #2a2a4a",
-                        background: c,
-                        padding: 0,
-                        cursor: "pointer",
+                canvasContextMenu.canRunFrom
+                  ? React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "btn2",
+                        style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+                        onClick: () => {
+                          const sr = canvasContextMenu.stepRef;
+                          setCanvasContextMenu(null);
+                          startScenarioRun({ startStep: sr });
+                        },
                       },
-                    }),
-                  ),
-                ),
-                React.createElement("label", { style: { marginTop: 8 } }, "Заливка"),
+                      `▶ Запустить с шага #${canvasContextMenu.stepRef}`,
+                    )
+                  : null,
                 React.createElement(
-                  "div",
-                  { className: "row", style: { gap: 4, flexWrap: "wrap" } },
-                  ...ANNOTATION_FILL_SWATCHES.map((c) =>
-                    React.createElement("button", {
-                      key: `f-${c}`,
-                      type: "button",
-                      title: c,
-                      onClick: () => updateSelectedNodeData({ annFill: c }),
-                      style: {
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        border:
-                          String(selectedNode.data?.fill || "") === c
-                            ? "2px solid #fff"
-                            : "1px solid #2a2a4a",
-                        background: c,
-                        padding: 0,
-                        cursor: "pointer",
-                      },
-                    }),
-                  ),
-                ),
-                React.createElement("label", null, "Размер шрифта"),
-                React.createElement("input", {
-                  type: "number",
-                  value: Number(selectedNode.data?.fontSize) > 0 ? Number(selectedNode.data.fontSize) : 13,
-                  min: 8,
-                  max: 64,
-                  onChange: (e) =>
-                    updateSelectedNodeData({ annFontSize: parseInt(e.target.value, 10) || 13 }),
-                }),
-                React.createElement("label", null, "Цвет текста"),
-                React.createElement(
-                  "div",
-                  { className: "row", style: { gap: 4, flexWrap: "wrap" } },
-                  ...ANNOTATION_STROKE_SWATCHES.map((c) =>
-                    React.createElement("button", {
-                      key: `t-${c}`,
-                      type: "button",
-                      title: c,
-                      onClick: () => updateSelectedNodeData({ annTextColor: c }),
-                      style: {
-                        width: 24,
-                        height: 24,
-                        borderRadius: 6,
-                        border:
-                          String(selectedNode.data?.textColor || "") === c
-                            ? "2px solid #fff"
-                            : "1px solid #2a2a4a",
-                        background: c,
-                        padding: 0,
-                        cursor: "pointer",
-                      },
-                    }),
-                  ),
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn2",
+                    style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+                    onClick: () => {
+                      const id = canvasContextMenu.nodeId;
+                      setCanvasContextMenu(null);
+                      duplicateNodeById(id);
+                    },
+                  },
+                  "📋 Копировать",
                 ),
               )
             : React.createElement(
                 React.Fragment,
                 null,
-                React.createElement("div", { className: "small" }, `Узел: ${selectedNode.id}`),
-            React.createElement(
-              "div",
-              { className: "small" },
-              `Номер (после сохранения перенумеруется по порядку блоков): ${selectedNode?.data?.stepRef || "-"}`,
-            ),
-            React.createElement("label", null, "Название (title)"),
-            React.createElement("input", {
-              value: d.title || "",
-              onChange: (e) => updateSelectedNodeData({ title: e.target.value }),
-            }),
-            React.createElement("label", null, "Тип (action)"),
-            React.createElement(
-              "select",
-              {
-                value: d.action || "click",
-                onChange: (e) => updateSelectedNodeData({ action: e.target.value }),
-              },
-              ...RUNNER_ACTIONS.map((a) =>
-                React.createElement("option", { key: a, value: a }, `${ACTION_LABELS[a] || a} (${a})`),
-              ),
-            ),
-            React.createElement("label", null, "Цвет шага (params.stepColor)"),
-            React.createElement(
-              "div",
-              { className: "row", style: { flexWrap: "wrap", gap: 6 } },
-              ...STEP_COLORS.map((c) =>
-                React.createElement("button", {
-                  key: c,
-                  type: "button",
-                  title: c,
-                  onClick: () => updateSelectedNodeData({ stepColor: c, params: { stepColor: c } }),
-                  style: {
-                    width: 28,
-                    height: 28,
-                    borderRadius: 6,
-                    border:
-                      (d.stepColor === c || params.stepColor === c) ? "2px solid #fff" : "1px solid #2a2a4a",
-                    background: c,
-                    cursor: "pointer",
-                  },
-                }),
-              ),
-            ),
-            React.createElement("label", null, "Теги (через запятую)"),
-            React.createElement("input", {
-              value: (d.tags || []).join(", "),
-              onChange: (e) =>
-                updateSelectedNodeData({
-                  tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean),
-                }),
-            }),
-            React.createElement("label", null, "Описание для QA (note)"),
-            React.createElement("textarea", {
-              value: d.note || "",
-              placeholder: "Зачем этот шаг, что проверяем",
-              style: { minHeight: 56 },
-              onChange: (e) => updateSelectedNodeData({ note: e.target.value }),
-            }),
-            React.createElement("label", null, "Тикет / ссылка (ticket)"),
-            React.createElement("input", {
-              value: d.ticket || "",
-              placeholder: "JIRA-123 или URL спеки",
-              onChange: (e) => updateSelectedNodeData({ ticket: e.target.value }),
-            }),
-            React.createElement("label", null, "Статус шага (qaStatus)"),
-            React.createElement(
-              "select",
-              {
-                value: d.qaStatus || "",
-                onChange: (e) => updateSelectedNodeData({ qaStatus: e.target.value }),
-              },
-              React.createElement("option", { value: "" }, "— не задан —"),
-              React.createElement("option", { value: "draft" }, "Черновик"),
-              React.createElement("option", { value: "stable" }, "Стабильный"),
-              React.createElement("option", { value: "flaky" }, "Flaky"),
-            ),
-            d.action !== "start" && d.action !== "end"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "XPath"),
-                  React.createElement("textarea", {
-                    value: d.xpath === "—" ? "" : d.xpath || "",
-                    placeholder: "—",
-                    onChange: (e) => updateSelectedNodeData({ xpath: e.target.value || "" }),
-                  }),
-                )
-              : null,
-            React.createElement("label", null, "Комментарий к блоку"),
-            React.createElement("textarea", {
-              value: d.comment || "",
-              onChange: (e) => updateSelectedNodeData({ comment: e.target.value }),
-            }),
-            React.createElement(
-              "div",
-              { className: "row", style: { marginTop: 8 } },
-              React.createElement("label", { className: "checkrow" }, React.createElement("input", {
-                type: "checkbox",
-                checked: params.mandatory !== false,
-                onChange: (e) => updateSelectedNodeData({ params: { mandatory: e.target.checked } }),
-              }), " mandatory"),
-              React.createElement("label", { className: "checkrow" }, React.createElement("input", {
-                type: "checkbox",
-                checked: !!params.waitForLoad,
-                onChange: (e) => updateSelectedNodeData({ params: { waitForLoad: e.target.checked } }),
-              }), " waitForLoad"),
-            ),
-            React.createElement("label", null, "timeoutMs"),
-            React.createElement("input", {
-              type: "number",
-              value: params.timeoutMs ?? "",
-              placeholder: "по умолчанию из раннера",
-              onChange: (e) => {
-                const v = e.target.value;
-                updateSelectedNodeData({ params: v === "" ? { timeoutMs: undefined } : { timeoutMs: parseInt(v, 10) || 0 } });
-              },
-            }),
-            d.action === "navigate"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "URL (navigate.params.url)"),
-                  React.createElement("input", {
-                    value: params.url || "",
-                    onChange: (e) => updateSelectedNodeData({ params: { url: e.target.value } }),
-                  }),
-                )
-              : null,
-            ["input", "set_date"].includes(d.action)
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Значение (value)"),
-                  React.createElement("input", {
-                    value: params.value ?? "",
-                    onChange: (e) => updateSelectedNodeData({ params: { value: e.target.value } }),
-                  }),
-                )
-              : null,
-            d.action === "wait"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Задержка delayMs"),
-                  React.createElement("input", {
-                    type: "number",
-                    value: params.delayMs ?? 500,
-                    onChange: (e) =>
-                      updateSelectedNodeData({ params: { delayMs: parseInt(e.target.value, 10) || 0 } }),
-                  }),
-                )
-              : null,
-            d.action === "user_action"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Сообщение пользователю"),
-                  React.createElement("input", {
-                    value: params.message || "",
-                    onChange: (e) => updateSelectedNodeData({ params: { message: e.target.value } }),
-                  }),
-                )
-              : null,
-            d.action === "start"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Подпись (в лог раннера, params.message)"),
-                  React.createElement("input", {
-                    value: params.message || "",
-                    placeholder: "например: основной сценарий",
-                    onChange: (e) => updateSelectedNodeData({ params: { message: e.target.value } }),
-                  }),
-                  React.createElement(
-                    "p",
-                    { className: "small", style: { marginTop: 6 } },
-                    "Выполнение всегда начинается с этого блока (первый start в сохранённом списке шагов).",
-                  ),
-                )
-              : null,
-            d.action === "end"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Подпись (в лог раннера, params.message)"),
-                  React.createElement("input", {
-                    value: params.message || "",
-                    placeholder: "например: выход по ветке «Нет»",
-                    onChange: (e) => updateSelectedNodeData({ params: { message: e.target.value } }),
-                  }),
-                  React.createElement(
-                    "p",
-                    { className: "small", style: { marginTop: 6 } },
-                    "После этого шага прогон сценария останавливается. Соединяйте сюда ветку «Нет» или любой завершающий путь.",
-                  ),
-                )
-              : null,
-            d.action === "separator"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Подпись разделителя (params.label)"),
-                  React.createElement("input", {
-                    value: params.label || "",
-                    onChange: (e) => updateSelectedNodeData({ params: { label: e.target.value } }),
-                  }),
-                )
-              : null,
-            d.action === "branch" || d.action === "assert"
-              ? React.createElement(
-                  React.Fragment,
-                  null,
-                  React.createElement("label", null, "Условие (params.condition)"),
-                  React.createElement(
-                    "select",
-                    {
-                      value: params.condition || "element_exists",
-                      onChange: (e) =>
-                        updateSelectedNodeData({ params: { condition: e.target.value } }),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn",
+                    style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+                    onClick: () => {
+                      const id = canvasContextMenu.nodeId;
+                      setCanvasContextMenu(null);
+                      setSelectedNodeId(id);
+                      setAnnSettingsModalNodeId(id);
                     },
-                    ...BRANCH_CONDITIONS.map((bc) =>
-                      React.createElement("option", { key: bc.value, value: bc.value }, bc.label),
-                    ),
-                  ),
-                  React.createElement("label", null, "expectedValue"),
-                  React.createElement("input", {
-                    value: params.expectedValue ?? "",
-                    onChange: (e) =>
-                      updateSelectedNodeData({ params: { expectedValue: e.target.value } }),
-                  }),
-                  params.condition === "attribute_equals"
-                    ? React.createElement(
-                        React.Fragment,
-                        null,
-                        React.createElement("label", null, "attributeName"),
-                        React.createElement("input", {
-                          value: params.attributeName || "",
-                          onChange: (e) =>
-                            updateSelectedNodeData({ params: { attributeName: e.target.value } }),
-                        }),
-                      )
-                    : null,
-                  d.action === "assert"
-                    ? React.createElement(
-                        React.Fragment,
-                        null,
-                        React.createElement(
-                          "div",
-                          { className: "row", style: { marginTop: 6 } },
-                          React.createElement(
-                            "label",
-                            { className: "checkrow" },
-                            React.createElement("input", {
-                              type: "checkbox",
-                              checked: !!params.waitMode,
-                              onChange: (e) =>
-                                updateSelectedNodeData({ params: { waitMode: e.target.checked } }),
-                            }),
-                            " waitMode",
-                          ),
-                          React.createElement(
-                            "label",
-                            { className: "checkrow" },
-                            React.createElement("input", {
-                              type: "checkbox",
-                              checked: !!params.softAssert,
-                              onChange: (e) =>
-                                updateSelectedNodeData({ params: { softAssert: e.target.checked } }),
-                            }),
-                            " softAssert",
-                          ),
-                        ),
-                      )
-                    : null,
-                )
-              : null,
-            React.createElement("label", null, "fallbackXPaths (по одному в строке)"),
-            React.createElement("textarea", {
-              placeholder: "//button[1]",
-              value: safeArray(params.fallbackXPaths).join("\n"),
-              onChange: (e) =>
-                updateSelectedNodeData({
-                  params: {
-                    fallbackXPaths: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean),
                   },
-                }),
-            }),
-            React.createElement(
-              "div",
-              { className: "row", style: { marginTop: 8 } },
-              React.createElement(
-                "select",
-                {
-                  value: selectedGroupId,
-                  onChange: (e) => setSelectedGroupId(e.target.value),
-                  style: { flex: 1 },
-                },
-                React.createElement("option", { value: "" }, "Группа…"),
-                ...groups.map((g) => React.createElement("option", { key: g.id, value: g.id }, g.title)),
+                  "⚙ Настройки примитива…",
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn2",
+                    style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+                    onClick: () => {
+                      const id = canvasContextMenu.nodeId;
+                      setCanvasContextMenu(null);
+                      duplicateNodeById(id);
+                    },
+                  },
+                  "📋 Копировать",
+                ),
               ),
-              React.createElement(
-                "button",
-                { className: "btn2", type: "button", onClick: assignNodeToSelectedGroup },
-                "В группу",
-              ),
-            ),
-          )
-        : React.createElement(
-            "p",
-            { className: "hint" },
-            "Выберите блок на схеме",
-          ),
-
-      React.createElement("hr", { style: { borderColor: "#2a2a4a", margin: "14px 0" } }),
-      React.createElement(
-        "div",
-        { className: "row", style: { justifyContent: "space-between" } },
-        React.createElement(
-          "h2",
-          { className: "title", style: { fontSize: 14, margin: 0 } },
-          "Группы",
-        ),
-        React.createElement(
-          "button",
-          { className: "btn2", type: "button", onClick: addGroup },
-          "+ Группа",
-        ),
-      ),
-      groups.length === 0
-        ? React.createElement("p", { className: "hint" }, "Пока нет групп")
-        : null,
-      ...groups.map((g) =>
-        React.createElement(
+        )
+      : null,
+    edgeContextMenu
+      ? React.createElement(
           "div",
-          { key: g.id, className: "groupItem" },
-          React.createElement(
-            "div",
-            { className: "row", style: { justifyContent: "space-between" } },
-            React.createElement("strong", null, g.title),
-            React.createElement(
-              "button",
-              { className: "btn2", type: "button", onClick: () => deleteGroup(g.id) },
-              "Удалить",
-            ),
-          ),
-          React.createElement("label", null, "Название"),
-          React.createElement("input", {
-            value: g.title,
-            onChange: (e) => updateGroup(g.id, { title: e.target.value }),
-          }),
-          React.createElement("label", null, "Цвет"),
-          React.createElement("input", {
-            className: "inlineColor",
-            type: "color",
-            value: g.color || "#00d4aa",
-            onChange: (e) => updateGroup(g.id, { color: e.target.value }),
-          }),
-          React.createElement(
-            "div",
-            { className: "hint" },
-            `Узлы: ${(g.nodeIds || []).join(", ") || "нет"}`,
-          ),
-          ...(g.nodeIds || []).map((nodeId) =>
-            React.createElement(
-              "div",
-              { key: `${g.id}-${nodeId}`, className: "row" },
-              React.createElement("span", { className: "small", style: { flex: 1 } }, nodeId),
-              React.createElement(
-                "button",
-                {
-                  className: "btn2",
-                  type: "button",
-                  onClick: () => removeNodeFromGroup(g.id, nodeId),
-                },
-                "Убрать",
+          {
+            className: "flow-ctx-menu flow-ctx-menu-col",
+            style: {
+              position: "fixed",
+              left: Math.min(
+                edgeContextMenu.clientX,
+                (typeof window !== "undefined" ? window.innerWidth : 999) - 240,
               ),
-            ),
+              top: Math.min(
+                edgeContextMenu.clientY,
+                (typeof window !== "undefined" ? window.innerHeight : 999) - 80,
+              ),
+              zIndex: 10000,
+              background: "#1a1a2e",
+              border: "1px solid #00d4aa",
+              borderRadius: 8,
+              boxShadow: "0 8px 28px rgba(0,0,0,0.5)",
+              padding: 6,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 200,
+            },
+            onClick: (e) => e.stopPropagation(),
+            onContextMenu: (e) => e.preventDefault(),
+          },
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn",
+              style: { width: "100%", justifyContent: "center", fontSize: 12, padding: "8px 10px" },
+              onClick: () => {
+                const eid = edgeContextMenu.edgeId;
+                setEdgeContextMenu(null);
+                setDecorateEdgeModalId(eid);
+              },
+            },
+            "Подпись и цвета…",
           ),
-        ),
-      ),
-      selectedGroup
-        ? React.createElement(
-            "p",
-            { className: "hint" },
-            `Группа: ${selectedGroup.title}`,
-          )
-        : null,
-    ),
+        )
+      : null,
   );
 }
 

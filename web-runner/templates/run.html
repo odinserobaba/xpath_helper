@@ -290,9 +290,24 @@
     #deriveBtn:disabled { opacity: 0.45; cursor: not-allowed; }
     .pill.soft { background: rgba(255,200,87,0.2); color: #ffc857; border: 1px solid rgba(255,200,87,0.5); }
     .step-card.soft-fail { border-left-color: #ffc857; }
+    #stopRunBtn {
+      background: #3a1510;
+      border: 1px solid #ff8a65;
+      color: #ffccbc;
+      border-radius: 10px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-weight: 700;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    #stopRunBtn:hover { filter: brightness(1.08); }
   </style>
 </head>
 <body>
+  <script>
+    window.__XPATH_RUNNER_TOKEN__ = {{ runner_token | tojson }};
+  </script>
   <div class="wrap">
     <div class="card">
       <div class="top">
@@ -304,6 +319,7 @@
         <span id="counts"><span class="pill ok">OK: 0</span> <span class="pill fail">FAIL: 0</span></span>
         <a id="reportLink" href="/runs/{{ run_id }}/report">report.json</a>
         <a id="logLink" href="/runs/{{ run_id }}/log">log.txt</a>
+        <button id="stopRunBtn" type="button" title="Остановка между шагами (POST /api/runs/…/stop)">⏹ Стоп прогона</button>
         <button id="deriveBtn" type="button">Create stabilized scenario</button>
         <button id="debugContinueBtn" type="button" style="display:none;background:#332700;border:1px solid #ffc857;color:#ffc857;border-radius:10px;padding:6px 10px;cursor:pointer;font-weight:700;">Продолжить отладку (debug-continue)</button>
       </div>
@@ -337,9 +353,37 @@
       scenarioName: document.getElementById("scenarioName"),
       counts: document.getElementById("counts"),
       deriveBtn: document.getElementById("deriveBtn"),
+      stopRunBtn: document.getElementById("stopRunBtn"),
       debugContinueBtn: document.getElementById("debugContinueBtn"),
     };
     els.deriveBtn.disabled = true;
+    if (els.stopRunBtn) {
+      els.stopRunBtn.addEventListener("click", async () => {
+        try {
+          const tok = (window.__XPATH_RUNNER_TOKEN__ && String(window.__XPATH_RUNNER_TOKEN__).trim()) || "";
+          const headers = {};
+          if (tok) headers["x-runner-token"] = tok;
+          const r = await fetch("/api/runs/" + runId + "/stop", { method: "POST", headers });
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error || "stop failed");
+          appendLogLine({
+            ts: Date.now() / 1000,
+            kind: "misc",
+            badge: "stop",
+            badgeClass: "b-misc",
+            htmlParts: [{ text: "запрошена остановка прогона" }],
+          });
+        } catch (e) {
+          appendLogLine({
+            ts: Date.now() / 1000,
+            kind: "misc",
+            badge: "err",
+            badgeClass: "b-fail",
+            htmlParts: [{ text: "стоп: " + (e && e.message ? e.message : String(e)) }],
+          });
+        }
+      });
+    }
     els.deriveBtn.title = "Available after successful run (failCount=0)";
     els.debugContinueBtn.addEventListener("click", async () => {
       try {
@@ -751,17 +795,30 @@
           badgeClass: "b-run",
           htmlParts: [{ text: "продолжаем после шага #" + String(msg.step || "") }],
         });
+      } else if (e === "run_cancelled") {
+        currentStep = null;
+        appendLogLine({
+          ts,
+          kind: "misc",
+          badge: "stop",
+          badgeClass: "b-misc",
+          htmlParts: [
+            { text: "остановка запрошена перед шагом #", cls: "hi" },
+            { text: String(msg.step || ""), cls: "hi" },
+          ],
+        });
       } else if (e === "run_done") {
         okCount = msg.okCount ?? okCount;
         failCount = msg.failCount ?? failCount;
         runFinished = true;
+        const cancelled = !!msg.cancelled;
         appendLogLine({
           ts,
           kind: "end",
           badge: "done",
           badgeClass: "b-end",
           htmlParts: [
-            { text: "finished · ok=", cls: "dim" },
+            { text: cancelled ? "finished (stopped) · ok=" : "finished · ok=", cls: "dim" },
             { text: String(okCount), cls: "hi" },
             { text: " fail=", cls: "dim" },
             { text: String(failCount), cls: "hi" },
