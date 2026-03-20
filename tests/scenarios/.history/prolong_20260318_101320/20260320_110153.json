@@ -1,7 +1,7 @@
 {
   "name": "prolong",
   "version": 1,
-  "exportedAt": "2026-03-20T08:01:53.268Z",
+  "exportedAt": "2026-03-20T08:01:19.030Z",
   "steps": [
     {
       "step": 1,
@@ -451,7 +451,7 @@
       "tags": [],
       "params": {
         "mandatory": true,
-        "stepColor": "#ff1744"
+        "stepColor": "#ff9100"
       }
     }
   ],
@@ -647,20 +647,6 @@
         "stepColor": "#ff1744"
       },
       {
-        "id": "step-13",
-        "stepRef": 13,
-        "position": {
-          "x": 40,
-          "y": 1480
-        },
-        "title": "Верно",
-        "action": "click",
-        "xpath": "//span[normalize-space()='Верно']",
-        "comment": "",
-        "tags": [],
-        "stepColor": "#ff1744"
-      },
-      {
         "id": "step-14",
         "stepRef": 14,
         "position": {
@@ -695,9 +681,9 @@
           "x": 420,
           "y": 1720
         },
-        "title": "#c10",
-        "action": "input",
-        "xpath": "//*[@name='c10']",
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -709,9 +695,9 @@
           "x": 40,
           "y": 1960
         },
-        "title": "Дата",
+        "title": "#c10",
         "action": "input",
-        "xpath": "//*[@name='c40']",
+        "xpath": "//*[@name='c10']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -723,9 +709,9 @@
           "x": 420,
           "y": 1960
         },
-        "title": "Продолжить",
-        "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "title": "Дата",
+        "action": "input",
+        "xpath": "//*[@name='c40']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -739,7 +725,7 @@
         },
         "title": "Продолжить",
         "action": "click",
-        "xpath": "//button[normalize-space()='Продолжить']",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -751,9 +737,9 @@
           "x": 420,
           "y": 2200
         },
-        "title": "<input>",
+        "title": "Продолжить",
         "action": "click",
-        "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+        "xpath": "//button[normalize-space()='Продолжить']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -765,9 +751,9 @@
           "x": 40,
           "y": 2440
         },
-        "title": "По реквизитам платёжного поручения или УИН",
+        "title": "<input>",
         "action": "click",
-        "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+        "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -779,9 +765,9 @@
           "x": 420,
           "y": 2440
         },
-        "title": "<input>",
-        "action": "input",
-        "xpath": "//*[@name='c35']",
+        "title": "По реквизитам платёжного поручения или УИН",
+        "action": "click",
+        "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -793,9 +779,9 @@
           "x": 40,
           "y": 2680
         },
-        "title": "Дата",
+        "title": "<input>",
         "action": "input",
-        "xpath": "//*[@name='c36']",
+        "xpath": "//*[@name='c35']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -807,9 +793,9 @@
           "x": 420,
           "y": 2680
         },
-        "title": "Перейти к подписанию",
-        "action": "click",
-        "xpath": "//span[normalize-space()='Перейти к подписанию']",
+        "title": "Дата",
+        "action": "input",
+        "xpath": "//*[@name='c36']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -821,9 +807,9 @@
           "x": 40,
           "y": 2920
         },
-        "title": "Продолжить",
+        "title": "Перейти к подписанию",
         "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "xpath": "//span[normalize-space()='Перейти к подписанию']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -835,9 +821,9 @@
           "x": 420,
           "y": 2920
         },
-        "title": "Подписание происходит в браузере. Сертификат УКЭП",
+        "title": "Продолжить",
         "action": "click",
-        "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -849,9 +835,9 @@
           "x": 40,
           "y": 3160
         },
-        "title": "Подписать",
+        "title": "Подписание происходит в браузере. Сертификат УКЭП",
         "action": "click",
-        "xpath": "//span[normalize-space()='Подписать']",
+        "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -863,9 +849,9 @@
           "x": 420,
           "y": 3160
         },
-        "title": "ООО \"ЦентрИнформ\"",
+        "title": "Подписать",
         "action": "click",
-        "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+        "xpath": "//span[normalize-space()='Подписать']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -877,9 +863,9 @@
           "x": 40,
           "y": 3400
         },
-        "title": "Продолжить",
+        "title": "ООО \"ЦентрИнформ\"",
         "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -891,12 +877,26 @@
           "x": 64,
           "y": 3632
         },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-31",
+        "stepRef": 31,
+        "position": {
+          "x": 80,
+          "y": 3808
+        },
         "title": "Новый шаг 31",
         "action": "end",
         "xpath": "—",
         "comment": "",
         "tags": [],
-        "stepColor": "#ff1744"
+        "stepColor": "#ff9100"
       }
     ],
     "edges": [
@@ -1054,6 +1054,12 @@
         "id": "e-step-29-step-30-1773993243008",
         "source": "step-29",
         "target": "step-30",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-30-step-31-1773993244454-1773993253058",
+        "source": "step-30",
+        "target": "step-31",
         "kind": "next"
       },
       {

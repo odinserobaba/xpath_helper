@@ -1,0 +1,195 @@
+{
+  "name": "XPath Helper — сценарий",
+  "version": 1,
+  "exportedAt": "2026-03-20T06:57:59.614Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "start",
+      "title": "Новый шаг 5",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#1de9b6",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "condition": "element_exists",
+        "expectedValue": "",
+        "nextElseId": "step-1773986924643-c26q1bdp4tt",
+        "waitForLoad": true,
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/"
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//a[normalize-space()='Лицензирование']",
+      "action": "click",
+      "title": "Лицензирование",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add"
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Лицензирование",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "branch",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//a[contains(normalize-space(), 'Лицензирование')]",
+          "(//a[contains(concat(' ', normalize-space(@class), ' '), ' page-nav-item ')])[12]",
+          "//a[contains(@href, '/app/services/license')]",
+          "(//a[contains(@class, 'page-nav-item ng-tns-c132-0')])[12]",
+          "//a[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//a[contains(@routerlinkactive, 'ci-nav-link-item-active')])[12]",
+          "(//li//a)[12]",
+          "(//ul/li//a)[12]",
+          "(//div[contains(@class, 'mat-expansion-panel-body')]/ul/li//a)[12]",
+          "//*[normalize-space()='Лицензирование']",
+          "//a[normalize-space()='Лицензирование']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    }
+  ],
+  "id": "xpath_helper_20260320_092240",
+  "flow": {
+    "nodes": [
+      {
+        "id": "step-1",
+        "stepRef": 1,
+        "position": {
+          "x": 64,
+          "y": -128
+        },
+        "title": "",
+        "action": "navigate",
+        "xpath": "—",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-2",
+        "stepRef": 2,
+        "position": {
+          "x": 96,
+          "y": 80
+        },
+        "title": "Лицензирование",
+        "action": "click",
+        "xpath": "//a[normalize-space()='Лицензирование']",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-3",
+        "stepRef": 3,
+        "position": {
+          "x": 71.42239745403015,
+          "y": 311.8603643614973
+        },
+        "title": "Лицензирование",
+        "action": "navigate",
+        "xpath": "—",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-4",
+        "stepRef": 4,
+        "position": {
+          "x": 562.6303568621759,
+          "y": 490.09235973618087
+        },
+        "title": "Продолжить",
+        "action": "branch",
+        "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-5-1773987784681",
+        "stepRef": 5,
+        "position": {
+          "x": 85.34463276836158,
+          "y": -324.47834274952925
+        },
+        "title": "Новый шаг 5",
+        "action": "start",
+        "xpath": "",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#1de9b6"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-step-1-step-2",
+        "source": "step-1",
+        "target": "step-2",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-2-step-3",
+        "source": "step-2",
+        "target": "step-3",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-3-step-4",
+        "source": "step-3",
+        "target": "step-4",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-5-1773987784681-step-1-1773987791800",
+        "source": "step-5-1773987784681",
+        "target": "step-1",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-4-step-1-1773987799374",
+        "source": "step-4",
+        "target": "step-1",
+        "kind": "yes",
+        "sourceHandle": "branch-yes"
+      }
+    ],
+    "groups": []
+  }
+}

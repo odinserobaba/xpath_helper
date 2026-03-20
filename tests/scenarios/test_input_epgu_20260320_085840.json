@@ -1,0 +1,201 @@
+{
+  "name": "test_input_epgu",
+  "version": 1,
+  "exportedAt": "2026-03-20T05:59:32.372Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "https://esia-portal1.test.gosuslugi.ru/login/",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//*[@id='password']",
+      "action": "input",
+      "title": "#password",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "Teneliz2603%",
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[@name='Пароль']",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' no-label ')]",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' plain-input ')]",
+          "//input[contains(@type, 'password')]",
+          "//input[contains(@class, 'plain-input no-label')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//div//input",
+          "//esia-input-password/div//input",
+          "//div/esia-input-password/div//input"
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//button[normalize-space()='Войти']",
+      "action": "click",
+      "title": "Войти",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//button[contains(concat(' ', normalize-space(@class), ' '), ' plain-button ')])[1]",
+          "(//button[contains(concat(' ', normalize-space(@class), ' '), ' plain-button_wide ')])[1]",
+          "(//button[contains(@class, 'plain-button plain-button_wide')])[1]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//button)[4]",
+          "(//form/div//button)[2]",
+          "(//div/form/div//button)[2]",
+          "//*[normalize-space()='Войти']",
+          "//button[normalize-space()='Войти']"
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "(//h4[contains(concat(' ', normalize-space(@class), ' '), ' title-h4 ')])[2]",
+      "action": "click",
+      "title": "ООО \"ЦентрИнформ\"",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//h4[contains(@class, 'title-h4')])[2]",
+          "//h4[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//h4)[2]",
+          "(//div/div//h4)[2]",
+          "(//button/div/div//h4)[2]",
+          "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+          "//h4[normalize-space()='ООО \"ЦентрИнформ\"']"
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "—",
+      "action": "start",
+      "title": "Новый шаг 5",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#1de9b6"
+      }
+    }
+  ],
+  "id": "test_input_epgu_20260320_085840",
+  "flow": {
+    "nodes": [
+      {
+        "id": "step-1",
+        "stepRef": 1,
+        "position": {
+          "x": 312.617702448211,
+          "y": -173.6195856873824
+        },
+        "title": "",
+        "action": "navigate",
+        "xpath": "—",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-2",
+        "stepRef": 2,
+        "position": {
+          "x": 320,
+          "y": 40
+        },
+        "title": "#password",
+        "action": "input",
+        "xpath": "//*[@id='password']",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-3",
+        "stepRef": 3,
+        "position": {
+          "x": 319.0960451977397,
+          "y": 266.2146892655368
+        },
+        "title": "Войти",
+        "action": "click",
+        "xpath": "//button[normalize-space()='Войти']",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-4",
+        "stepRef": 4,
+        "position": {
+          "x": 289.41619585687386,
+          "y": 515.7062146892655
+        },
+        "title": "ООО \"ЦентрИнформ\"",
+        "action": "click",
+        "xpath": "(//h4[contains(concat(' ', normalize-space(@class), ' '), ' title-h4 ')])[2]",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-5-1773986362343",
+        "stepRef": 5,
+        "position": {
+          "x": 314.5009416195857,
+          "y": -389.9811676082864
+        },
+        "title": "Новый шаг 5",
+        "action": "start",
+        "xpath": "",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#1de9b6"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-step-1-step-2",
+        "source": "step-1",
+        "target": "step-2",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-2-step-3",
+        "source": "step-2",
+        "target": "step-3",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-3-step-4",
+        "source": "step-3",
+        "target": "step-4",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-5-1773986362343-step-1-1773986370555",
+        "source": "step-5-1773986362343",
+        "target": "step-1",
+        "kind": "next"
+      }
+    ],
+    "groups": []
+  }
+}

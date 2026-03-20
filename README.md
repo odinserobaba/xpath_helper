@@ -59,7 +59,7 @@ cd web-runner
 - **Fallback selectors** в выполнении: пробуем primary XPath, затем fallbacks.
 - **Более стабильные ожидания/ретраи**: wait state, retryOnFlaky, before/after screenshots, HTML report.
 - **`set_date` в раннере**: ставит дату через `evaluate` (value + input/change), чтобы Angular корректно принял значение.
-- **Отдельный Flow Editor (`/flow-editor`)**: визуальная блок-схема шагов, комментарии к узлам, визуальные группы и сохранение flow-метаданных в сценарий.
+- **Отдельный Flow Editor (`/flow-editor`)**: визуальная блок-схема шагов (локальный JS-бандл в `web-runner/static/`, без CDN), комментарии к узлам, визуальные группы и сохранение `flow` в JSON сценария.
 
 ---
 

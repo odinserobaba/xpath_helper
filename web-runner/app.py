@@ -7,7 +7,7 @@ import re
 import time
 import uuid
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,6 +16,7 @@ import anyio
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -26,6 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
 SCENARIOS_DIR = REPO_ROOT / "tests" / "scenarios"
 LOG_DIR = REPO_ROOT / "tests" / "logs"
 RUNNER_TOKEN = os.environ.get("XPATH_RUNNER_TOKEN", "").strip() or None
@@ -33,6 +35,9 @@ SCENARIO_HISTORY_DIR = REPO_ROOT / "tests" / "scenarios" / ".history"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app = FastAPI(title="XPath Helper — Web Runner")
+
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +50,8 @@ app.add_middleware(
 
 
 ALLOWED_ACTIONS = {
+    "start",
+    "end",
     "click",
     "click_if_exists",
     "input",
@@ -109,6 +116,40 @@ def _emit_run_event(run_dir: Path, obj: Dict[str, Any]) -> None:
     _jsonl_append(_run_events_path(run_dir), obj)
 
 
+def _is_soft_assert_failure(err: str) -> bool:
+    t = (err or "").lower()
+    return "soft assert" in t or (t.startswith("soft ") and "assert" in t)
+
+
+def _debug_wait_for_continue(run_dir: Path, step_no: int) -> None:
+    """Пауза до POST /api/runs/{id}/debug-continue (создаётся файл _debug_continue в каталоге прогона)."""
+    flag = run_dir / "_debug_continue"
+    try:
+        flag.unlink(missing_ok=True)
+    except Exception:
+        pass
+    _emit_run_event(
+        run_dir,
+        {
+            "ts": time.time(),
+            "event": "debug_pause",
+            "step": step_no,
+            "runId": run_dir.name,
+            "hint": "Отправьте POST /api/runs/{runId}/debug-continue или кнопку в UI",
+        },
+    )
+    deadline = time.time() + 7200
+    while time.time() < deadline:
+        if flag.exists():
+            try:
+                flag.unlink(missing_ok=True)
+            except Exception:
+                pass
+            _emit_run_event(run_dir, {"ts": time.time(), "event": "debug_resume", "step": step_no})
+            return
+        time.sleep(0.2)
+
+
 def _require_token(request: Request) -> Optional[JSONResponse]:
     if not RUNNER_TOKEN:
         return None
@@ -133,6 +174,124 @@ class Step:
     action: str
     params: Dict[str, Any]
     fallback_xpaths: List[str]
+    title: str = ""
+    tags: List[str] = field(default_factory=list)
+    note: str = ""
+    ticket: str = ""
+    qa_status: str = ""  # draft | stable | flaky
+
+
+def _step_sse_meta(s: Step) -> Dict[str, Any]:
+    """Поля для Live run UI (как в Flow Editor)."""
+    p = s.params or {}
+    sc = p.get("stepColor")
+    qs = (s.qa_status or "").strip().lower()
+    if qs not in {"", "draft", "stable", "flaky"}:
+        qs = ""
+    return {
+        "title": (s.title or "")[:180],
+        "tags": list(s.tags)[:10],
+        "stepColor": str(sc).strip()[:24] if sc else "",
+        "note": (s.note or "")[:400],
+        "ticket": (s.ticket or "")[:120],
+        "qaStatus": qs,
+    }
+
+
+ACTIONS_NEEDING_XPATH = {
+    "click",
+    "click_if_exists",
+    "input",
+    "set_date",
+    "file_upload",
+    "wait_for_element",
+}
+
+
+def _validate_scenario_raw(raw: Any) -> Tuple[List[str], List[str]]:
+    """Проверка сценария до сохранения: (ошибки, предупреждения). Ошибки блокируют сохранение API при желании."""
+    errors: List[str] = []
+    warnings: List[str] = []
+    if not isinstance(raw, dict):
+        return (["Сценарий должен быть объектом JSON"], warnings)
+    steps_raw = raw.get("steps")
+    if not isinstance(steps_raw, list):
+        return (["Поле steps должно быть массивом"], warnings)
+
+    seen_steps: Dict[int, int] = {}
+    draft_or_flaky = 0
+    for i, s in enumerate(steps_raw):
+        if not isinstance(s, dict):
+            continue
+        action = s.get("action")
+        if action not in ALLOWED_ACTIONS or action == "separator":
+            continue
+        try:
+            sn = int(s.get("step") or 0)
+        except Exception:
+            sn = 0
+        if sn > 0:
+            seen_steps[sn] = seen_steps.get(sn, 0) + 1
+        xpath = str(s.get("xpath") or "").strip()
+        params = s.get("params") if isinstance(s.get("params"), dict) else {}
+        qs = str(s.get("qaStatus") or s.get("qa_status") or "").strip().lower()
+        if qs in {"draft", "flaky"}:
+            draft_or_flaky += 1
+
+        if action == "navigate":
+            url = str((params or {}).get("url") or "").strip()
+            if not url:
+                errors.append(f"Шаг #{sn or i + 1} navigate: не задан params.url")
+        elif action in ACTIONS_NEEDING_XPATH:
+            if not xpath or xpath in {"—", "-"}:
+                errors.append(f"Шаг #{sn or i + 1} ({action}): нужен непустой xpath")
+
+        if action == "branch":
+            p = params or {}
+            has_yes = p.get("nextStep") not in (None, "", 0) or p.get("next") not in (None, "", 0) or p.get("nextId")
+            has_no = p.get("nextElseStep") not in (None, "", 0) or p.get("nextElse") not in (None, "", 0) or p.get("nextElseId")
+            if not has_yes and not has_no:
+                warnings.append(
+                    f"Шаг #{sn or i + 1} branch: нет целей nextStep/nextElseStep — проверьте связи на схеме",
+                )
+
+        if action in {"assert", "branch"}:
+            cond = str((params or {}).get("condition") or "")
+            if cond in {
+                "element_exists",
+                "attribute_equals",
+                "text_equals",
+                "text_contains",
+                "count_equals",
+            }:
+                if not xpath or xpath in {"—", "-"}:
+                    warnings.append(f"Шаг #{sn or i + 1} ({action}): для условия {cond!r} обычно нужен xpath")
+
+    for num, cnt in seen_steps.items():
+        if cnt > 1:
+            errors.append(f"Дублируется номер шага step={num} ({cnt} раз)")
+
+    if draft_or_flaky:
+        warnings.append(f"В сценарии есть черновики/flaky шагов: {draft_or_flaky} — убедитесь перед релизным прогоном")
+
+    return (errors, warnings)
+
+
+def _xpath_for_sse(action: str, xpath: str) -> Optional[str]:
+    if action == "navigate":
+        return None
+    x = (xpath or "").strip()
+    if not x or x == "—":
+        return None
+    return x[:520]
+
+
+def _step_done_timing(s: Step, step_t0: float) -> Dict[str, Any]:
+    """duration + метаданные шага для SSE step_done."""
+    return {
+        "durationMs": int((time.time() - step_t0) * 1000),
+        **_step_sse_meta(s),
+    }
 
 
 def _parse_scenario(raw: Any) -> Tuple[str, List[Step]]:
@@ -161,10 +320,90 @@ def _parse_scenario(raw: Any) -> Tuple[str, List[Step]]:
         fx = []
         if isinstance(params, dict) and isinstance(params.get("fallbackXPaths"), list):
             fx = [str(x) for x in params.get("fallbackXPaths") if str(x).strip()][:8]
-        steps.append(Step(step=step_no, xpath=str(xpath), action=str(action), params=params, fallback_xpaths=fx))
+        title_s = str(s.get("title") or "").strip()
+        note_s = str(s.get("note") or "").strip()
+        ticket_s = str(s.get("ticket") or "").strip()
+        qa_s = str(s.get("qaStatus") or s.get("qa_status") or "").strip().lower()
+        if qa_s not in {"", "draft", "stable", "flaky"}:
+            qa_s = ""
+        tag_list: List[str] = []
+        if isinstance(s.get("tags"), list):
+            tag_list = [str(t).strip() for t in s["tags"] if str(t).strip()][:12]
+        steps.append(
+            Step(
+                step=step_no,
+                xpath=str(xpath),
+                action=str(action),
+                params=params,
+                fallback_xpaths=fx,
+                title=title_s,
+                tags=tag_list,
+                note=note_s[:4000],
+                ticket=ticket_s[:500],
+                qa_status=qa_s,
+            )
+        )
 
     steps.sort(key=lambda x: x.step)
+    # Точка входа start должна идти в списке до следующих шагов — иначе entry_idx указывает на последний элемент и цикл завершается после одного start.
+    starts = [s for s in steps if s.action == "start"]
+    ends = [s for s in steps if s.action == "end"]
+    others = [s for s in steps if s.action not in {"start", "end"}]
+    if starts or ends:
+        steps = starts + others + ends
     return name, steps
+
+
+def _resolve_branch_jump_index(target: Any, steps: List[Step]) -> Optional[int]:
+    """Индекс шага в `steps` для перехода branch/assert. target: номер шага, числовая строка
+    или id узла редактора вида ``step-12-…`` / ``step-12`` (из params.nextId / nextElseId)."""
+    if target in (None, "", 0):
+        return None
+    if isinstance(target, bool) or isinstance(target, dict):
+        return None
+    step_no: Optional[int] = None
+    try:
+        if isinstance(target, (int, float)):
+            step_no = int(target)
+        elif isinstance(target, str):
+            t = target.strip()
+            if not t:
+                return None
+            if t.isdigit() or (t.startswith("-") and t[1:].isdigit()):
+                step_no = int(t)
+            else:
+                step_no = None
+                # Flow Editor: step-<ref>-<timestamp>…
+                m_ref_ts = re.match(r"^step-(\d+)-(\d+)", t, re.I)
+                if m_ref_ts:
+                    seg1, seg2 = int(m_ref_ts.group(1)), int(m_ref_ts.group(2))
+                    if seg2 >= 1_000_000_000_000:
+                        step_no = seg1
+                    elif seg1 >= 1_000_000_000_000:
+                        step_no = None
+                    else:
+                        step_no = seg1
+                if step_no is None:
+                    m = re.search(r"(?:^|[-_/])(?:step[-_]?|s)(\d+)", t, re.I)
+                    if m:
+                        cand = int(m.group(1))
+                        if cand < 1_000_000_000_000:
+                            step_no = cand
+                if step_no is None:
+                    try:
+                        step_no = int(float(t))
+                    except ValueError:
+                        return None
+        else:
+            return None
+    except (ValueError, TypeError, OverflowError):
+        return None
+    if step_no is None or step_no <= 0:
+        return None
+    if step_no >= 1_000_000_000_000:
+        return None
+    return next((j for j, st in enumerate(steps) if st.step == step_no), None)
+
 
 def _scenario_steps_count(raw: Any) -> int:
     try:
@@ -207,9 +446,26 @@ def _write_html_report(run_dir: Path, report: Dict[str, Any]) -> None:
         name = p.split("/")[-1]
         return f'<a href="/runs/{run_dir.name}/screenshots/{name}">{p}</a>'
 
+    def esc(s: Any) -> str:
+        t = "" if s is None else str(s)
+        return (
+            t.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+
     rows_html = []
     for s in report.get("steps", []):
         status = "OK" if s.get("ok") else "FAIL"
+        url_after = esc(_url_for_log(s.get("urlAfter") or "", 220))
+        jump = s.get("jumpTo")
+        br = s.get("branchResult")
+        extra = ""
+        if jump is not None:
+            extra += f'<br><small>jump→#{jump}</small>'
+        if br is not None:
+            extra += f'<br><small>ветка: {"Да" if br else "Нет"}</small>'
         rows_html.append(
             "<tr>"
             f"<td>{s.get('step')}</td>"
@@ -218,9 +474,10 @@ def _write_html_report(run_dir: Path, report: Dict[str, Any]) -> None:
             f"<td>{s.get('durationMs','')}</td>"
             f"<td>{(s.get('failReason') or '')}</td>"
             f"<td>{(s.get('error') or '')}</td>"
+            f'<td style="max-width:280px;word-break:break-all"><small>{url_after}</small>{extra}</td>'
+            f"<td>{link(s.get('screenshot'))}</td>"
             f"<td>{link(s.get('before'))}</td>"
             f"<td>{link(s.get('after'))}</td>"
-            f"<td>{link(s.get('screenshot'))}</td>"
             "</tr>"
         )
 
@@ -245,7 +502,7 @@ code{{color:#00d4aa}}
 <h2>Top slow steps</h2><ul>{slow_html}</ul>
 <h2>Steps</h2>
 <table>
-<thead><tr><th>#</th><th>Action</th><th>Status</th><th>ms</th><th>Reason</th><th>Error</th><th>Before</th><th>After</th><th>Fail shot</th></tr></thead>
+<thead><tr><th>#</th><th>Action</th><th>Status</th><th>ms</th><th>Reason</th><th>Error</th><th>URL после</th><th>Скрин шага</th><th>Before</th><th>After</th></tr></thead>
 <tbody>{''.join(rows_html)}</tbody>
 </table>
 </body></html>"""
@@ -271,26 +528,44 @@ def _log_line(lines: List[str], msg: str) -> None:
     lines.append(f"[{ts}] {msg}")
 
 
+def _url_for_log(url: str, max_len: int = 180) -> str:
+    u = (url or "").strip()
+    if len(u) <= max_len:
+        return u
+    return u[: max_len - 1] + "…"
+
+
+def _page_url_safe(page: Any) -> str:
+    try:
+        return str(page.url or "")
+    except Exception:
+        return ""
+
+
 def run_scenario(
     scenario_name: str,
     steps: List[Step],
     *,
-    variables: Dict[str, Any],
-    start_url: str,
-    default_timeout_ms: int,
-    headless: bool,
-    slow_mo_ms: int,
-    viewport: str,
+    variables: Optional[Dict[str, Any]] = None,
+    start_url: str = "",
+    default_timeout_ms: int = 15000,
+    headless: bool = True,
+    slow_mo_ms: int = 0,
+    viewport: str = "1280x720",
     connect_over_cdp: bool = False,
     cdp_endpoint: str = "",
     bring_to_front: bool = True,
     highlight_steps: bool = True,
     highlight_ms: int = 600,
     run_dir: Path,
+    start_step_no: Optional[int] = None,
+    debug_breakpoints: Optional[Any] = None,
+    capture_console: bool = False,
 ) -> Dict[str, Any]:
     logs: List[str] = []
     results: List[Dict[str, Any]] = []
     t0 = time.time()
+    variables = dict(variables or {})
 
     width, height = 1280, 720
     try:
@@ -302,6 +577,49 @@ def run_scenario(
     _log_line(logs, f"Scenario: {scenario_name}")
     _log_line(logs, f"Steps: {len(steps)}")
     _log_line(logs, f"Headless: {headless}, slowMoMs: {slow_mo_ms}, viewport: {width}x{height}")
+    start_indices = [i for i, st in enumerate(steps) if st.action == "start"]
+    if not start_indices:
+        _log_line(
+            logs,
+            "⚠ Нет шага «Начало» (action=start): выполнение с первого шага в списке. "
+            "Рекомендуется добавить один такой шаг в начало сценария (Flow Editor).",
+        )
+        entry_idx = 0
+    else:
+        entry_idx = start_indices[0]
+        _log_line(
+            logs,
+            f"▶ Точка входа: шаг #{steps[entry_idx].step} (Начало). Всего шагов start в сценарии: {len(start_indices)}",
+        )
+        if len(start_indices) > 1:
+            _log_line(
+                logs,
+                f"⚠ Несколько шагов «Начало» — используется первый (step={steps[entry_idx].step}).",
+            )
+
+    bp: set = set()
+    if debug_breakpoints:
+        if isinstance(debug_breakpoints, (list, tuple, set)):
+            for x in debug_breakpoints:
+                try:
+                    bp.add(int(x))
+                except (TypeError, ValueError):
+                    pass
+
+    if start_step_no is not None:
+        try:
+            target = int(start_step_no)
+        except (TypeError, ValueError):
+            target = None
+        if target is not None:
+            jump = next((i for i, st in enumerate(steps) if st.step == target), None)
+            if jump is not None:
+                entry_idx = jump
+                _log_line(
+                    logs,
+                    f"▶ Запуск с шага #{target} (позиция в списке {jump}). Проверьте startUrl — страница должна соответствовать этому месту сценария.",
+                )
+
     _emit_run_event(run_dir, {"ts": time.time(), "event": "run_start", "scenario": scenario_name, "stepsCount": len(steps)})
 
     _jsonl_append(
@@ -327,6 +645,17 @@ def run_scenario(
             browser = p.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
             context = browser.new_context(viewport={"width": width, "height": height})
             page = context.new_page()
+        console_lines: List[str] = []
+        if capture_console:
+
+            def _on_console(msg: Any) -> None:
+                try:
+                    console_lines.append(f"{msg.type}: {msg.text}")
+                except Exception:
+                    pass
+
+            page.on("console", _on_console)
+
         tracing_enabled = False
 
         def maybe_start_tracing(params: Dict[str, Any]) -> None:
@@ -508,9 +837,11 @@ def run_scenario(
                 _emit_run_event(run_dir, {"ts": time.time(), "event": "navigated", "url": start_url})
                 maybe_bring_to_front()
 
-            idx = 0
+            idx = entry_idx
             while idx < len(steps):
                 s = steps[idx]
+                if bp and s.step in bp:
+                    _debug_wait_for_continue(run_dir, s.step)
                 step_t0 = time.time()
                 ok = True
                 err = ""
@@ -547,10 +878,25 @@ def run_scenario(
                 selector_candidates = [xpath] + fallback_xpaths
                 selector_used = xpath
 
-                _log_line(logs, f"#{s.step} {s.action} xpath={xpath[:120]!r}")
+                if s.action == "navigate":
+                    nav_u = _url_for_log(str(params.get("url") or ""), 200)
+                    _log_line(logs, f"#{s.step} navigate → {nav_u!r}")
+                elif s.action in {"start", "end"}:
+                    _log_line(logs, f"#{s.step} {s.action}")
+                else:
+                    _log_line(logs, f"#{s.step} {s.action} xpath={xpath[:120]!r}")
                 _emit_run_event(
                     run_dir,
-                    {"ts": time.time(), "event": "step_start", "step": s.step, "action": s.action, "xpath": xpath, "timeoutMs": step_timeout_ms},
+                    {
+                        "ts": time.time(),
+                        "event": "step_start",
+                        "step": s.step,
+                        "action": s.action,
+                        **_step_sse_meta(s),
+                        "xpath": _xpath_for_sse(s.action, xpath),
+                        "navigateUrl": str(params.get("url") or "").strip() if s.action == "navigate" else None,
+                        "timeoutMs": step_timeout_ms,
+                    },
                 )
                 _jsonl_append(
                     LOG_DIR / "web-runner.log",
@@ -570,7 +916,7 @@ def run_scenario(
                     shot_before = screenshot(f"step_{s.step}_before")
                     # Element screenshot before (best-effort)
                     try:
-                        if xpath and s.action not in {"navigate", "wait", "user_action"}:
+                        if xpath and s.action not in {"navigate", "wait", "user_action", "start", "end"}:
                             loc0 = page.locator(f"xpath={xpath}").first
                             if loc0.count() > 0:
                                 el_before = element_screenshot(loc0, f"step_{s.step}_el_before")
@@ -601,16 +947,35 @@ def run_scenario(
                         except Exception:
                             return
 
-                    if s.action == "navigate":
-                        url = params.get("url") or ""
-                        url = _substitute_vars(str(url), variables)
+                    if s.action == "start":
+                        note = str(params.get("message") or params.get("label") or "").strip()
+                        if note:
+                            _log_line(logs, f"Начало: {note}")
+                        shot_after = screenshot(f"step_{s.step}_after")
+                        _log_line(logs, f"↳ URL: {_url_for_log(_page_url_safe(page))}")
+
+                    elif s.action == "end":
+                        note = str(params.get("message") or params.get("label") or "").strip()
+                        if note:
+                            _log_line(logs, f"Конец: {note}")
+                        shot_after = screenshot(f"step_{s.step}_after")
+                        _log_line(logs, f"↳ URL: {_url_for_log(_page_url_safe(page))}")
+
+                    elif s.action == "navigate":
+                        url = str(params.get("url") or "").strip()
                         if not url:
                             raise ValueError("navigate.params.url is required")
                         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                         shot_after = screenshot(f"step_{s.step}_after")
+                        _log_line(logs, f"↳ Страница после перехода: {_url_for_log(_page_url_safe(page))}")
+                        _emit_run_event(
+                            run_dir,
+                            {"ts": time.time(), "event": "navigated", "step": s.step, "requestedUrl": _url_for_log(url, 400), "currentUrl": _url_for_log(_page_url_safe(page))},
+                        )
 
                     elif s.action == "wait":
                         delay_ms = int(params.get("delayMs") or 500)
+                        _log_line(logs, f"↳ Пауза {delay_ms} ms")
                         page.wait_for_timeout(max(0, delay_ms))
                         shot_after = screenshot(f"step_{s.step}_after")
 
@@ -950,32 +1315,72 @@ def run_scenario(
                                 err = f"soft assert failed: {cond} expected={expected!r}"
 
                         if s.action == "branch":
-                            # In export JSON we don't have ids; we support numeric jumps in params.
                             next_step = params.get("nextStep") or params.get("next") or params.get("nextId")
                             else_step = params.get("nextElseStep") or params.get("nextElse") or params.get("nextElseId")
                             target = next_step if condition_ok else else_step
+                            new_idx = _resolve_branch_jump_index(target, steps)
+                            if new_idx is not None:
+                                jumped = steps[new_idx].step
+                                jumped_action = steps[new_idx].action
+                                idx = new_idx
+                                shot_after = screenshot(f"step_{s.step}_after")
+                                url_after = _page_url_safe(page)
+                                _log_line(
+                                    logs,
+                                    f"↳ Ветвление: условие={cond!r} → {'Да' if condition_ok else 'Нет'} "
+                                    f"→ переход к шагу #{jumped} ({jumped_action}), цель в JSON: {target!r}",
+                                )
+                                _log_line(logs, f"↳ URL страницы: {_url_for_log(url_after)}")
+                                primary = shot_after or shot_before
+                                results.append(
+                                    {
+                                        "step": s.step,
+                                        "action": s.action,
+                                        "ok": ok,
+                                        "durationMs": int((time.time() - step_t0) * 1000),
+                                        "error": err or None,
+                                        "screenshot": primary,
+                                        "before": shot_before,
+                                        "after": shot_after,
+                                        "elBefore": el_before,
+                                        "elAfter": el_after,
+                                        "selectorUsed": selector_used,
+                                        "urlAfter": url_after,
+                                        "branchResult": condition_ok,
+                                        "jumpTo": jumped,
+                                        "branchTarget": str(target) if target not in (None, "", 0) else None,
+                                    }
+                                )
+                                _emit_run_event(
+                                    run_dir,
+                                    {
+                                        "ts": time.time(),
+                                        "event": "step_done",
+                                        "step": s.step,
+                                        "action": s.action,
+                                        **_step_done_timing(s, step_t0),
+                                        "ok": True,
+                                        "branchResult": condition_ok,
+                                        "jumpTo": jumped,
+                                        "selectorUsed": selector_used,
+                                        "urlAfter": url_after,
+                                        "screenshot": primary,
+                                        "before": shot_before,
+                                        "after": shot_after,
+                                    },
+                                )
+                                continue
                             if target not in (None, "", 0):
-                                try:
-                                    target_no = int(target)
-                                    # jump to step number (1-based in JSON export)
-                                    new_idx = next((j for j, st in enumerate(steps) if st.step == target_no), None)
-                                    if new_idx is not None:
-                                        idx = new_idx
-                                        results.append(
-                                            {
-                                                "step": s.step,
-                                                "action": s.action,
-                                                "ok": ok,
-                                                "durationMs": int((time.time() - step_t0) * 1000),
-                                                "error": err or None,
-                                                "screenshot": shot,
-                                                "branchResult": condition_ok,
-                                                "jumpTo": target_no,
-                                            }
-                                        )
-                                        continue
-                                except Exception:
-                                    pass
+                                _log_line(
+                                    logs,
+                                    f"⚠ branch step {s.step}: не удалось перейти к цели {target!r} "
+                                    f"(ветка {'Да' if condition_ok else 'Нет'}) — проверьте nextStep/nextElseStep или id узла",
+                                )
+                            else:
+                                _log_line(
+                                    logs,
+                                    f"↳ Ветвление: {'Да' if condition_ok else 'Нет'} — цель перехода не задана, дальше по порядку шагов",
+                                )
                         shot_after = screenshot(f"step_{s.step}_after")
 
                     else:
@@ -986,9 +1391,33 @@ def run_scenario(
                     err = str(e)
                     shot = screenshot(f"step_{s.step}_fail")
                     _log_line(logs, f"✗ FAIL step {s.step}: {err}")
+                    _log_line(logs, f"↳ URL при ошибке: {_url_for_log(_page_url_safe(page))}")
+                    sel_stats = None
+                    if xpath and s.action not in {"navigate", "wait", "user_action", "start", "end"}:
+                        try:
+                            sel_stats = element_visibility_summary_by_xpath(xpath)
+                        except Exception:
+                            sel_stats = None
                     _emit_run_event(
                         run_dir,
-                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": False, "error": err, "screenshot": shot, "before": shot_before, "after": shot_after, "elBefore": el_before, "elAfter": el_after},
+                        {
+                            "ts": time.time(),
+                            "event": "step_done",
+                            "step": s.step,
+                            "action": s.action,
+                            **_step_done_timing(s, step_t0),
+                            "ok": False,
+                            "error": err,
+                            "softFailure": _is_soft_assert_failure(err),
+                            "selectorUsed": selector_used,
+                            "selectorStats": sel_stats,
+                            "screenshot": shot,
+                            "before": shot_before,
+                            "after": shot_after,
+                            "elBefore": el_before,
+                            "elAfter": el_after,
+                            "urlAfter": _page_url_safe(page),
+                        },
                     )
                     _jsonl_append(
                         LOG_DIR / "web-runner.log",
@@ -1001,27 +1430,78 @@ def run_scenario(
                             "step": s.step,
                             "action": s.action,
                             "error": err,
+                            "urlAfter": _page_url_safe(page),
                         },
                     )
                 else:
-                    _log_line(logs, f"✓ OK step {s.step}")
+                    url_done = _url_for_log(_page_url_safe(page))
+                    if ok:
+                        if s.action == "navigate":
+                            _log_line(logs, f"✓ OK step {s.step}")
+                        else:
+                            _log_line(logs, f"✓ OK step {s.step} · {url_done}")
+                        if s.action not in {"start", "end", "wait", "user_action", "navigate"}:
+                            su = (selector_used or xpath or "")[:100]
+                            if su and su != "—":
+                                _log_line(logs, f"↳ Селектор: {su!r}")
+                    else:
+                        _log_line(logs, f"⚠ step {s.step} (без исключения): {err or '—'} · {url_done}")
+                    primary_shot = shot_after or shot
                     _emit_run_event(
                         run_dir,
-                        {"ts": time.time(), "event": "step_done", "step": s.step, "action": s.action, "ok": True, "selectorUsed": selector_used, "before": shot_before, "after": shot_after, "elBefore": el_before, "elAfter": el_after},
-                    )
-                    _jsonl_append(
-                        LOG_DIR / "web-runner.log",
                         {
                             "ts": time.time(),
-                            "level": "info",
-                            "event": "step_ok",
-                            "runId": run_dir.name,
-                            "scenario": scenario_name,
+                            "event": "step_done",
                             "step": s.step,
                             "action": s.action,
+                            **_step_done_timing(s, step_t0),
+                            "ok": ok,
+                            "error": err or None,
+                            "softFailure": (not ok) and _is_soft_assert_failure(err or ""),
+                            "selectorUsed": selector_used,
+                            "before": shot_before,
+                            "after": shot_after,
+                            "screenshot": primary_shot,
+                            "urlAfter": _page_url_safe(page),
+                            "elBefore": el_before,
+                            "elAfter": el_after,
                         },
                     )
+                    if ok:
+                        _jsonl_append(
+                            LOG_DIR / "web-runner.log",
+                            {
+                                "ts": time.time(),
+                                "level": "info",
+                                "event": "step_ok",
+                                "runId": run_dir.name,
+                                "scenario": scenario_name,
+                                "step": s.step,
+                                "action": s.action,
+                                "urlAfter": _page_url_safe(page),
+                            },
+                        )
+                    else:
+                        _jsonl_append(
+                            LOG_DIR / "web-runner.log",
+                            {
+                                "ts": time.time(),
+                                "level": "warning",
+                                "event": "step_warn",
+                                "runId": run_dir.name,
+                                "scenario": scenario_name,
+                                "step": s.step,
+                                "action": s.action,
+                                "error": err,
+                                "urlAfter": _page_url_safe(page),
+                            },
+                        )
 
+                url_after_row = _page_url_safe(page)
+                if ok and shot_after:
+                    shot = shot_after
+                elif not ok and shot is None and shot_after:
+                    shot = shot_after
                 results.append(
                     {
                         "step": s.step,
@@ -1029,12 +1509,14 @@ def run_scenario(
                         "ok": ok,
                         "durationMs": int((time.time() - step_t0) * 1000),
                         "error": err or None,
+                        "softFailure": (not ok) and _is_soft_assert_failure(err or ""),
                         "screenshot": shot,
                         "before": shot_before,
                         "after": shot_after,
                         "elBefore": el_before,
                         "elAfter": el_after,
                         "selectorUsed": selector_used,
+                        "urlAfter": url_after_row,
                     }
                 )
 
@@ -1043,6 +1525,9 @@ def run_scenario(
                 if not ok and mandatory:
                     break
 
+                if s.action == "end":
+                    _log_line(logs, "■ Завершение по шагу «Конец» (end)")
+                    break
                 idx += 1
 
         finally:
@@ -1052,6 +1537,12 @@ def run_scenario(
                     context.tracing.stop(path=str(trace_path))
             except Exception:
                 pass
+            if capture_console and console_lines:
+                try:
+                    txt = "\n".join(console_lines[-8000:])
+                    (run_dir / "console.log").write_text(txt, encoding="utf-8")
+                except Exception:
+                    pass
             context.close()
             browser.close()
 
@@ -1100,10 +1591,14 @@ def api_list_scenarios(request: Request) -> JSONResponse:
         name = ""
         exported_at = ""
         version = None
+        smoke_flag = False
+        labels_obj: Any = None
         if isinstance(raw, dict):
             name = str(raw.get("name") or "")
             exported_at = str(raw.get("exportedAt") or "")
             version = raw.get("version")
+            smoke_flag = bool(raw.get("smoke") is True)
+            labels_obj = raw.get("labels")
         items.append(
             {
                 "id": p.stem,
@@ -1113,6 +1608,8 @@ def api_list_scenarios(request: Request) -> JSONResponse:
                 "version": version,
                 "stepsCount": _scenario_steps_count(raw),
                 "mtime": int(p.stat().st_mtime),
+                "smoke": smoke_flag,
+                "labels": labels_obj if isinstance(labels_obj, dict) else None,
             }
         )
     return JSONResponse({"ok": True, "scenarios": items})
@@ -1183,6 +1680,15 @@ async def api_save_scenario(request: Request) -> JSONResponse:
     except Exception as e:
         return JSONResponse({"ok": False, "error": f"Invalid scenario format: {e}"}, status_code=400)
 
+    warns_out: List[str] = []
+    if isinstance(raw, dict):
+        errs, warns_out = _validate_scenario_raw(raw)
+        if errs:
+            return JSONResponse(
+                {"ok": False, "error": "; ".join(errs[:12]), "validationErrors": errs, "validationWarnings": warns_out},
+                status_code=400,
+            )
+
     exported_at = ""
     if isinstance(raw, dict):
         exported_at = str(raw.get("exportedAt") or "")
@@ -1214,7 +1720,13 @@ async def api_save_scenario(request: Request) -> JSONResponse:
             "exportedAt": exported_at or None,
         },
     )
-    return JSONResponse({"ok": True, "scenario": {"id": scenario_id, "name": name, "stepsCount": len(steps)}})
+    return JSONResponse(
+        {
+            "ok": True,
+            "scenario": {"id": scenario_id, "name": name, "stepsCount": len(steps)},
+            "validationWarnings": warns_out,
+        }
+    )
 
 
 @app.delete("/api/scenarios/{scenario_id}", response_class=JSONResponse)
@@ -1248,6 +1760,13 @@ async def api_update_scenario(scenario_id: str, request: Request) -> JSONRespons
     if not isinstance(raw, dict):
         return JSONResponse({"ok": False, "error": "Scenario must be an object"}, status_code=400)
 
+    errs, warns = _validate_scenario_raw(raw)
+    if errs:
+        return JSONResponse(
+            {"ok": False, "error": "; ".join(errs[:12]), "validationErrors": errs, "validationWarnings": warns},
+            status_code=400,
+        )
+
     # Preserve stable id when editing existing scenario.
     payload = dict(raw)
     payload["id"] = scenario_id
@@ -1269,7 +1788,69 @@ async def api_update_scenario(scenario_id: str, request: Request) -> JSONRespons
             "stepsCount": len(steps),
         },
     )
-    return JSONResponse({"ok": True, "scenario": {"id": scenario_id, "name": str(payload.get("name") or scenario_id), "stepsCount": len(steps)}})
+    return JSONResponse(
+        {
+            "ok": True,
+            "scenario": {"id": scenario_id, "name": str(payload.get("name") or scenario_id), "stepsCount": len(steps)},
+            "validationWarnings": warns,
+        }
+    )
+
+
+@app.post("/api/scenarios/validate", response_class=JSONResponse)
+async def api_validate_scenario_body(request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    raw = await request.json()
+    errs, warns = _validate_scenario_raw(raw)
+    return JSONResponse({"ok": len(errs) == 0, "errors": errs, "warnings": warns})
+
+
+@app.get("/api/scenarios/{scenario_id}/history-file/{file_name:path}", response_class=JSONResponse)
+def api_scenario_history_file(scenario_id: str, file_name: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    if ".." in file_name or "/" in file_name or "\\" in file_name:
+        return JSONResponse({"ok": False, "error": "Invalid file"}, status_code=400)
+    p = SCENARIO_HISTORY_DIR / scenario_id / file_name
+    if not p.exists() or not p.is_file():
+        return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+    try:
+        data = _read_json(p)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    return JSONResponse({"ok": True, "scenario": data, "file": file_name})
+
+
+@app.post("/api/scenarios/{scenario_id}/restore-history", response_class=JSONResponse)
+async def api_restore_scenario_history(scenario_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    body = await request.json()
+    file_name = str(body.get("file") or "").strip()
+    if not file_name or ".." in file_name or "/" in file_name or "\\" in file_name:
+        return JSONResponse({"ok": False, "error": "Invalid file"}, status_code=400)
+    snap = SCENARIO_HISTORY_DIR / scenario_id / file_name
+    if not snap.exists():
+        return JSONResponse({"ok": False, "error": "Snapshot not found"}, status_code=404)
+    main = _scenario_path(scenario_id)
+    if not main.exists():
+        return JSONResponse({"ok": False, "error": "Scenario not found"}, status_code=404)
+    try:
+        raw = _read_json(snap)
+        _, steps = _parse_scenario(raw)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Invalid snapshot: {e}"}, status_code=400)
+    _snapshot_scenario(scenario_id)
+    main.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    _jsonl_append(
+        LOG_DIR / "web-runner.log",
+        {"ts": time.time(), "level": "info", "event": "scenario_restored", "scenarioId": scenario_id, "from": file_name},
+    )
+    return JSONResponse({"ok": True, "stepsCount": len(steps)})
 
 
 @app.post("/api/runs", response_class=JSONResponse)
@@ -1320,12 +1901,40 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     max_rows = int(body.get("maxRows") or runner_defaults.get("maxRows") or 0)
     stop_on_first_fail = bool(body.get("stopOnFirstFail", runner_defaults.get("stopOnFirstFail", True)))
 
+    start_step_raw = body.get("startStep", runner_defaults.get("startStep"))
+    start_step_no: Optional[int] = None
+    if start_step_raw not in (None, "", False):
+        try:
+            start_step_no = int(start_step_raw)
+        except (TypeError, ValueError):
+            start_step_no = None
+
+    environment = str(body.get("environment") or runner_defaults.get("environment") or "").strip()
+    run_labels = body.get("labels") or runner_defaults.get("labels") or {}
+    if not isinstance(run_labels, dict):
+        run_labels = {}
+
+    dbg_bp = body.get("debugBreakpoints", runner_defaults.get("debugBreakpoints"))
+    capture_console = bool(body.get("captureConsole", runner_defaults.get("captureConsole", False)))
+
     run_id = uuid.uuid4().hex[:12]
     run_dir = OUTPUTS_DIR / run_id
     _ensure_dir(run_dir)
     (run_dir / "input.json").write_bytes(raw_bytes)
     # Initialize events file early so UI can attach immediately.
-    _emit_run_event(run_dir, {"ts": time.time(), "event": "created", "runId": run_id, "scenarioId": scenario_id, "scenario": scenario_name})
+    _emit_run_event(
+        run_dir,
+        {
+            "ts": time.time(),
+            "event": "created",
+            "runId": run_id,
+            "scenarioId": scenario_id,
+            "scenario": scenario_name,
+            "environment": environment or None,
+            "startStep": start_step_no,
+            "labels": run_labels,
+        },
+    )
     _write_json(
         _run_meta_path(run_dir),
         {
@@ -1334,6 +1943,8 @@ async def api_run_scenario(request: Request) -> JSONResponse:
             "scenarioName": scenario_name,
             "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "startedAtTs": time.time(),
+            "environment": environment or None,
+            "labels": run_labels,
             "settings": {
                 "startUrl": start_url,
                 "baseUrl": base_url,
@@ -1349,6 +1960,11 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                 "dataRowsCount": len(data_rows) if isinstance(data_rows, list) else 0,
                 "maxRows": max_rows,
                 "stopOnFirstFail": stop_on_first_fail,
+                "startStep": start_step_no,
+                "environment": environment,
+                "labels": run_labels,
+                "debugBreakpoints": dbg_bp if isinstance(dbg_bp, list) else None,
+                "captureConsole": capture_console,
             },
         },
     )
@@ -1401,6 +2017,9 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                             bring_to_front=bring_to_front,
                             highlight_steps=highlight_steps,
                             run_dir=run_dir / "rows" / f"row_{i+1}",
+                            start_step_no=start_step_no,
+                            debug_breakpoints=dbg_bp,
+                            capture_console=capture_console,
                         )
                     )
                     row_reports.append({"rowIndex": i, "okCount": rep.get("okCount"), "failCount": rep.get("failCount"), "totalMs": rep.get("totalMs")})
@@ -1437,6 +2056,9 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                         bring_to_front=bring_to_front,
                         highlight_steps=highlight_steps,
                         run_dir=run_dir,
+                        start_step_no=start_step_no,
+                        debug_breakpoints=dbg_bp,
+                        capture_console=capture_console,
                     )
                 )
         except Exception as e:
@@ -1517,6 +2139,138 @@ def api_list_runs(request: Request) -> JSONResponse:
                 }
             )
     return JSONResponse({"ok": True, "runs": items})
+
+
+@app.get("/api/scenarios/{scenario_id}/insights", response_class=JSONResponse)
+def api_scenario_insights(scenario_id: str, request: Request) -> JSONResponse:
+    """Агрегат по последним прогонам: успех, шаги с частыми падениями (эвристика «flaky»)."""
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    recent: List[Dict[str, Any]] = []
+    step_fail_counts: Dict[Any, int] = {}
+    if OUTPUTS_DIR.exists():
+        for d in sorted(OUTPUTS_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not d.is_dir():
+                continue
+            try:
+                meta = _read_json(_run_meta_path(d))
+            except Exception:
+                continue
+            if meta.get("scenarioId") != scenario_id:
+                continue
+            rep_path = d / "report.json"
+            if not rep_path.exists():
+                continue
+            try:
+                rep = _read_json(rep_path)
+            except Exception:
+                continue
+            fail = int(rep.get("failCount") or 0)
+            ok = fail == 0
+            recent.append(
+                {
+                    "runId": meta.get("runId") or d.name,
+                    "startedAtTs": meta.get("startedAtTs"),
+                    "ok": ok,
+                    "okCount": rep.get("okCount"),
+                    "failCount": rep.get("failCount"),
+                    "totalMs": rep.get("totalMs"),
+                }
+            )
+            for st in rep.get("steps") or []:
+                if not isinstance(st, dict) or st.get("ok"):
+                    continue
+                sn = st.get("step")
+                step_fail_counts[sn] = step_fail_counts.get(sn, 0) + 1
+            if len(recent) >= 40:
+                break
+    window = recent[:20]
+    ok_n = sum(1 for r in window if r.get("ok"))
+    rate = round(ok_n / len(window), 3) if window else None
+    flaky = sorted(
+        [{"step": k, "failRuns": v} for k, v in step_fail_counts.items()],
+        key=lambda x: -x["failRuns"],
+    )[:12]
+    return JSONResponse(
+        {
+            "ok": True,
+            "scenarioId": scenario_id,
+            "recentRuns": window,
+            "successRateLast20": rate,
+            "flakySteps": flaky,
+        }
+    )
+
+
+@app.get("/api/runs/compare", response_class=JSONResponse)
+def api_compare_runs(request: Request, left: str, right: str) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    if not left.strip() or not right.strip():
+        return JSONResponse({"ok": False, "error": "left and right run ids required"}, status_code=400)
+    out: Dict[str, Any] = {"ok": True, "left": left.strip(), "right": right.strip(), "steps": []}
+    try:
+        rl = _read_json(OUTPUTS_DIR / left.strip() / "report.json")
+        rr = _read_json(OUTPUTS_DIR / right.strip() / "report.json")
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=404)
+    sl = {int(s["step"]): s for s in (rl.get("steps") or []) if isinstance(s, dict) and s.get("step") is not None}
+    sr = {int(s["step"]): s for s in (rr.get("steps") or []) if isinstance(s, dict) and s.get("step") is not None}
+    all_n = sorted(set(sl.keys()) | set(sr.keys()))
+    diff_rows = []
+    for n in all_n:
+        a = sl.get(n)
+        b = sr.get(n)
+        changed = False
+        if (a is None) != (b is None):
+            changed = True
+        elif a and b:
+            if bool(a.get("ok")) != bool(b.get("ok")):
+                changed = True
+            if int(a.get("durationMs") or 0) != int(b.get("durationMs") or 0):
+                changed = True
+            if (a.get("urlAfter") or "") != (b.get("urlAfter") or ""):
+                changed = True
+        diff_rows.append(
+            {
+                "step": n,
+                "changed": changed,
+                "left": a,
+                "right": b,
+            }
+        )
+    out["summary"] = {
+        "leftOk": rl.get("okCount"),
+        "leftFail": rl.get("failCount"),
+        "leftMs": rl.get("totalMs"),
+        "rightOk": rr.get("okCount"),
+        "rightFail": rr.get("failCount"),
+        "rightMs": rr.get("totalMs"),
+    }
+    out["steps"] = diff_rows
+    return JSONResponse(out)
+
+
+@app.post("/api/runs/{run_id}/debug-continue", response_class=JSONResponse)
+def api_debug_continue(run_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    run_dir = OUTPUTS_DIR / run_id.strip()
+    if not run_dir.is_dir():
+        return JSONResponse({"ok": False, "error": "Run not found"}, status_code=404)
+    try:
+        (run_dir / "_debug_continue").write_text("ok", encoding="utf-8")
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/runs/compare", response_class=HTMLResponse)
+def runs_compare_page(request: Request, a: str = "", b: str = "") -> HTMLResponse:
+    return templates.TemplateResponse("compare_runs.html", {"request": request, "run_a": a.strip(), "run_b": b.strip()})
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)

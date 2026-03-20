@@ -150,6 +150,24 @@
             </div>
           </div>
 
+          <div class="row" style="margin-top:12px;">
+            <div class="col">
+              <label>Старт с шага № (startStep, опционально)</label>
+              <input id="startStepInput" type="number" min="0" placeholder="с начала" />
+              <div class="hint">Нужен корректный <code>startUrl</code> — страница как перед этим шагом.</div>
+            </div>
+            <div class="col">
+              <label>Окружение (environment)</label>
+              <input id="environmentInput" type="text" placeholder="staging / prod" />
+            </div>
+          </div>
+          <label class="check" style="margin-top:8px;">
+            <input id="captureConsoleInput" type="checkbox" />
+            Писать console вкладки в артефакт <code>console.log</code>
+          </label>
+          <p class="small" style="margin-top:8px;"><a href="/runs/compare">Сравнить два прогона</a> · метрики по сценарию ниже при выборе слева</p>
+          <div id="insightsBox" class="hint" style="margin-top:6px; min-height: 1.2em;"></div>
+
           <label style="margin-top:14px;">Variables JSON (опционально)</label>
           <textarea id="varsInput" placeholder='{"login":"alice","password":"secret"}'></textarea>
 
@@ -229,6 +247,10 @@
       stopOnFirstFail: document.getElementById('stopOnFirstFailInput'),
       summary: document.getElementById('runSummary'),
       toast: document.getElementById('toast'),
+      startStep: document.getElementById('startStepInput'),
+      environment: document.getElementById('environmentInput'),
+      captureConsole: document.getElementById('captureConsoleInput'),
+      insightsBox: document.getElementById('insightsBox'),
     };
 
     let scenarios = [];
@@ -260,15 +282,16 @@
           els.runBtn.disabled = false;
           els.saveDefaults.disabled = false;
           loadScenarioDefaults(selectedId);
+          loadInsights(selectedId);
           renderList();
         });
         const title = document.createElement('div');
         title.className = 'itemTitle';
         const left = document.createElement('div');
-        left.textContent = (s.name || s.file || s.id);
+        left.textContent = (s.name || s.file || s.id) + (s.smoke ? ' · smoke' : '');
         const right = document.createElement('span');
         right.className = 'pill pillOk';
-        right.textContent = `${s.stepsCount} steps`;
+        right.textContent = `${s.stepsCount} шагов`;
         title.appendChild(left);
         title.appendChild(right);
         const meta = document.createElement('div');
@@ -342,6 +365,20 @@
       }
     }
 
+    async function loadInsights(id) {
+      if (!els.insightsBox) return;
+      els.insightsBox.textContent = '';
+      if (!id) return;
+      try {
+        const r = await fetch('/api/scenarios/' + encodeURIComponent(id) + '/insights');
+        const j = await r.json();
+        if (!j.ok) return;
+        const rate = j.successRateLast20 != null ? Math.round(Number(j.successRateLast20) * 100) + '% успешных (из посл. 20 прогонов)' : 'мало данных для % успеха';
+        const flaky = (j.flakySteps || []).slice(0, 6).map(function (x) { return '#' + x.step + ' (' + x.failRuns + '×)'; }).join(', ');
+        els.insightsBox.textContent = rate + (flaky ? ' · частые падения шагов: ' + flaky : '');
+      } catch (_) {}
+    }
+
     async function loadScenarioDefaults(id) {
       try {
         const r = await fetch(`/api/scenarios/${id}`);
@@ -363,6 +400,9 @@
         if (d.dataRows != null) els.dataRows.value = JSON.stringify(d.dataRows || [], null, 2);
         if (d.maxRows != null) els.maxRows.value = d.maxRows || 0;
         if (d.stopOnFirstFail != null) els.stopOnFirstFail.checked = !!d.stopOnFirstFail;
+        if (d.startStep != null && els.startStep) els.startStep.value = d.startStep;
+        if (d.environment != null && els.environment) els.environment.value = d.environment || '';
+        if (d.captureConsole != null && els.captureConsole) els.captureConsole.checked = !!d.captureConsole;
       } catch (_) {}
     }
 
@@ -390,7 +430,12 @@
           dataRows,
           maxRows: parseInt(els.maxRows.value || '0', 10) || 0,
           stopOnFirstFail: !!els.stopOnFirstFail.checked,
+          startStep: parseInt(els.startStep?.value || '0', 10) || undefined,
+          environment: (els.environment?.value || '').trim() || undefined,
+          captureConsole: !!els.captureConsole?.checked,
         };
+        if (!body.startStep) delete body.startStep;
+        if (!body.environment) delete body.environment;
         const r = await fetch(`/api/scenarios/${selectedId}/runner-settings`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'Failed');
@@ -447,7 +492,13 @@
           cdpEndpoint: (els.cdpEndpoint.value || '').trim(),
           bringToFront: !!els.bringToFront.checked,
           highlightSteps: !!els.highlightSteps.checked,
+          startStep: parseInt(els.startStep?.value || '0', 10) || undefined,
+          environment: (els.environment?.value || '').trim() || undefined,
+          captureConsole: !!els.captureConsole?.checked,
+          labels: (function(){ try { return (scenarios.find(x => x.id === selectedId) || {}).labels || {}; } catch(e) { return {}; } })(),
         };
+        if (!body.startStep) delete body.startStep;
+        if (!body.environment) delete body.environment;
         const r = await fetch('/api/runs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || 'Run failed');

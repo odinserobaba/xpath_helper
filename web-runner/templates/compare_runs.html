@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Сравнение прогонов</title>
+  <style>
+    :root { --bg:#0f0f1a; --bg2:#1a1a2e; --text:#eee; --muted:#c4cad8; --accent:#00d4aa; --err:#ff6b8a; --ok:#5ef2a0; --warn:#ffc857; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 18px; }
+    h1 { font-size: 18px; color: var(--accent); }
+    input { background: #16213e; border: 1px solid #2a2a4a; color: var(--text); padding: 8px; border-radius: 8px; width: 220px; }
+    .btn { background: linear-gradient(135deg, var(--accent), #00b894); color: #000; border: 0; border-radius: 10px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+    th, td { border: 1px solid #2a2a4a; padding: 8px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); }
+    .chg { background: rgba(255,200,87,0.12); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Сравнение двух прогонов</h1>
+    <p style="color:var(--muted); font-size:13px;">Укажите два Run ID и сравните шаги (статус, длительность, URL). Данные из <code>/api/runs/compare?left=&amp;right=</code>.</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <label>Left <input id="left" type="text" value="{{ run_a }}" placeholder="run id" /></label>
+      <label>Right <input id="right" type="text" value="{{ run_b }}" placeholder="run id" /></label>
+      <button class="btn" type="button" id="go">Сравнить</button>
+      <a href="/">← Раннер</a>
+    </div>
+    <div id="out"></div>
+  </div>
+  <script>
+    const out = document.getElementById("out");
+    function esc(s) {
+      const d = document.createElement("span");
+      d.textContent = s == null ? "" : String(s);
+      return d.textContent;
+    }
+    async function run() {
+      const left = document.getElementById("left").value.trim();
+      const right = document.getElementById("right").value.trim();
+      if (!left || !right) { alert("Нужны оба ID"); return; }
+      out.textContent = "Загрузка…";
+      const r = await fetch("/api/runs/compare?left=" + encodeURIComponent(left) + "&right=" + encodeURIComponent(right));
+      const j = await r.json();
+      if (!j.ok) {
+        out.textContent = "Ошибка: " + (j.error || r.status);
+        return;
+      }
+      const sum = j.summary || {};
+      const head = document.createElement("p");
+      head.style.color = "var(--muted)";
+      head.textContent = "Left: OK " + (sum.leftOk ?? "—") + " FAIL " + (sum.leftFail ?? "—") + " · " + (sum.leftMs ?? "—") + " ms"
+        + "   |   Right: OK " + (sum.rightOk ?? "—") + " FAIL " + (sum.rightFail ?? "—") + " · " + (sum.rightMs ?? "—") + " ms";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>Шаг</th><th>Изменение</th><th>Левый прогон</th><th>Правый прогон</th></tr>";
+      table.appendChild(thead);
+      const tb = document.createElement("tbody");
+      for (const row of (j.steps || [])) {
+        const tr = document.createElement("tr");
+        if (row.changed) tr.className = "chg";
+        const a = row.left;
+        const b = row.right;
+        const la = a ? ((a.ok ? "OK" : "FAIL") + " · " + (a.durationMs ?? "") + "ms · " + esc((a.urlAfter || "").slice(0, 120))) : "—";
+        const lb = b ? ((b.ok ? "OK" : "FAIL") + " · " + (b.durationMs ?? "") + "ms · " + esc((b.urlAfter || "").slice(0, 120))) : "—";
+        const td0 = document.createElement("td");
+        const c0 = document.createElement("code");
+        c0.textContent = String(row.step);
+        td0.appendChild(c0);
+        const td1 = document.createElement("td");
+        td1.textContent = row.changed ? "да" : "";
+        const td2 = document.createElement("td");
+        td2.textContent = la;
+        const td3 = document.createElement("td");
+        td3.textContent = lb;
+        tr.appendChild(td0);
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tb.appendChild(tr);
+      }
+      table.appendChild(tb);
+      out.textContent = "";
+      out.appendChild(head);
+      out.appendChild(table);
+    }
+    document.getElementById("go").addEventListener("click", run);
+    if (document.getElementById("left").value && document.getElementById("right").value) run();
+  </script>
+</body>
+</html>

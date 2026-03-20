@@ -1,0 +1,89 @@
+{
+  "name": "test_input_epgu",
+  "version": 1,
+  "exportedAt": "2026-03-20T05:58:40.742Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "https://esia-portal1.test.gosuslugi.ru/login/",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//*[@id='password']",
+      "action": "input",
+      "title": "#password",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "Teneliz2603%",
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[@name='Пароль']",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' no-label ')]",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' plain-input ')]",
+          "//input[contains(@type, 'password')]",
+          "//input[contains(@class, 'plain-input no-label')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//div//input",
+          "//esia-input-password/div//input",
+          "//div/esia-input-password/div//input"
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//button[normalize-space()='Войти']",
+      "action": "click",
+      "title": "Войти",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//button[contains(concat(' ', normalize-space(@class), ' '), ' plain-button ')])[1]",
+          "(//button[contains(concat(' ', normalize-space(@class), ' '), ' plain-button_wide ')])[1]",
+          "(//button[contains(@class, 'plain-button plain-button_wide')])[1]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//button)[4]",
+          "(//form/div//button)[2]",
+          "(//div/form/div//button)[2]",
+          "//*[normalize-space()='Войти']",
+          "//button[normalize-space()='Войти']"
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "(//h4[contains(concat(' ', normalize-space(@class), ' '), ' title-h4 ')])[2]",
+      "action": "click",
+      "title": "ООО \"ЦентрИнформ\"",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//h4[contains(@class, 'title-h4')])[2]",
+          "//h4[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//h4)[2]",
+          "(//div/div//h4)[2]",
+          "(//button/div/div//h4)[2]",
+          "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+          "//h4[normalize-space()='ООО \"ЦентрИнформ\"']"
+        ]
+      }
+    }
+  ],
+  "id": "test_input_epgu_20260320_085840"
+}

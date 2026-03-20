@@ -23,4 +23,12 @@ pip install -r requirements.txt
 # Install browsers for Playwright
 python -m playwright install chromium
 
+# Flow Editor (локальный бандл React Flow, без CDN)
+if command -v npm >/dev/null 2>&1; then
+  echo "Building Flow Editor static bundle…"
+  (cd flow-editor-src && npm ci && npm run build)
+else
+  echo "npm not found — skip Flow Editor build. Install Node.js or run: cd flow-editor-src && npm ci && npm run build"
+fi
+
 echo "OK. Now run: ./run.sh"

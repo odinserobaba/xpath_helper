@@ -1,19 +1,18 @@
 {
-  "name": "prolong",
+  "name": "new_prolong",
   "version": 1,
-  "exportedAt": "2026-03-20T08:01:53.268Z",
+  "exportedAt": "2026-03-20T11:30:40.059Z",
   "steps": [
     {
       "step": 1,
       "xpath": "—",
       "action": "start",
-      "title": "Новый шаг 30",
-      "tags": [
-        "Продление"
-      ],
+      "title": "Начало",
+      "tags": [],
       "params": {
         "mandatory": true,
-        "stepColor": "#ff1744"
+        "stepColor": "#00e676",
+        "waitForLoad": false
       }
     },
     {
@@ -21,9 +20,7 @@
       "xpath": "—",
       "action": "navigate",
       "title": "",
-      "tags": [
-        "Продление"
-      ],
+      "tags": [],
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744",
@@ -42,6 +39,12 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Начать')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Начать']",
           "//span[normalize-space()='Начать']"
         ]
@@ -58,6 +61,13 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Производство')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
           "//*[normalize-space()='Производство']",
           "//span[normalize-space()='Производство']"
         ]
@@ -72,7 +82,16 @@
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744",
-        "waitForLoad": true
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Производство этилового спирта,')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]"
+        ]
       }
     },
     {
@@ -86,6 +105,19 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' search-input ')]",
+          "//input[contains(@type, 'text')]",
+          "//input[contains(@role, 'combobox')]",
+          "//input[contains(@autocomplete, 'off')]",
+          "//input[contains(@aria-expanded, 'false')]",
+          "//input[contains(@aria-haspopup, 'listbox')]",
+          "//input[contains(@aria-autocomplete, 'list')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'search-input ng-untouched ng-pristine ng-valid ng-')]",
+          "//input[contains(@aria-label, 'Начните печатать и выберите вариант из списка, наж')]",
+          "//div//input",
+          "//div/div//input",
+          "//lib-search-bar/div/div//input",
           "//*[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
           "//*[@role='combobox' and @aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
           "//input[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']"
@@ -101,7 +133,16 @@
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744",
-        "waitForLoad": true
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//span[contains(normalize-space(), 'Производство, хранение и поста')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' lookup-item-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'lookup-item-text ng-star-inserted')])[1]",
+          "(//div//span)[4]",
+          "(//div/div//span)[4]",
+          "(//div/div/div//span)[4]"
+        ]
       }
     },
     {
@@ -115,6 +156,12 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[14]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Продолжить']",
           "//span[normalize-space()='Продолжить']"
         ]
@@ -131,6 +178,13 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'В электронном виде')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
           "//*[normalize-space()='В электронном виде']",
           "//span[normalize-space()='В электронном виде']"
         ]
@@ -147,6 +201,12 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
           "//*[normalize-space()='5 лет']",
           "//span[normalize-space()='5 лет']"
         ]
@@ -163,6 +223,12 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к заявлению')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Перейти к заявлению']",
           "//span[normalize-space()='Перейти к заявлению']"
         ]
@@ -179,6 +245,11 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Верно']",
           "//span[normalize-space()='Верно']"
         ]
@@ -195,6 +266,11 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Верно']",
           "//span[normalize-space()='Верно']"
         ]
@@ -211,6 +287,11 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Верно']",
           "//span[normalize-space()='Верно']"
         ]
@@ -227,6 +308,11 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Верно']",
           "//span[normalize-space()='Верно']"
         ]
@@ -234,35 +320,88 @@
     },
     {
       "step": 16,
-      "xpath": "//*[@name='c10']",
-      "action": "input",
-      "title": "#c10",
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
       "tags": [],
       "params": {
         "mandatory": true,
-        "value": "12ПСЭ0000012",
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
-          "//*[@name='c10']"
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
         ]
       }
     },
     {
       "step": 17,
+      "xpath": "//*[@id='c10']",
+      "action": "input",
+      "title": "Номер",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "12ПСЭ0000012",
+        "stepColor": "#00b0ff",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[@name='c10']",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[1]",
+          "//input[contains(@role, 'textbox')]",
+          "(//input[contains(@type, 'text')])[1]",
+          "(//input[contains(@autocomplete, 'off')])[1]",
+          "(//input[contains(@aria-invalid, 'false')])[1]",
+          "//input[contains(@aria-labelledby, 'label_c10')]",
+          "//input[contains(@aria-errormessage, 'error_c10')]",
+          "//input[contains(@aria-describedby, 'helper_c10')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'text-input ng-pristine ng-valid ng-star-inserted n')]",
+          "(//div//input)[1]",
+          "//lib-plain-input/div//input",
+          "//epgu-constructor-plain-input/lib-plain-input/div//input"
+        ]
+      }
+    },
+    {
+      "step": 18,
       "xpath": "//*[@name='c40']",
       "action": "input",
       "title": "Дата",
       "tags": [],
       "params": {
         "mandatory": true,
-        "value": "01.01.2026",
-        "stepColor": "#ff1744",
-        "waitForLoad": true
+        "value": "02.02.2026",
+        "stepColor": "#00b0ff",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[2]",
+          "(//input[contains(@type, 'text')])[2]",
+          "//input[contains(@aria-label, 'Дата')]",
+          "//input[contains(@inputmode, 'decimal')]",
+          "(//input[contains(@autocomplete, 'off')])[2]",
+          "(//input[contains(@aria-invalid, 'false')])[2]",
+          "//input[contains(@class, 'text-input focused')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@aria-description, 'Укажите месяц, день и год полностью, точку вводить')]",
+          "(//div//input)[2]",
+          "(//div/div//input)[2]",
+          "(//div/div/div//input)[2]",
+          "//*[@aria-label='Дата']",
+          "//*[@name='c40']",
+          "//input[@aria-label='Дата']"
+        ]
       }
     },
     {
-      "step": 18,
+      "step": 19,
       "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -272,14 +411,20 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Продолжить']",
           "//span[normalize-space()='Продолжить']"
         ]
       }
     },
     {
-      "step": 19,
-      "xpath": "//button[normalize-space()='Продолжить']",
+      "step": 20,
+      "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
       "tags": [],
@@ -288,13 +433,19 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[26]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Продолжить']",
-          "//button[normalize-space()='Продолжить']"
+          "//span[normalize-space()='Продолжить']"
         ]
       }
     },
     {
-      "step": 20,
+      "step": 21,
       "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
       "action": "click",
       "title": "<input>",
@@ -302,11 +453,23 @@
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744",
-        "waitForLoad": true
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//input[contains(@readonly, 'true')]",
+          "//input[contains(@role, 'combobox')]",
+          "(//input[contains(@type, 'text')])[1]",
+          "//input[contains(@class, 'focusable-input')]",
+          "(//input[contains(@aria-expanded, 'false')])[1]",
+          "//input[contains(@aria-labelledby, 'label_0.2330100037502667')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//input)[1]",
+          "(//div/div//input)[1]",
+          "//lib-dropdown[@id='undefined']/div/div//input"
+        ]
       }
     },
     {
-      "step": 21,
+      "step": 22,
       "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
       "action": "click",
       "title": "По реквизитам платёжного поручения или УИН",
@@ -314,11 +477,21 @@
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744",
-        "waitForLoad": true
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'По реквизитам платёжного поруч')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' text-plain ')])[3]",
+          "(//span[contains(@aria-hidden, 'false')])[2]",
+          "(//span[contains(@class, 'text-plain ng-star-inserted')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[6]",
+          "(//div/div//span)[6]",
+          "(//div/div/div//span)[6]"
+        ]
       }
     },
     {
-      "step": 22,
+      "step": 23,
       "xpath": "//*[@name='c35']",
       "action": "input",
       "title": "<input>",
@@ -329,22 +502,44 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' clearable ')])[2]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[3]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' masked-input ')])[2]",
+          "(//input[contains(@type, 'text')])[4]",
+          "(//input[contains(@autocomplete, 'off')])[3]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'text-input masked-input clearable')])[2]",
+          "(//div//input)[4]",
+          "(//lib-base-masked-input/div//input)[2]",
+          "(//epgu-constructor-masked-input/lib-base-masked-input/div//input)[2]",
           "//*[@name='c35']"
         ]
       }
     },
     {
-      "step": 23,
+      "step": 24,
       "xpath": "//*[@name='c36']",
       "action": "input",
       "title": "Дата",
       "tags": [],
       "params": {
         "mandatory": true,
-        "value": "01.01.2026",
+        "value": "02.02.2026",
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[4]",
+          "(//input[contains(@type, 'text')])[5]",
+          "(//input[contains(@aria-label, 'Дата')])[2]",
+          "(//input[contains(@class, 'text-input')])[4]",
+          "(//input[contains(@autocomplete, 'off')])[4]",
+          "(//input[contains(@inputmode, 'decimal')])[2]",
+          "(//input[contains(@aria-invalid, 'false')])[2]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@aria-description, 'Укажите месяц, день и год полностью, точку вводить')])[2]",
+          "(//div//input)[5]",
+          "(//div/div//input)[5]",
+          "(//div/div/div//input)[5]",
           "//*[@aria-label='Дата']",
           "//*[@name='c36']",
           "//input[@aria-label='Дата']"
@@ -352,7 +547,7 @@
       }
     },
     {
-      "step": 24,
+      "step": 25,
       "xpath": "//span[normalize-space()='Перейти к подписанию']",
       "action": "click",
       "title": "Перейти к подписанию",
@@ -362,13 +557,19 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к подписанию')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[7]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Перейти к подписанию']",
           "//span[normalize-space()='Перейти к подписанию']"
         ]
       }
     },
     {
-      "step": 25,
+      "step": 26,
       "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -378,13 +579,18 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Продолжить']",
           "//span[normalize-space()='Продолжить']"
         ]
       }
     },
     {
-      "step": 26,
+      "step": 27,
       "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
       "action": "click",
       "title": "Подписание происходит в браузере. Сертификат УКЭП",
@@ -392,11 +598,20 @@
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744",
-        "waitForLoad": true
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' small-text ')])[2]",
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' choose__item-desc ')])[2]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div[contains(@class, 'choose__item-desc small-text gray')])[2]",
+          "(//div//div)[26]",
+          "(//span/div//div)[8]",
+          "(//div/span/div//div)[8]"
+        ]
       }
     },
     {
-      "step": 27,
+      "step": 28,
       "xpath": "//span[normalize-space()='Подписать']",
       "action": "click",
       "title": "Подписать",
@@ -406,13 +621,18 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Подписать')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
           "//*[normalize-space()='Подписать']",
           "//span[normalize-space()='Подписать']"
         ]
       }
     },
     {
-      "step": 28,
+      "step": 29,
       "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
       "action": "click",
       "title": "ООО \"ЦентрИнформ\"",
@@ -422,13 +642,19 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--shadow ')]",
+          "//button[contains(@class, 'btn--white btn--shadow')]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//epgu-cf-ui-long-button//button",
+          "//epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//div/epgu-answer-button/epgu-cf-ui-long-button//button",
           "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
           "//button[normalize-space()='ООО \"ЦентрИнформ\"']"
         ]
       }
     },
     {
-      "step": 29,
+      "step": 30,
       "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -438,57 +664,54 @@
         "stepColor": "#ff1744",
         "waitForLoad": true,
         "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[2]",
+          "(//div/button//span)[2]",
+          "(//lib-button/div/button//span)[2]",
           "//*[normalize-space()='Продолжить']",
           "//span[normalize-space()='Продолжить']"
         ]
       }
-    },
-    {
-      "step": 30,
-      "xpath": "—",
-      "action": "end",
-      "title": "Новый шаг 31",
-      "tags": [],
-      "params": {
-        "mandatory": true,
-        "stepColor": "#ff1744"
-      }
     }
   ],
-  "id": "prolong_20260318_101320",
+  "id": "new_prolong_20260320_121008",
   "runnerSettings": {
     "startUrl": "",
     "baseUrl": "",
     "viewport": "1280x720",
     "slowMoMs": 0,
     "headless": true,
-    "defaultTimeoutMs": 3000,
+    "defaultTimeoutMs": 15000,
     "connectOverCdp": true,
     "cdpEndpoint": "9222",
     "bringToFront": true,
-    "highlightSteps": false,
+    "highlightSteps": true,
     "variables": {},
     "dataRows": null,
     "maxRows": 0,
-    "stopOnFirstFail": false
+    "stopOnFirstFail": true
   },
+  "smoke": false,
+  "labels": {},
   "flow": {
     "nodes": [
       {
         "id": "step-1",
         "stepRef": 1,
         "position": {
-          "x": 80,
-          "y": -368
+          "x": 40,
+          "y": 40
         },
-        "title": "Новый шаг 30",
+        "title": "Начало",
         "action": "start",
         "xpath": "—",
         "comment": "",
-        "tags": [
-          "Продление"
-        ],
-        "stepColor": "#ff1744"
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#00e676"
       },
       {
         "id": "step-2",
@@ -501,9 +724,10 @@
         "action": "navigate",
         "xpath": "—",
         "comment": "",
-        "tags": [
-          "Продление"
-        ],
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
         "stepColor": "#ff1744"
       },
       {
@@ -517,6 +741,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Начать']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -531,6 +758,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Производство']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -545,6 +775,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -559,6 +792,9 @@
         "action": "click",
         "xpath": "//*[@id='c24']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -573,6 +809,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённого этилового спирта']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -587,6 +826,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -601,6 +843,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='В электронном виде']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -615,6 +860,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='5 лет']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -629,6 +877,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Перейти к заявлению']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -643,6 +894,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -657,6 +911,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -671,6 +928,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -685,6 +945,9 @@
         "action": "click",
         "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -695,10 +958,13 @@
           "x": 420,
           "y": 1720
         },
-        "title": "#c10",
-        "action": "input",
-        "xpath": "//*[@name='c10']",
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -709,12 +975,15 @@
           "x": 40,
           "y": 1960
         },
-        "title": "Дата",
+        "title": "Номер",
         "action": "input",
-        "xpath": "//*[@name='c40']",
+        "xpath": "//*[@id='c10']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
-        "stepColor": "#ff1744"
+        "stepColor": "#00b0ff"
       },
       {
         "id": "step-18",
@@ -723,12 +992,15 @@
           "x": 420,
           "y": 1960
         },
-        "title": "Продолжить",
-        "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "title": "Дата",
+        "action": "input",
+        "xpath": "//*[@name='c40']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
-        "stepColor": "#ff1744"
+        "stepColor": "#00b0ff"
       },
       {
         "id": "step-19",
@@ -739,8 +1011,11 @@
         },
         "title": "Продолжить",
         "action": "click",
-        "xpath": "//button[normalize-space()='Продолжить']",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -751,10 +1026,13 @@
           "x": 420,
           "y": 2200
         },
-        "title": "<input>",
+        "title": "Продолжить",
         "action": "click",
-        "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -765,10 +1043,13 @@
           "x": 40,
           "y": 2440
         },
-        "title": "По реквизитам платёжного поручения или УИН",
+        "title": "<input>",
         "action": "click",
-        "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+        "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -779,10 +1060,13 @@
           "x": 420,
           "y": 2440
         },
-        "title": "<input>",
-        "action": "input",
-        "xpath": "//*[@name='c35']",
+        "title": "По реквизитам платёжного поручения или УИН",
+        "action": "click",
+        "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -793,10 +1077,13 @@
           "x": 40,
           "y": 2680
         },
-        "title": "Дата",
+        "title": "<input>",
         "action": "input",
-        "xpath": "//*[@name='c36']",
+        "xpath": "//*[@name='c35']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -807,10 +1094,13 @@
           "x": 420,
           "y": 2680
         },
-        "title": "Перейти к подписанию",
-        "action": "click",
-        "xpath": "//span[normalize-space()='Перейти к подписанию']",
+        "title": "Дата",
+        "action": "input",
+        "xpath": "//*[@name='c36']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -821,10 +1111,13 @@
           "x": 40,
           "y": 2920
         },
-        "title": "Продолжить",
+        "title": "Перейти к подписанию",
         "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "xpath": "//span[normalize-space()='Перейти к подписанию']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -835,10 +1128,13 @@
           "x": 420,
           "y": 2920
         },
-        "title": "Подписание происходит в браузере. Сертификат УКЭП",
+        "title": "Продолжить",
         "action": "click",
-        "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -849,10 +1145,13 @@
           "x": 40,
           "y": 3160
         },
-        "title": "Подписать",
+        "title": "Подписание происходит в браузере. Сертификат УКЭП",
         "action": "click",
-        "xpath": "//span[normalize-space()='Подписать']",
+        "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -863,10 +1162,13 @@
           "x": 420,
           "y": 3160
         },
-        "title": "ООО \"ЦентрИнформ\"",
+        "title": "Подписать",
         "action": "click",
-        "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+        "xpath": "//span[normalize-space()='Подписать']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -877,10 +1179,13 @@
           "x": 40,
           "y": 3400
         },
-        "title": "Продолжить",
+        "title": "ООО \"ЦентрИнформ\"",
         "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       },
@@ -888,187 +1193,253 @@
         "id": "step-30",
         "stepRef": 30,
         "position": {
-          "x": 64,
-          "y": 3632
+          "x": 420,
+          "y": 3400
         },
-        "title": "Новый шаг 31",
-        "action": "end",
-        "xpath": "—",
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
         "tags": [],
         "stepColor": "#ff1744"
       }
     ],
     "edges": [
       {
+        "id": "e-step-1-step-2",
+        "source": "step-1",
+        "target": "step-2",
+        "kind": "next",
+        "label": ""
+      },
+      {
         "id": "e-step-2-step-3",
         "source": "step-2",
         "target": "step-3",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-3-step-4",
         "source": "step-3",
         "target": "step-4",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-4-step-5",
         "source": "step-4",
         "target": "step-5",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-5-step-6",
         "source": "step-5",
         "target": "step-6",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-6-step-7",
         "source": "step-6",
         "target": "step-7",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-7-step-8",
         "source": "step-7",
         "target": "step-8",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-8-step-9",
         "source": "step-8",
         "target": "step-9",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-9-step-10",
         "source": "step-9",
         "target": "step-10",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-10-step-11",
         "source": "step-10",
         "target": "step-11",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-11-step-12",
         "source": "step-11",
         "target": "step-12",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-12-step-13",
+        "source": "step-12",
+        "target": "step-13",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-13-step-14",
+        "source": "step-13",
+        "target": "step-14",
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-14-step-15",
         "source": "step-14",
         "target": "step-15",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-15-step-16",
         "source": "step-15",
         "target": "step-16",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-16-step-17",
         "source": "step-16",
         "target": "step-17",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-17-step-18",
         "source": "step-17",
         "target": "step-18",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-18-step-19",
         "source": "step-18",
         "target": "step-19",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-19-step-20",
         "source": "step-19",
         "target": "step-20",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-20-step-21",
         "source": "step-20",
         "target": "step-21",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-21-step-22",
         "source": "step-21",
         "target": "step-22",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-22-step-23",
         "source": "step-22",
         "target": "step-23",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-23-step-24",
         "source": "step-23",
         "target": "step-24",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-24-step-25",
         "source": "step-24",
         "target": "step-25",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-25-step-26",
         "source": "step-25",
         "target": "step-26",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-26-step-27",
         "source": "step-26",
         "target": "step-27",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-27-step-28",
         "source": "step-27",
         "target": "step-28",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
         "id": "e-step-28-step-29",
         "source": "step-28",
         "target": "step-29",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       },
       {
-        "id": "e-step-29-step-30-1773993243008",
+        "id": "e-step-29-step-30",
         "source": "step-29",
         "target": "step-30",
-        "kind": "next"
-      },
-      {
-        "id": "e-step-1-step-2-1773993259274",
-        "source": "step-1",
-        "target": "step-2",
-        "kind": "next"
-      },
-      {
-        "id": "e-step-12-step-14-1773993677207",
-        "source": "step-12",
-        "target": "step-14",
-        "kind": "next"
+        "kind": "next",
+        "label": ""
       }
     ],
-    "groups": []
+    "groups": [],
+    "annotations": [
+      {
+        "id": "ann-1774005802649",
+        "kind": "text",
+        "x": -496,
+        "y": 0,
+        "width": 1552,
+        "height": 880,
+        "label": "Подпись",
+        "stroke": "#ff9100",
+        "fill": "rgba(213,0,249,0.12)",
+        "fontSize": 15,
+        "textColor": "#ff9100"
+      },
+      {
+        "id": "ann-1774005805624",
+        "kind": "text",
+        "x": -384,
+        "y": 48,
+        "width": 128,
+        "height": 48,
+        "label": "Подпись",
+        "stroke": "#ff9100",
+        "fill": "rgba(213,0,249,0.12)",
+        "fontSize": 15,
+        "textColor": "#ff9100"
+      }
+    ]
   }
 }

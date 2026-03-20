@@ -43,7 +43,7 @@ const MAX_HISTORY = 8;
 const MAX_STEPS_WARNING = 100;
 const MAX_FILE_SIZE_B64 = 1024 * 1024 * 4 / 3;
 
-const ACTION_LABELS = { click: 'Клик', input: 'Ввод', set_date: 'Дата', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя', wait_for_element: 'Ждать элемент' };
+const ACTION_LABELS = { start: 'Начало', end: 'Конец', click: 'Клик', input: 'Ввод', set_date: 'Дата', file_upload: 'Файл', wait: 'Пауза', separator: '—', click_if_exists: 'Клик если есть', branch: 'Ветвление', assert: 'Assert', navigate: 'Переход', user_action: 'Действие пользователя', wait_for_element: 'Ждать элемент' };
 const BRANCH_CONDITIONS = [
     { value: 'element_exists', label: 'Элемент есть' },
     { value: 'text_equals', label: 'Текст равен' },
@@ -417,7 +417,7 @@ function isFragileXPath(xpath) {
 
 function highlightElementOnError(tabId, step) {
     const xpath = step?.xpath?.trim();
-    if (!xpath || step?.action === 'separator' || step?.action === 'navigate' || step?.action === 'user_action') return;
+    if (!xpath || step?.action === 'separator' || step?.action === 'navigate' || step?.action === 'user_action' || step?.action === 'start' || step?.action === 'end') return;
     try {
         chrome.tabs.sendMessage(tabId, { action: 'highlightXpath', xpath }, () => { if (chrome.runtime.lastError) {} });
     } catch (_) {}
@@ -1112,6 +1112,8 @@ function renderEditorStepList() {
         else if (step.action === 'branch' || step.action === 'assert') preview += ` [${BRANCH_CONDITIONS.find((x) => x.value === step.params?.condition)?.label || step.params?.condition || '?'}]`;
         else if (step.action === 'navigate') preview = step.params?.url || '—';
         else if (step.action === 'user_action') preview = (step.params?.message || 'Ожидание действий').substring(0, 40);
+        else if (step.action === 'start') preview = (step.params?.message || 'точка входа').substring(0, 48);
+        else if (step.action === 'end') preview = (step.params?.message || 'конец').substring(0, 48);
         else if (step.action === 'separator' && step.params?.label) preview = step.params.label;
         li.innerHTML = `<span class="step-badge">${i + 1}. ${badge}</span><div class="step-preview" title="${escapeHtml(step.xpath || '')}">${escapeHtml(preview)}</div>`;
         li.addEventListener('click', () => selectEditorStep(step.id));
@@ -1172,7 +1174,11 @@ function toggleEditorParams() {
     if (editorParamsSetDate) { editorParamsSetDate.classList.toggle('hidden', !isSetDate); editorParamsSetDate.style.display = isSetDate ? '' : 'none'; }
     if (isSetDate && editorDateValue && !editorDateValue.value) editorDateValue.value = new Date().toISOString().slice(0, 10);
     if (editorParamsWait) { editorParamsWait.classList.toggle('hidden', action !== 'wait'); editorParamsWait.style.display = action === 'wait' ? '' : 'none'; }
-    if (editorParamsUserAction) { editorParamsUserAction.classList.toggle('hidden', action !== 'user_action'); editorParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
+    if (editorParamsUserAction) {
+        const showUa = action === 'user_action' || action === 'start' || action === 'end';
+        editorParamsUserAction.classList.toggle('hidden', !showUa);
+        editorParamsUserAction.style.display = showUa ? '' : 'none';
+    }
     if (editorParamsFile) { editorParamsFile.classList.toggle('hidden', action !== 'file_upload'); editorParamsFile.style.display = action === 'file_upload' ? '' : 'none'; }
     if (editorParamsSeparator) { editorParamsSeparator.classList.toggle('hidden', action !== 'separator'); editorParamsSeparator.style.display = action === 'separator' ? '' : 'none'; }
     if (editorParamsBranch) { editorParamsBranch.classList.toggle('hidden', action !== 'branch'); editorParamsBranch.style.display = action === 'branch' ? '' : 'none'; if (action === 'branch') populateEditorBranchSelects(); }
@@ -1180,10 +1186,10 @@ function toggleEditorParams() {
     if (editorParamsAssert) { editorParamsAssert.classList.toggle('hidden', action !== 'assert'); editorParamsAssert.style.display = action === 'assert' ? '' : 'none'; }
     if (editorAssertAttributeName) { editorAssertAttributeName.classList.toggle('hidden', action !== 'assert' || editorAssertCondition?.value !== 'attribute_equals'); editorAssertAttributeName.style.display = (action === 'assert' && editorAssertCondition?.value === 'attribute_equals') ? '' : 'none'; }
     if (editorParamsNavigate) { editorParamsNavigate.classList.toggle('hidden', action !== 'navigate'); editorParamsNavigate.style.display = action === 'navigate' ? '' : 'none'; }
-    const hideEditorWaitForLoad = action === 'separator' || action === 'wait' || action === 'user_action' || action === 'branch' || action === 'navigate';
+    const hideEditorWaitForLoad = action === 'separator' || action === 'wait' || action === 'user_action' || action === 'start' || action === 'end' || action === 'branch' || action === 'navigate';
     if (editorParamsWaitForLoad) { editorParamsWaitForLoad.classList.toggle('hidden', hideEditorWaitForLoad); editorParamsWaitForLoad.style.display = hideEditorWaitForLoad ? 'none' : ''; }
     const xpathRow = editorDetail?.querySelector('.form-row:first-child');
-    if (xpathRow) xpathRow.style.display = (action === 'separator' || action === 'navigate' || action === 'user_action') ? 'none' : '';
+    if (xpathRow) xpathRow.style.display = (action === 'separator' || action === 'navigate' || action === 'user_action' || action === 'start' || action === 'end') ? 'none' : '';
 }
 
 function renderEditorSeparatorColors(selected) {
@@ -1217,13 +1223,15 @@ function applyEditorStep() {
     const step = executionList.find((s) => s.id === selectedEditorStepId);
     if (!step) return;
     const action = editorAction.value;
-    step.xpath = action === 'separator' || action === 'user_action' ? '—' : (action === 'navigate' ? '—' : (editorXpath.value || '').trim());
+    step.xpath = action === 'separator' || action === 'user_action' || action === 'start' || action === 'end' ? '—' : (action === 'navigate' ? '—' : (editorXpath.value || '').trim());
     step.action = action;
     step.params = step.params || {};
     if (action === 'input') step.params.value = editorInputValue.value;
     if (action === 'set_date') step.params.value = (editorDateValue?.value || new Date().toISOString().slice(0, 10)).trim();
     if (action === 'wait') step.params.delayMs = Math.max(0, parseInt(editorWaitMs.value, 10) || 500);
     if (action === 'user_action') step.params.message = (editorUserActionMessage?.value || '').trim() || 'Выполните действие и нажмите Продолжить';
+    if (action === 'start') step.params.message = (editorUserActionMessage?.value || '').trim();
+    if (action === 'end') step.params.message = (editorUserActionMessage?.value || '').trim();
     if (action === 'file_upload') {
         step.params.fileName = editorFileName.value.trim() || 'file';
         if (editorFileBase64) step.params.fileContentBase64 = editorFileBase64;
@@ -1380,6 +1388,9 @@ function closeEnvModal(save) {
 function loadExecutionList() {
     chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH, STORAGE_KEY_PYTHON_SETTINGS, STORAGE_KEY_RUNNER_URL, STORAGE_KEY_RUNNER_TOKEN], (data) => {
         executionList = Array.isArray(data[STORAGE_KEY_EXECUTION_LIST]) ? data[STORAGE_KEY_EXECUTION_LIST] : [];
+        if (ensureStartStepInExecutionList()) {
+            chrome.storage.local.set({ [STORAGE_KEY_EXECUTION_LIST]: executionList });
+        }
         scenarios = Array.isArray(data[STORAGE_KEY_SCENARIOS]) ? data[STORAGE_KEY_SCENARIOS] : [];
         if (data[STORAGE_KEY_ENVIRONMENTS]) {
             environments = { ...{ dev: {}, stage: {}, prod: {} }, ...data[STORAGE_KEY_ENVIRONMENTS] };
@@ -1407,6 +1418,7 @@ function renderScenarioSelect() {
 }
 
 function saveExecutionList() {
+    ensureStartStepInExecutionList();
     chrome.storage.local.set({ [STORAGE_KEY_EXECUTION_LIST]: executionList });
     const name = (scenarioName?.value || '').trim();
     if (name) {
@@ -1454,6 +1466,7 @@ if (scenarioSelect) {
         if (s?.steps) {
             currentScenarioId = id;
             executionList = s.steps.map((st) => ({ ...st, id: st.id || 'step-' + Date.now() + '-' + Math.random().toString(36).slice(2) }));
+            ensureStartStepInExecutionList();
             if (scenarioName) scenarioName.value = s.name || '';
             chrome.storage.local.set({ [STORAGE_KEY_EXECUTION_LIST]: executionList });
             renderExecutionList();
@@ -1860,7 +1873,11 @@ function toggleStepParams() {
     stepParamsWait.classList.toggle('hidden', action !== 'wait');
     stepParamsWait.style.display = action === 'wait' ? '' : 'none';
     const isWaitForElement = action === 'wait_for_element';
-    if (stepParamsUserAction) { stepParamsUserAction.classList.toggle('hidden', action !== 'user_action'); stepParamsUserAction.style.display = action === 'user_action' ? '' : 'none'; }
+    if (stepParamsUserAction) {
+        const showUa = action === 'user_action' || action === 'start' || action === 'end';
+        stepParamsUserAction.classList.toggle('hidden', !showUa);
+        stepParamsUserAction.style.display = showUa ? '' : 'none';
+    }
     stepParamsBranch.classList.toggle('hidden', action !== 'branch');
     stepParamsBranch.style.display = action === 'branch' ? '' : 'none';
     if (stepBranchAttributeName) { stepBranchAttributeName.classList.toggle('hidden', action !== 'branch' || stepBranchCondition?.value !== 'attribute_equals'); stepBranchAttributeName.style.display = (action === 'branch' && stepBranchCondition?.value === 'attribute_equals') ? '' : 'none'; }
@@ -1875,13 +1892,13 @@ function toggleStepParams() {
         stepParamsSeparator.style.display = isSeparator ? '' : 'none';
         if (isSeparator) renderSeparatorColorButtons(selectedSeparatorColor);
     }
-    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'wait_for_element' || action === 'user_action' || action === 'branch' || action === 'navigate';
+    const hideWaitForLoad = action === 'separator' || action === 'wait' || action === 'wait_for_element' || action === 'user_action' || action === 'start' || action === 'end' || action === 'branch' || action === 'navigate';
     if (stepParamsWaitForLoad) {
         stepParamsWaitForLoad.classList.toggle('hidden', hideWaitForLoad);
         stepParamsWaitForLoad.style.display = hideWaitForLoad ? 'none' : '';
     }
     const xpathRow = stepModal?.querySelector('.form-row:first-child');
-    if (xpathRow) xpathRow.style.display = (isSeparator || action === 'navigate' || action === 'user_action') ? 'none' : '';
+    if (xpathRow) xpathRow.style.display = (isSeparator || action === 'navigate' || action === 'user_action' || action === 'start' || action === 'end') ? 'none' : '';
     const hideCommon = isSeparator;
     const commonRow = stepModal?.querySelector('#stepParamsCommon');
     const mandatoryRow = stepModal?.querySelector('#stepParamsMandatory');
@@ -1911,7 +1928,7 @@ function updateFragileXpathWarn() {
     if (!stepXpathFragileWarn) return;
     const action = stepAction?.value;
     const xpath = stepXpath?.value?.trim() || '';
-    const show = action && action !== 'separator' && action !== 'navigate' && action !== 'user_action' && xpath && isFragileXPath(xpath);
+    const show = action && action !== 'separator' && action !== 'navigate' && action !== 'user_action' && action !== 'start' && action !== 'end' && xpath && isFragileXPath(xpath);
     stepXpathFragileWarn.classList.toggle('hidden', !show);
 }
 if (stepXpath) stepXpath.addEventListener('input', updateFragileXpathWarn);
@@ -1975,11 +1992,11 @@ stepModalCancel.addEventListener('click', hideStepModal);
 function upsertStepFromModal({ alsoAddAssert = false } = {}) {
     const action = stepAction.value;
     const navUrl = (stepNavigateUrl?.value || '').trim();
-    let xpath = action === 'separator' || action === 'user_action' ? '—' : (action === 'navigate' ? navUrl : stepXpath.value.trim());
+    let xpath = action === 'separator' || action === 'user_action' || action === 'start' || action === 'end' ? '—' : (action === 'navigate' ? navUrl : stepXpath.value.trim());
     if (action === 'navigate') {
         if (!navUrl) return;
         xpath = '—';
-    } else if (action === 'user_action') {
+    } else if (action === 'user_action' || action === 'start' || action === 'end') {
         xpath = '—';
     } else if (!xpath && action !== 'separator') return;
     const params = {};
@@ -2011,6 +2028,8 @@ function upsertStepFromModal({ alsoAddAssert = false } = {}) {
     }
     if (action === 'navigate') params.url = navUrl;
     if (action === 'user_action') params.message = (stepUserActionMessage?.value || '').trim() || 'Выполните действие и нажмите Продолжить';
+    if (action === 'start') params.message = (stepUserActionMessage?.value || '').trim();
+    if (action === 'end') params.message = (stepUserActionMessage?.value || '').trim();
     if (action === 'branch') {
         params.condition = stepBranchCondition?.value || 'element_exists';
         params.expectedValue = (stepBranchExpected?.value || '').trim();
@@ -2496,11 +2515,11 @@ function parseImportFile(data) {
     return raw.map((s, i) => ({
         id: 'step-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2),
         xpath: typeof s.xpath === 'string' ? s.xpath : (s.action === 'separator' ? '—' : ''),
-        action: ['click', 'click_if_exists', 'input', 'set_date', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
+        action: ['start', 'end', 'click', 'click_if_exists', 'input', 'set_date', 'file_upload', 'wait', 'wait_for_element', 'user_action', 'assert', 'branch', 'navigate', 'separator'].includes(s.action) ? s.action : 'click',
         title: typeof s.title === 'string' ? s.title : '',
         tags: Array.isArray(s.tags) ? s.tags.map((t) => String(t)).filter(Boolean).slice(0, 12) : [],
         params: s.params && typeof s.params === 'object' ? s.params : {}
-    })).filter((s) => s.xpath || s.action === 'separator');
+    })).filter((s) => s.xpath || s.action === 'separator' || s.action === 'start' || s.action === 'end');
 }
 
 function clearAllSteps() {
@@ -2512,7 +2531,7 @@ function clearAllSteps() {
     }
     const ok = confirm(`Очистить все шаги? (${executionList.length})`);
     if (!ok) return;
-    executionList = [];
+    executionList = [makeDefaultStartStep()];
     lastExecutionReport = [];
     currentExecutingStepId = null;
     saveExecutionList();
@@ -2548,6 +2567,7 @@ function applyImport(mode) {
     } else {
         executionList = executionList.concat(pendingImportData);
     }
+    ensureStartStepInExecutionList();
     saveExecutionList();
     renderExecutionList();
     hideImportModal();
@@ -3322,7 +3342,8 @@ if (importDataInput) importDataInput.addEventListener('change', () => {
 });
 
 async function runDataDrivenExecution(tabId) {
-    const stepsToRun = executionList.filter((s) => s.action !== 'separator');
+    const startIx = findScenarioStartIndex(executionList);
+    const stepsToRun = executionList.slice(startIx).filter((s) => s.action !== 'separator');
     if (stepsToRun.length === 0) {
         if (executeDataDrivenBtn) executeDataDrivenBtn.textContent = 'Нет шагов';
         setTimeout(() => { if (executeDataDrivenBtn) executeDataDrivenBtn.textContent = '▶ Data-driven'; }, 2000);
@@ -3381,10 +3402,11 @@ async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, origina
     const continueOnError = !stopOnErrorEl?.checked;
     const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
     const selectorTimeout = parseInt(selectorTimeoutMsEl?.value, 10) || 5000;
-    let currentIdx = 0;
+    const runSteps = normalizeRunOrderForExecution(stepsWithVars);
+    let currentIdx = findScenarioStartIndex(runSteps);
     const visited = new Set();
-    while (currentIdx >= 0 && currentIdx < stepsWithVars.length && !stopExecutionRequested) {
-        const step = stepsWithVars[currentIdx];
+    while (currentIdx >= 0 && currentIdx < runSteps.length && !stopExecutionRequested) {
+        const step = runSteps[currentIdx];
         if (step.action === 'separator') { currentIdx++; continue; }
         if (visited.has(step.id)) break;
         visited.add(step.id);
@@ -3393,6 +3415,15 @@ async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, origina
         renderExecutionList();
         if (stepDelay > 0 && currentIdx > 0) await new Promise((r) => setTimeout(r, stepDelay));
         try {
+            if (step.action === 'start') {
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
+                currentIdx++;
+                continue;
+            }
+            if (step.action === 'end') {
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
+                break;
+            }
             if (step.action === 'user_action') {
                 await waitForUserAction(step.params?.message || 'Выполните действие');
                 lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
@@ -3424,7 +3455,7 @@ async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, origina
                 let nextId = null;
                 if (step.action === 'branch' && (step.params?.nextId || step.params?.nextElseId)) nextId = resp.conditionResult ? step.params.nextId : step.params.nextElseId;
                 if (nextId) {
-                    const nextIdx = stepsWithVars.findIndex((s) => s.id === nextId);
+                    const nextIdx = runSteps.findIndex((s) => s.id === nextId);
                     currentIdx = nextIdx >= 0 ? nextIdx : currentIdx + 1;
                 } else currentIdx++;
             }
@@ -3445,6 +3476,38 @@ if (executeDataDrivenBtn) executeDataDrivenBtn.addEventListener('click', () => {
 });
 
 // ——— Execute list ———
+function findScenarioStartIndex(list) {
+    const i = list.findIndex((s) => s.action === 'start');
+    return i >= 0 ? i : 0;
+}
+
+/** start — в начало, end — в конец (ветки могут вести к «Конец»), прочие — между ними в исходном порядке. */
+function normalizeRunOrderForExecution(list) {
+    if (!Array.isArray(list) || list.length === 0) return list;
+    const starts = list.filter((s) => s.action === 'start');
+    const ends = list.filter((s) => s.action === 'end');
+    const rest = list.filter((s) => s.action !== 'start' && s.action !== 'end');
+    if (starts.length === 0 && ends.length === 0) return list;
+    return [...starts, ...rest, ...ends];
+}
+
+function makeDefaultStartStep() {
+    return {
+        id: 'step-start-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+        xpath: '—',
+        action: 'start',
+        title: 'Начало',
+        params: { mandatory: true, stepColor: '#00e676', waitForLoad: false }
+    };
+}
+
+/** Гарантирует один шаг «Начало» в начале списка (для всех сценариев в расширении). */
+function ensureStartStepInExecutionList() {
+    if (executionList.some((s) => s.action === 'start')) return false;
+    executionList.unshift(makeDefaultStartStep());
+    return true;
+}
+
 function hasBranching() {
     return executionList.some((s) => s.params?.nextId || s.params?.nextElseId);
 }
@@ -3456,7 +3519,8 @@ function needsStepByStepExecution() {
 async function runExecutionWithBranching(tabId, fromStepId) {
     const stepsToRun = executionList.filter((s) => s.action !== 'separator');
     if (stepsToRun.length === 0) return;
-    let currentIdx = fromStepId ? executionList.findIndex((s) => s.id === fromStepId) : 0;
+    const runList = fromStepId ? executionList : normalizeRunOrderForExecution(executionList);
+    let currentIdx = fromStepId ? executionList.findIndex((s) => s.id === fromStepId) : findScenarioStartIndex(runList);
     if (currentIdx < 0) currentIdx = 0;
     const continueOnError = !stopOnErrorEl?.checked;
     const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
@@ -3467,8 +3531,8 @@ async function runExecutionWithBranching(tabId, fromStepId) {
     lastExecutionReport = [];
     const reportStart = Date.now();
 
-    while (currentIdx >= 0 && currentIdx < executionList.length && !stopExecutionRequested) {
-        const step = executionList[currentIdx];
+    while (currentIdx >= 0 && currentIdx < runList.length && !stopExecutionRequested) {
+        const step = runList[currentIdx];
         if (step.action === 'separator') {
             currentIdx++;
             continue;
@@ -3483,6 +3547,25 @@ async function runExecutionWithBranching(tabId, fromStepId) {
         renderExecutionList();
         if (stepDelay > 0 && okCount > 0) await new Promise((r) => setTimeout(r, stepDelay));
         try {
+            if (step.action === 'start') {
+                const t0 = Date.now();
+                const note = (step.params?.message || '').trim();
+                appendExecutionLog(`▶ ${step.id}: начало сценария${note ? ` — ${note}` : ''}`);
+                okCount++;
+                setStepStatus(step.id, 'ok', '');
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
+                currentIdx++;
+                continue;
+            }
+            if (step.action === 'end') {
+                const t0 = Date.now();
+                const note = (step.params?.message || '').trim();
+                appendExecutionLog(`■ ${step.id}: конец сценария${note ? ` — ${note}` : ''}`);
+                okCount++;
+                setStepStatus(step.id, 'ok', '');
+                lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
+                break;
+            }
             if (step.action === 'user_action') {
                 const t0 = Date.now();
                 appendExecutionLog(`⏸ ${step.id}: ожидание действий пользователя`);
@@ -3561,7 +3644,7 @@ async function runExecutionWithBranching(tabId, fromStepId) {
                 nextId = resp.conditionResult ? step.params.nextId : step.params.nextElseId;
             }
             if (nextId) {
-                const nextIdx = executionList.findIndex((s) => s.id === nextId);
+                const nextIdx = runList.findIndex((s) => s.id === nextId);
                 currentIdx = nextIdx >= 0 ? nextIdx : currentIdx + 1;
             } else {
                 currentIdx++;
@@ -3678,7 +3761,8 @@ executeListBtn.addEventListener('click', () => {
     }
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
         if (!tab?.id) return;
-        const stepsToRun = executionList.filter((s) => s.action !== 'separator');
+        const startIx = findScenarioStartIndex(executionList);
+        const stepsToRun = executionList.slice(startIx).filter((s) => s.action !== 'separator');
         if (stepsToRun.length === 0) {
             executeListBtn.textContent = 'Нет шагов для выполнения';
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2000);
@@ -3686,7 +3770,7 @@ executeListBtn.addEventListener('click', () => {
         }
         if (needsStepByStepExecution()) {
             if (executionLog) executionLog.textContent = '';
-            appendExecutionLog(`Старт (пошагово): ${stepsToRun.length} шагов`);
+            appendExecutionLog(`Старт (пошагово) с позиции ${startIx + 1}: ${stepsToRun.length} шагов`);
             setExecutionUIRunning(true);
             runExecutionWithBranching(tab.id, null);
             return;
@@ -3694,7 +3778,7 @@ executeListBtn.addEventListener('click', () => {
         const continueOnError = !stopOnErrorEl?.checked;
         const stepDelay = Math.max(0, parseInt(stepDelayMsEl?.value, 10) || STEP_DELAY_DEFAULT);
         if (executionLog) executionLog.textContent = '';
-        appendExecutionLog(`Старт: ${stepsToRun.length} шагов`);
+        appendExecutionLog(`Старт с позиции ${startIx + 1}: ${stepsToRun.length} шагов`);
         stepsToRun.forEach((s) => setStepStatus(s.id, 'running', ''));
         currentExecutingStepId = stepsToRun[0]?.id || null;
         setExecutionUIRunning(true);

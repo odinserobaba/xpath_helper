@@ -1,0 +1,695 @@
+{
+  "name": "new_prolong",
+  "version": 1,
+  "exportedAt": "2026-03-20T09:10:08.769Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "start",
+      "title": "Начало",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#00e676",
+        "waitForLoad": false
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "https://svcdev-beta.test.gosuslugi.ru/611099/1/form",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//span[normalize-space()='Начать']",
+      "action": "click",
+      "title": "Начать",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Начать')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Начать']",
+          "//span[normalize-space()='Начать']"
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "//span[normalize-space()='Производство']",
+      "action": "click",
+      "title": "Производство",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Производство')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
+          "//*[normalize-space()='Производство']",
+          "//span[normalize-space()='Производство']"
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
+      "action": "click",
+      "title": "Производство этилового спирта, алкогольной и спирт",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Производство этилового спирта,')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]"
+        ]
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "//*[@id='c24']",
+      "action": "click",
+      "title": "Начните печатать и выберите вариант из списка, нажав стрелку Вниз",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' search-input ')]",
+          "//input[contains(@type, 'text')]",
+          "//input[contains(@role, 'combobox')]",
+          "//input[contains(@autocomplete, 'off')]",
+          "//input[contains(@aria-expanded, 'false')]",
+          "//input[contains(@aria-haspopup, 'listbox')]",
+          "//input[contains(@aria-autocomplete, 'list')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'search-input ng-untouched ng-pristine ng-valid ng-')]",
+          "//input[contains(@aria-label, 'Начните печатать и выберите вариант из списка, наж')]",
+          "//div//input",
+          "//div/div//input",
+          "//lib-search-bar/div/div//input",
+          "//*[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
+          "//*[@role='combobox' and @aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
+          "//input[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']"
+        ]
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённого этилового спирта']",
+      "action": "click",
+      "title": "Производство, хранение и поставки произведённого э",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//span[contains(normalize-space(), 'Производство, хранение и поста')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' lookup-item-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'lookup-item-text ng-star-inserted')])[1]",
+          "(//div//span)[4]",
+          "(//div/div//span)[4]",
+          "(//div/div/div//span)[4]"
+        ]
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[14]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "//span[normalize-space()='В электронном виде']",
+      "action": "click",
+      "title": "В электронном виде",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'В электронном виде')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
+          "//*[normalize-space()='В электронном виде']",
+          "//span[normalize-space()='В электронном виде']"
+        ]
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "//span[normalize-space()='5 лет']",
+      "action": "click",
+      "title": "5 лет",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
+          "//*[normalize-space()='5 лет']",
+          "//span[normalize-space()='5 лет']"
+        ]
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "//span[normalize-space()='Перейти к заявлению']",
+      "action": "click",
+      "title": "Перейти к заявлению",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к заявлению')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Перейти к заявлению']",
+          "//span[normalize-space()='Перейти к заявлению']"
+        ]
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 17,
+      "xpath": "//*[@id='c10']",
+      "action": "input",
+      "title": "Номер",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "12ПСЭ0000012",
+        "stepColor": "#00b0ff",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[@name='c10']",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[1]",
+          "//input[contains(@role, 'textbox')]",
+          "(//input[contains(@type, 'text')])[1]",
+          "(//input[contains(@autocomplete, 'off')])[1]",
+          "(//input[contains(@aria-invalid, 'false')])[1]",
+          "//input[contains(@aria-labelledby, 'label_c10')]",
+          "//input[contains(@aria-errormessage, 'error_c10')]",
+          "//input[contains(@aria-describedby, 'helper_c10')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'text-input ng-pristine ng-valid ng-star-inserted n')]",
+          "(//div//input)[1]",
+          "//lib-plain-input/div//input",
+          "//epgu-constructor-plain-input/lib-plain-input/div//input"
+        ]
+      }
+    },
+    {
+      "step": 18,
+      "xpath": "//*[@name='c40']",
+      "action": "input",
+      "title": "Дата",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "02.02.2026",
+        "stepColor": "#00b0ff",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[2]",
+          "(//input[contains(@type, 'text')])[2]",
+          "//input[contains(@aria-label, 'Дата')]",
+          "//input[contains(@inputmode, 'decimal')]",
+          "(//input[contains(@autocomplete, 'off')])[2]",
+          "(//input[contains(@aria-invalid, 'false')])[2]",
+          "//input[contains(@class, 'text-input focused')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@aria-description, 'Укажите месяц, день и год полностью, точку вводить')]",
+          "(//div//input)[2]",
+          "(//div/div//input)[2]",
+          "(//div/div/div//input)[2]",
+          "//*[@aria-label='Дата']",
+          "//*[@name='c40']",
+          "//input[@aria-label='Дата']"
+        ]
+      }
+    },
+    {
+      "step": 19,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 20,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[26]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 21,
+      "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+      "action": "click",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//input[contains(@readonly, 'true')]",
+          "//input[contains(@role, 'combobox')]",
+          "(//input[contains(@type, 'text')])[1]",
+          "//input[contains(@class, 'focusable-input')]",
+          "(//input[contains(@aria-expanded, 'false')])[1]",
+          "//input[contains(@aria-labelledby, 'label_0.2330100037502667')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//input)[1]",
+          "(//div/div//input)[1]",
+          "//lib-dropdown[@id='undefined']/div/div//input"
+        ]
+      }
+    },
+    {
+      "step": 22,
+      "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+      "action": "click",
+      "title": "По реквизитам платёжного поручения или УИН",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'По реквизитам платёжного поруч')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' text-plain ')])[3]",
+          "(//span[contains(@aria-hidden, 'false')])[2]",
+          "(//span[contains(@class, 'text-plain ng-star-inserted')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[6]",
+          "(//div/div//span)[6]",
+          "(//div/div/div//span)[6]"
+        ]
+      }
+    },
+    {
+      "step": 23,
+      "xpath": "//*[@name='c35']",
+      "action": "input",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "123",
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' clearable ')])[2]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[3]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' masked-input ')])[2]",
+          "(//input[contains(@type, 'text')])[4]",
+          "(//input[contains(@autocomplete, 'off')])[3]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'text-input masked-input clearable')])[2]",
+          "(//div//input)[4]",
+          "(//lib-base-masked-input/div//input)[2]",
+          "(//epgu-constructor-masked-input/lib-base-masked-input/div//input)[2]",
+          "//*[@name='c35']"
+        ]
+      }
+    },
+    {
+      "step": 24,
+      "xpath": "//*[@name='c36']",
+      "action": "input",
+      "title": "Дата",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "02.02.2026",
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[4]",
+          "(//input[contains(@type, 'text')])[5]",
+          "(//input[contains(@aria-label, 'Дата')])[2]",
+          "(//input[contains(@class, 'text-input')])[4]",
+          "(//input[contains(@autocomplete, 'off')])[4]",
+          "(//input[contains(@inputmode, 'decimal')])[2]",
+          "(//input[contains(@aria-invalid, 'false')])[2]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@aria-description, 'Укажите месяц, день и год полностью, точку вводить')])[2]",
+          "(//div//input)[5]",
+          "(//div/div//input)[5]",
+          "(//div/div/div//input)[5]",
+          "//*[@aria-label='Дата']",
+          "//*[@name='c36']",
+          "//input[@aria-label='Дата']"
+        ]
+      }
+    },
+    {
+      "step": 25,
+      "xpath": "//span[normalize-space()='Перейти к подписанию']",
+      "action": "click",
+      "title": "Перейти к подписанию",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к подписанию')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[7]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Перейти к подписанию']",
+          "//span[normalize-space()='Перейти к подписанию']"
+        ]
+      }
+    },
+    {
+      "step": 26,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 27,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
+      "action": "click",
+      "title": "Подписание происходит в браузере. Сертификат УКЭП",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' small-text ')])[2]",
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' choose__item-desc ')])[2]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div[contains(@class, 'choose__item-desc small-text gray')])[2]",
+          "(//div//div)[26]",
+          "(//span/div//div)[8]",
+          "(//div/span/div//div)[8]"
+        ]
+      }
+    },
+    {
+      "step": 28,
+      "xpath": "//span[normalize-space()='Подписать']",
+      "action": "click",
+      "title": "Подписать",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Подписать')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Подписать']",
+          "//span[normalize-space()='Подписать']"
+        ]
+      }
+    },
+    {
+      "step": 29,
+      "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+      "action": "click",
+      "title": "ООО \"ЦентрИнформ\"",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--shadow ')]",
+          "//button[contains(@class, 'btn--white btn--shadow')]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//epgu-cf-ui-long-button//button",
+          "//epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//div/epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+          "//button[normalize-space()='ООО \"ЦентрИнформ\"']"
+        ]
+      }
+    },
+    {
+      "step": 30,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[2]",
+          "(//div/button//span)[2]",
+          "(//lib-button/div/button//span)[2]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    }
+  ],
+  "id": "new_prolong_20260320_121008",
+  "runnerSettings": {
+    "startUrl": "",
+    "baseUrl": "",
+    "viewport": "1280x720",
+    "slowMoMs": 0,
+    "headless": true,
+    "defaultTimeoutMs": 15000,
+    "connectOverCdp": true,
+    "cdpEndpoint": "9222",
+    "bringToFront": true,
+    "highlightSteps": true,
+    "variables": {},
+    "dataRows": null,
+    "maxRows": 0,
+    "stopOnFirstFail": true
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "name": "utm1_test",
+  "version": 1,
+  "exportedAt": "2026-03-20T06:10:20.971Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//a[normalize-space()='Лицензирование']",
+      "action": "click",
+      "title": "Лицензирование",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//a[contains(normalize-space(), 'Лицензирование')]",
+          "(//a[contains(concat(' ', normalize-space(@class), ' '), ' page-nav-item ')])[12]",
+          "//a[contains(@href, '/app/services/license')]",
+          "(//a[contains(@class, 'page-nav-item ng-tns-c132-0')])[12]",
+          "//a[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//a[contains(@routerlinkactive, 'ci-nav-link-item-active')])[12]",
+          "(//li//a)[12]",
+          "(//ul/li//a)[12]",
+          "(//div[contains(@class, 'mat-expansion-panel-body')]/ul/li//a)[12]",
+          "//*[normalize-space()='Лицензирование']",
+          "//a[normalize-space()='Лицензирование']"
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Лицензирование",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "—",
+      "action": "start",
+      "title": "Новый шаг 4",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#00e676"
+      }
+    }
+  ],
+  "id": "utm1_test_20260320_090927",
+  "flow": {
+    "nodes": [
+      {
+        "id": "step-1",
+        "stepRef": 1,
+        "position": {
+          "x": 254.67608286252357,
+          "y": -251.28248587570627
+        },
+        "title": "",
+        "action": "navigate",
+        "xpath": "—",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-2",
+        "stepRef": 2,
+        "position": {
+          "x": 295.05838041431264,
+          "y": -30.37099811676086
+        },
+        "title": "Лицензирование",
+        "action": "click",
+        "xpath": "//a[normalize-space()='Лицензирование']",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-3",
+        "stepRef": 3,
+        "position": {
+          "x": 279.3220338983052,
+          "y": 160.61054613935977
+        },
+        "title": "Лицензирование",
+        "action": "navigate",
+        "xpath": "—",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-4-1773986987170",
+        "stepRef": 4,
+        "position": {
+          "x": 280.42372881355936,
+          "y": -424.06666666666695
+        },
+        "title": "Новый шаг 4",
+        "action": "start",
+        "xpath": "",
+        "comment": "",
+        "tags": [],
+        "stepColor": "#00e676"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-step-1-step-2",
+        "source": "step-1",
+        "target": "step-2",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-2-step-3",
+        "source": "step-2",
+        "target": "step-3",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-4-1773986987170-step-1-1773986991003",
+        "source": "step-4-1773986987170",
+        "target": "step-1",
+        "kind": "next"
+      }
+    ],
+    "groups": []
+  }
+}

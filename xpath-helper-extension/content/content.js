@@ -374,7 +374,7 @@ function init() {
             return out;
         }
 
-        for (let i = 0; i < steps.length; i++) {
+        execSteps: for (let i = 0; i < steps.length; i++) {
             if (!isContextValid() || token !== runToken) break;
             if (i > 0 && stepDelayMs > 0) await new Promise((r) => setTimeout(r, stepDelayMs));
             const step = steps[i];
@@ -393,6 +393,20 @@ function init() {
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
                     break;
+                }
+
+                if (step.action === 'start') {
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
+                    sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
+                    lastErr = null;
+                    break;
+                }
+
+                if (step.action === 'end') {
+                    results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
+                    sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
+                    lastErr = null;
+                    break execSteps;
                 }
 
                 if (step.action === 'wait_for_element') {

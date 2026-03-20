@@ -1,16 +1,14 @@
 {
   "name": "prolong",
   "version": 1,
-  "exportedAt": "2026-03-20T08:01:53.268Z",
+  "exportedAt": "2026-03-20T07:53:16.928Z",
   "steps": [
     {
       "step": 1,
       "xpath": "—",
       "action": "start",
       "title": "Новый шаг 30",
-      "tags": [
-        "Продление"
-      ],
+      "tags": [],
       "params": {
         "mandatory": true,
         "stepColor": "#ff1744"
@@ -234,6 +232,22 @@
     },
     {
       "step": 16,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 17,
       "xpath": "//*[@name='c10']",
       "action": "input",
       "title": "#c10",
@@ -249,7 +263,7 @@
       }
     },
     {
-      "step": 17,
+      "step": 18,
       "xpath": "//*[@name='c40']",
       "action": "input",
       "title": "Дата",
@@ -262,7 +276,7 @@
       }
     },
     {
-      "step": 18,
+      "step": 19,
       "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -278,7 +292,7 @@
       }
     },
     {
-      "step": 19,
+      "step": 20,
       "xpath": "//button[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -294,7 +308,7 @@
       }
     },
     {
-      "step": 20,
+      "step": 21,
       "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
       "action": "click",
       "title": "<input>",
@@ -306,7 +320,7 @@
       }
     },
     {
-      "step": 21,
+      "step": 22,
       "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
       "action": "click",
       "title": "По реквизитам платёжного поручения или УИН",
@@ -318,7 +332,7 @@
       }
     },
     {
-      "step": 22,
+      "step": 23,
       "xpath": "//*[@name='c35']",
       "action": "input",
       "title": "<input>",
@@ -334,7 +348,7 @@
       }
     },
     {
-      "step": 23,
+      "step": 24,
       "xpath": "//*[@name='c36']",
       "action": "input",
       "title": "Дата",
@@ -352,7 +366,7 @@
       }
     },
     {
-      "step": 24,
+      "step": 25,
       "xpath": "//span[normalize-space()='Перейти к подписанию']",
       "action": "click",
       "title": "Перейти к подписанию",
@@ -368,7 +382,7 @@
       }
     },
     {
-      "step": 25,
+      "step": 26,
       "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -384,7 +398,7 @@
       }
     },
     {
-      "step": 26,
+      "step": 27,
       "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
       "action": "click",
       "title": "Подписание происходит в браузере. Сертификат УКЭП",
@@ -396,7 +410,7 @@
       }
     },
     {
-      "step": 27,
+      "step": 28,
       "xpath": "//span[normalize-space()='Подписать']",
       "action": "click",
       "title": "Подписать",
@@ -412,7 +426,7 @@
       }
     },
     {
-      "step": 28,
+      "step": 29,
       "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
       "action": "click",
       "title": "ООО \"ЦентрИнформ\"",
@@ -428,7 +442,7 @@
       }
     },
     {
-      "step": 29,
+      "step": 30,
       "xpath": "//span[normalize-space()='Продолжить']",
       "action": "click",
       "title": "Продолжить",
@@ -441,17 +455,6 @@
           "//*[normalize-space()='Продолжить']",
           "//span[normalize-space()='Продолжить']"
         ]
-      }
-    },
-    {
-      "step": 30,
-      "xpath": "—",
-      "action": "end",
-      "title": "Новый шаг 31",
-      "tags": [],
-      "params": {
-        "mandatory": true,
-        "stepColor": "#ff1744"
       }
     }
   ],
@@ -478,11 +481,11 @@
         "id": "step-1",
         "stepRef": 1,
         "position": {
-          "x": 80,
-          "y": -368
+          "x": 40,
+          "y": 40
         },
-        "title": "Новый шаг 30",
-        "action": "start",
+        "title": "",
+        "action": "navigate",
         "xpath": "—",
         "comment": "",
         "tags": [
@@ -497,13 +500,11 @@
           "x": 420,
           "y": 40
         },
-        "title": "",
-        "action": "navigate",
-        "xpath": "—",
+        "title": "Начать",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Начать']",
         "comment": "",
-        "tags": [
-          "Продление"
-        ],
+        "tags": [],
         "stepColor": "#ff1744"
       },
       {
@@ -513,9 +514,9 @@
           "x": 40,
           "y": 280
         },
-        "title": "Начать",
+        "title": "Производство",
         "action": "click",
-        "xpath": "//span[normalize-space()='Начать']",
+        "xpath": "//span[normalize-space()='Производство']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -527,9 +528,9 @@
           "x": 420,
           "y": 280
         },
-        "title": "Производство",
+        "title": "Производство этилового спирта, алкогольной и спирт",
         "action": "click",
-        "xpath": "//span[normalize-space()='Производство']",
+        "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -541,9 +542,9 @@
           "x": 40,
           "y": 520
         },
-        "title": "Производство этилового спирта, алкогольной и спирт",
+        "title": "Начните печатать и выберите вариант из списка, нажав стрелку Вниз",
         "action": "click",
-        "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
+        "xpath": "//*[@id='c24']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -555,9 +556,9 @@
           "x": 420,
           "y": 520
         },
-        "title": "Начните печатать и выберите вариант из списка, нажав стрелку Вниз",
+        "title": "Производство, хранение и поставки произведённого э",
         "action": "click",
-        "xpath": "//*[@id='c24']",
+        "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённого этилового спирта']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -569,9 +570,9 @@
           "x": 40,
           "y": 760
         },
-        "title": "Производство, хранение и поставки произведённого э",
+        "title": "Продолжить",
         "action": "click",
-        "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённого этилового спирта']",
+        "xpath": "//span[normalize-space()='Продолжить']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -583,9 +584,9 @@
           "x": 420,
           "y": 760
         },
-        "title": "Продолжить",
+        "title": "В электронном виде",
         "action": "click",
-        "xpath": "//span[normalize-space()='Продолжить']",
+        "xpath": "//span[normalize-space()='В электронном виде']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -597,9 +598,9 @@
           "x": 40,
           "y": 1000
         },
-        "title": "В электронном виде",
+        "title": "5 лет",
         "action": "click",
-        "xpath": "//span[normalize-space()='В электронном виде']",
+        "xpath": "//span[normalize-space()='5 лет']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -611,9 +612,9 @@
           "x": 420,
           "y": 1000
         },
-        "title": "5 лет",
+        "title": "Перейти к заявлению",
         "action": "click",
-        "xpath": "//span[normalize-space()='5 лет']",
+        "xpath": "//span[normalize-space()='Перейти к заявлению']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -625,9 +626,9 @@
           "x": 40,
           "y": 1240
         },
-        "title": "Перейти к заявлению",
+        "title": "Верно",
         "action": "click",
-        "xpath": "//span[normalize-space()='Перейти к заявлению']",
+        "xpath": "//span[normalize-space()='Верно']",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
@@ -885,21 +886,27 @@
         "stepColor": "#ff1744"
       },
       {
-        "id": "step-30",
+        "id": "step-30-1773993161789",
         "stepRef": 30,
         "position": {
           "x": 64,
-          "y": 3632
+          "y": -192
         },
-        "title": "Новый шаг 31",
-        "action": "end",
-        "xpath": "—",
+        "title": "Новый шаг 30",
+        "action": "start",
+        "xpath": "",
         "comment": "",
         "tags": [],
         "stepColor": "#ff1744"
       }
     ],
     "edges": [
+      {
+        "id": "e-step-1-step-2",
+        "source": "step-1",
+        "target": "step-2",
+        "kind": "next"
+      },
       {
         "id": "e-step-2-step-3",
         "source": "step-2",
@@ -958,6 +965,18 @@
         "id": "e-step-11-step-12",
         "source": "step-11",
         "target": "step-12",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-12-step-13",
+        "source": "step-12",
+        "target": "step-13",
+        "kind": "next"
+      },
+      {
+        "id": "e-step-13-step-14",
+        "source": "step-13",
+        "target": "step-14",
         "kind": "next"
       },
       {
@@ -1051,21 +1070,9 @@
         "kind": "next"
       },
       {
-        "id": "e-step-29-step-30-1773993243008",
-        "source": "step-29",
-        "target": "step-30",
-        "kind": "next"
-      },
-      {
-        "id": "e-step-1-step-2-1773993259274",
-        "source": "step-1",
-        "target": "step-2",
-        "kind": "next"
-      },
-      {
-        "id": "e-step-12-step-14-1773993677207",
-        "source": "step-12",
-        "target": "step-14",
+        "id": "e-step-30-1773993161789-step-1-1773993195466",
+        "source": "step-30-1773993161789",
+        "target": "step-1",
         "kind": "next"
       }
     ],

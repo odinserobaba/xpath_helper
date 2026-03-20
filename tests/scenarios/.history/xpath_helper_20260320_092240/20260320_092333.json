@@ -1,0 +1,74 @@
+{
+  "name": "XPath Helper — сценарий",
+  "version": 1,
+  "exportedAt": "2026-03-20T06:22:40.599Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//a[normalize-space()='Лицензирование']",
+      "action": "click",
+      "title": "Лицензирование",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//a[contains(normalize-space(), 'Лицензирование')]",
+          "(//a[contains(concat(' ', normalize-space(@class), ' '), ' page-nav-item ')])[12]",
+          "//a[contains(@href, '/app/services/license')]",
+          "(//a[contains(@class, 'page-nav-item ng-tns-c132-0')])[12]",
+          "//a[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//a[contains(@routerlinkactive, 'ci-nav-link-item-active')])[12]",
+          "(//li//a)[12]",
+          "(//ul/li//a)[12]",
+          "(//div[contains(@class, 'mat-expansion-panel-body')]/ul/li//a)[12]",
+          "//*[normalize-space()='Лицензирование']",
+          "//a[normalize-space()='Лицензирование']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Лицензирование",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "branch",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "condition": "element_exists",
+        "expectedValue": "",
+        "nextElseId": "step-1773986924643-c26q1bdp4tt",
+        "waitForLoad": true
+      }
+    }
+  ],
+  "id": "xpath_helper_20260320_092240"
+}

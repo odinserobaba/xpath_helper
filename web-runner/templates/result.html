@@ -16,6 +16,10 @@
     .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
     .ok { background: rgba(46,204,113,0.18); color: var(--ok); }
     .fail { background: rgba(231,76,60,0.18); color: var(--err); }
+    .soft { background: rgba(255,200,87,0.2); color: #ffc857; }
+    tr.softrow td { background: rgba(255,200,87,0.06); }
+    .shotpair { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+    .shotpair img { max-height: 64px; border-radius: 6px; border: 1px solid #2a2a4a; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #2a2a4a; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
     th { background: var(--bg3); color: var(--muted); }
@@ -59,29 +63,36 @@
               <th>Status</th>
               <th>Duration</th>
               <th>Error</th>
-              <th>Screenshot</th>
+              <th>Скриншоты</th>
             </tr>
           </thead>
           <tbody>
             {% for s in report.steps %}
-              <tr>
+              <tr class="{% if s.softFailure %}softrow{% endif %}">
                 <td><code>{{ s.step }}</code></td>
                 <td><code>{{ s.action }}</code></td>
                 <td>
                   {% if s.ok %}
                     <span class="pill ok">OK</span>
                   {% else %}
-                    <span class="pill fail">FAIL</span>
+                    {% if s.softFailure %}<span class="pill soft">SOFT</span>{% else %}<span class="pill fail">FAIL</span>{% endif %}
                   {% endif %}
                 </td>
                 <td>{{ s.durationMs }} ms</td>
                 <td>{{ s.error or "" }}</td>
                 <td>
-                  {% if s.screenshot %}
-                    <a href="/runs/{{ run_id }}/screenshots/{{ s.screenshot.split('/')[-1] }}">{{ s.screenshot }}</a>
-                  {% else %}
-                    —
+                  <div class="shotpair">
+                  {% if s.before %}
+                    <span><small>до</small><br/><a href="/runs/{{ run_id }}/screenshots/{{ s.before.split('/')[-1] }}"><img src="/runs/{{ run_id }}/screenshots/{{ s.before.split('/')[-1] }}" alt="before" loading="lazy" /></a></span>
                   {% endif %}
+                  {% if s.after %}
+                    <span><small>после</small><br/><a href="/runs/{{ run_id }}/screenshots/{{ s.after.split('/')[-1] }}"><img src="/runs/{{ run_id }}/screenshots/{{ s.after.split('/')[-1] }}" alt="after" loading="lazy" /></a></span>
+                  {% endif %}
+                  {% if s.screenshot and not s.after %}
+                    <a href="/runs/{{ run_id }}/screenshots/{{ s.screenshot.split('/')[-1] }}">{{ s.screenshot }}</a>
+                  {% endif %}
+                  {% if not s.before and not s.after and not s.screenshot %}—{% endif %}
+                  </div>
                 </td>
               </tr>
             {% endfor %}

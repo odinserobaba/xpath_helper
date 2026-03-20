@@ -19,9 +19,11 @@ cd web-runner
 
 3) Откройте `http://127.0.0.1:8000`, загрузите JSON сценария, нажмите **Run**.
 
+**Flow Editor** (`/flow-editor`): визуальная блок-схема сценариев. Статика собирается в `web-runner/static/` при `./install.sh` (нужен Node.js) или вручную: `cd flow-editor-src && npm ci && npm run build`.
+
 ## Что поддерживается
 
-- **Actions**: `navigate`, `click`, `click_if_exists`, `input`, `file_upload`, `wait`, `wait_for_element`, `assert`, `branch` (частично), `user_action` (пропускается)
+- **Actions**: `start` (точка входа — выполнение с этого шага), `navigate`, `click`, `click_if_exists`, `input`, `file_upload`, `wait`, `wait_for_element`, `assert`, `branch` (частично), `user_action` (пропускается). Без `start` прогон начинается с первого шага (см. лог).
 - **Переменные**: подстановка `{{var}}` из `Variables JSON` и `baseUrl`
 - **Артефакты**: сохраняются в `web-runner/outputs/<runId>/` (`input.json`, `log.txt`, `report.json`, `screenshots/`)
 
