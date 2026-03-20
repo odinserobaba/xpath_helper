@@ -15,6 +15,7 @@
 - [Часть 2. Запись первого сценария в расширении](./part-2-record-first-scenario.md)
 - [Часть 3. Запуск сценария в Web Runner](./part-3-run-scenario.md)
 - [Часть 4. Примеры готовых сценариев](./part-4-examples.md)
+- [Часть 5. Flow Editor (блок-схема)](./part-5-flow-editor.md)
 
 ## Что делать дальше
 

@@ -1,0 +1,369 @@
+{
+  "name": "pr3 — stabilized (2026-03-19 16:08)",
+  "version": 1,
+  "exportedAt": "2026-03-19T16:08:47",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Начать",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#76ff03",
+        "url": "https://svcdev-beta.test.gosuslugi.ru/611449/1/form?_=1773835920961",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//span[normalize-space()='Начать']",
+      "action": "click",
+      "title": "Начать",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Начать')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Начать']",
+          "//span[normalize-space()='Начать']"
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//span[normalize-space()='Перейти к заявлению']",
+      "action": "click",
+      "title": "Перейти к заявлению",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к заявлению')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Перейти к заявлению']",
+          "//span[normalize-space()='Перейти к заявлению']"
+        ]
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "//button[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//button[contains(concat(' ', normalize-space(@class), ' '), ' button ')]",
+          "//button[contains(@type, 'button')]",
+          "(//button[contains(@role, 'button')])[5]",
+          "//button[contains(@class, 'button ng-star-inserted')]",
+          "(//div//button)[5]",
+          "//lib-button/div//button",
+          "//div/lib-button/div//button",
+          "//*[normalize-space()='Верно']",
+          "//button[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "//span[contains(@class, 'ng-star-inserted')]",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[4]",
+          "(//div/button//span)[3]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "//span[contains(@class, 'ng-star-inserted')]",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ]
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "//*[@id='c10']",
+      "action": "input",
+      "title": "#c10",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "12ПСЭ0000012",
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//*[@name='c10']",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[1]",
+          "//input[contains(@role, 'textbox')]",
+          "(//input[contains(@type, 'text')])[1]",
+          "//input[contains(@aria-readonly, 'false')]",
+          "(//input[contains(@autocomplete, 'off')])[1]",
+          "(//input[contains(@aria-invalid, 'false')])[1]",
+          "//input[contains(@aria-labelledby, 'label_c10')]",
+          "//input[contains(@aria-errormessage, 'error_c10')]",
+          "//input[contains(@aria-describedby, 'helper_c10')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'text-input ng-pristine ng-valid ng-star-inserted n')]",
+          "(//div//input)[1]",
+          "//lib-plain-input/div//input",
+          "//epgu-constructor-plain-input/lib-plain-input/div//input"
+        ]
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "//*[@name='c40']",
+      "action": "input",
+      "title": "Дата",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "value": "02.02.2026",
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' invalid ')]",
+          "//*[@name='c40']",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[2]",
+          "(//input[contains(@type, 'text')])[2]",
+          "//input[contains(@aria-label, 'Дата')]",
+          "//input[contains(@inputmode, 'decimal')]",
+          "//input[contains(@aria-invalid, 'true')]",
+          "(//input[contains(@autocomplete, 'off')])[2]",
+          "//input[contains(@class, 'text-input invalid')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@aria-description, 'Укажите месяц, день и год полностью, точку вводить')]",
+          "(//div//input)[2]",
+          "(//div/div//input)[2]",
+          "(//div/div/div//input)[2]",
+          "//*[@aria-label='Дата']",
+          "//input[@aria-label='Дата']"
+        ]
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "//span[normalize-space()='Перейти к подписанию']",
+      "action": "click",
+      "title": "Перейти к подписанию",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к подписанию')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Перейти к подписанию']",
+          "//span[normalize-space()='Перейти к подписанию']"
+        ]
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' choose__item-header ')])[2]",
+      "action": "click",
+      "title": "УКЭП с компьютера",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "(//div[contains(@class, 'choose__item-header')])[2]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//div)[24]",
+          "(//span/div//div)[5]",
+          "(//div/span/div//div)[5]",
+          "//*[normalize-space()='УКЭП с компьютера']",
+          "//div[normalize-space()='УКЭП с компьютера']"
+        ]
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "//span[normalize-space()='Подписать']",
+      "action": "click",
+      "title": "Подписать",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Подписать')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Подписать']",
+          "//span[normalize-space()='Подписать']"
+        ]
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+      "action": "click",
+      "title": "ООО \"ЦентрИнформ\"",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+          "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--shadow ')]",
+          "//button[contains(@class, 'btn--white btn--shadow')]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//epgu-cf-ui-long-button//button",
+          "//epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//div/epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+          "//button[normalize-space()='ООО \"ЦентрИнформ\"']"
+        ]
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true,
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[2]",
+          "(//div/button//span)[2]",
+          "(//lib-button/div/button//span)[2]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ]
+      }
+    }
+  ],
+  "id": "derived_49becd3d4200_20260319_160847",
+  "derivedFrom": {
+    "runId": "49becd3d4200",
+    "scenarioId": "pr3_20260318_151012",
+    "createdAt": "2026-03-19T16:08:47",
+    "type": "stabilizedSelectors"
+  }
+}

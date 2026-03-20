@@ -1,0 +1,1182 @@
+{
+  "name": "test_utm_grant",
+  "version": 1,
+  "exportedAt": "2026-03-19T13:08:02.484Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Переход на страницу",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff4081",
+        "url": "http://9ca6e84b-utm.middleware.monitor-utm.ru/app/services/license/add",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[6]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[1]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[6]",
+          "(//span[normalize-space()='Продолжить'])[1]",
+          "(//span[contains(@class, 'mat-button')])[16]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[13]",
+          "(//div[@id='cdk-step-content-0-0']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-0']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[6]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[8]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[2]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[8]",
+          "(//span[normalize-space()='Продолжить'])[2]",
+          "(//span[contains(@class, 'mat-button')])[22]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[19]",
+          "(//div[@id='cdk-step-content-0-1']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-1']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[2]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[8]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "(//*[contains(@class, 'mat-radio-label-content')])[5]",
+      "action": "click",
+      "title": "Производство",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-radio-label-content')])[5]",
+          "(//span[contains(@class, 'mat-radio')])[30]",
+          "(//label[contains(@class, 'mat-radio-label')]//span)[34]",
+          "(//mat-radio-button[@id='mat-radio-3']/label[contains(@class, 'mat-radio-label')]//span)[6]",
+          "(//div/mat-radio-button[@id='mat-radio-3']/label[contains(@class, 'mat-radio-label')]//span)[6]",
+          "//span[contains(normalize-space(), 'Производство')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-radio-label-content ')])[5]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Производство']",
+          "//span[normalize-space()='Производство']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//*[contains(@class, 'mat-select-arrow-wrapper')]",
+      "action": "click",
+      "title": "<div>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//div[contains(@class, 'mat-select-arrow-wrapper')]",
+          "(//div[contains(@class, 'mat-select')])[3]",
+          "(//div[contains(@class, 'mat-select-trigger')]//div)[2]",
+          "(//mat-select[@id='mat-select-0']/div[contains(@class, 'mat-select-trigger')]//div)[2]",
+          "(//div[contains(@class, 'mat-form-field-infix')]/mat-select[@id='mat-select-0']/div[contains(@class, 'mat-select-trigger')]//div)[2]",
+          "//div[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-arrow-wrapper ')]",
+          "//div[contains(@class, 'mat-select-arrow-wrapper ng-tns-c85-32')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "//span[normalize-space()='Производство этилового спирта, алкогольной и спиртосодержащей продукции']",
+      "action": "click",
+      "title": "Производство этилового спирта, алкогольной и спирт",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-option-text')])[1]",
+          "(//span[contains(@class, 'mat-option-text')])[1]",
+          "//mat-option[@id='mat-option-0']//span",
+          "//div[@id='mat-select-0-panel']/mat-option[@id='mat-option-0']//span",
+          "(//span[contains(@class, 'mat-option')])[1]",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-0-panel']/mat-option[@id='mat-option-0']//span",
+          "//span[contains(normalize-space(), 'Производство этилового спирта,')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#76ff03",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "//*[contains(@class, 'mat-select-placeholder')]",
+      "action": "click",
+      "title": "Вид деятельности",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-select-min-line')])[2]",
+          "//div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-3']//span",
+          "//span[contains(@class, 'mat-select-placeholder') and normalize-space()='Вид деятельности']",
+          "//span[contains(@class, 'mat-select-placeholder')]",
+          "(//span[contains(@class, 'mat-select-min-line')])[2]",
+          "//span[contains(@class, 'mat-select-placeholder') and contains(@class, 'mat-select-min-line')]",
+          "(//span[normalize-space()='Вид деятельности'])[1]",
+          "(//span[contains(@class, 'mat-select')])[3]",
+          "//div[@id='mat-select-value-3']//span",
+          "//mat-select[@id='mat-select-2']/div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-3']//span",
+          "(//span[contains(normalize-space(), 'Вид деятельности')])[1]",
+          "//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-placeholder ')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-min-line ')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//span[contains(@class, 'mat-select-placeholder mat-select-min-line ng-tns-')]",
+          "//*[normalize-space()='Вид деятельности']",
+          "//span[normalize-space()='Вид деятельности']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "//span[normalize-space()='Производство, хранение и поставки произведённой алкогольной продукции: плодовые алкогольные напитки с добавлением этилового спирта']",
+      "action": "click",
+      "title": "Производство, хранение и поставки произведённой ал",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-option-text')])[1]",
+          "(//span[contains(@class, 'mat-option-text')])[1]",
+          "(//span[contains(@class, 'mat-option')])[1]",
+          "//mat-option[@id='mat-option-6']//span",
+          "//div[@id='mat-select-2-panel']/mat-option[@id='mat-option-6']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-2-panel']/mat-option[@id='mat-option-6']//span",
+          "(//span[contains(normalize-space(), 'Производство, хранение и поста')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#76ff03",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[10]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[3]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[10]",
+          "(//span[normalize-space()='Продолжить'])[3]",
+          "(//span[contains(@class, 'mat-button')])[28]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[25]",
+          "(//div[@id='cdk-step-content-0-2']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-2']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[3]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[10]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[12]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[4]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[12]",
+          "(//span[normalize-space()='Продолжить'])[4]",
+          "(//span[contains(@class, 'mat-button')])[34]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[31]",
+          "(//div[@id='cdk-step-content-0-3']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-3']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[4]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[12]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "//span[contains(normalize-space(), 'Место ведения деятельности сов')]",
+      "action": "click",
+      "title": "Место ведения деятельности совпадает с КПП юридиче",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[contains(@class, 'mat-checkbox-label')]",
+          "//span[contains(@class, 'mat-checkbox-label')]",
+          "(//span[contains(@class, 'mat-checkbox')])[7]",
+          "(//label[contains(@class, 'mat-checkbox-layout')]//span)[7]",
+          "(//mat-checkbox[@id='mat-checkbox-1']/label[contains(@class, 'mat-checkbox-layout')]//span)[7]",
+          "(//div/mat-checkbox[@id='mat-checkbox-1']/label[contains(@class, 'mat-checkbox-layout')]//span)[7]",
+          "//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-checkbox-label ')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#00b0ff",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "(//*[contains(@class, 'mat-select-arrow-wrapper')])[3]",
+      "action": "click",
+      "title": "<div>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//div[contains(@class, 'mat-select-arrow-wrapper')])[3]",
+          "(//div[contains(@class, 'mat-select')])[11]",
+          "(//div[contains(@class, 'mat-select-trigger')]//div)[8]",
+          "(//mat-select[@id='mat-select-12']/div[contains(@class, 'mat-select-trigger')]//div)[2]",
+          "(//div[contains(@class, 'mat-form-field-infix')]/mat-select[@id='mat-select-12']/div[contains(@class, 'mat-select-trigger')]//div)[2]",
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-arrow-wrapper ')])[3]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//div[contains(@class, 'mat-select-arrow-wrapper ng-tns-c85-46')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "//span[normalize-space()='плодовые алкогольные напитки с добавлением этилового спирта']",
+      "action": "click",
+      "title": "плодовые алкогольные напитки с добавлением этилово",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[contains(@class, 'mat-option-text')]",
+          "//span[contains(@class, 'mat-option-text')]",
+          "//mat-option[@id='mat-option-19']//span",
+          "//span[contains(@class, 'mat-option')]",
+          "//div[@id='mat-select-12-panel']/mat-option[@id='mat-option-19']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-12-panel']/mat-option[@id='mat-option-19']//span",
+          "(//span[contains(normalize-space(), 'плодовые алкогольные напитки с')])[3]",
+          "//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#00b0ff",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "(//*[contains(@class, 'mat-input-element')])[16]",
+      "action": "input",
+      "title": "#mat-input-14",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[@id='mat-input-14']",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[16]",
+          "(//input[contains(@class, 'mat-input-element')])[16]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[16]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[16]",
+          "(//input[contains(@class, 'mat-form')])[16]",
+          "(//input[contains(@class, 'mat-input')])[16]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[16]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[16]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[16]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[16]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[16]",
+          "//input[contains(@mask, '0*:0*:0*:0*')]",
+          "(//input[contains(@aria-required, 'true')])[13]",
+          "//input[contains(@formcontrolname, 'cadastralNumber')]",
+          "//input[contains(@data-placeholder, 'Кадастровый номер')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[16]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "77:77:1111111:7777",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "(//*[contains(@class, 'mat-select-min-line')])[4]",
+      "action": "click",
+      "title": "Вид",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-select-placeholder')])[1]",
+          "(//span[contains(@class, 'mat-select-min-line')])[4]",
+          "(//span[contains(@class, 'mat-select-placeholder')])[1]",
+          "//div[@id='mat-select-value-15']//span",
+          "//div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-15']//span",
+          "(//span[contains(@class, 'mat-select-placeholder') and contains(@class, 'mat-select-min-line')])[1]",
+          "(//span[contains(@class, 'mat-select')])[7]",
+          "//mat-select[@id='mat-select-14']/div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-15']//span",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-min-line ')])[4]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-placeholder ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'mat-select-placeholder mat-select-min-line ng-tns-')])[1]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "//span[contains(@class, 'mat-option-text') and normalize-space()='Здание']",
+      "action": "click",
+      "title": "Здание",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-option-text')])[2]",
+          "//mat-option[@id='mat-option-21']//span",
+          "(//span[contains(@class, 'mat-option-text')])[2]",
+          "//span[normalize-space()='Здание']",
+          "(//span[contains(@class, 'mat-option')])[2]",
+          "//div[@id='mat-select-14-panel']/mat-option[@id='mat-option-21']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-14-panel']/mat-option[@id='mat-option-21']//span",
+          "//span[contains(normalize-space(), 'Здание')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Здание']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 17,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[17]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[5]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[17]",
+          "(//span[normalize-space()='Продолжить'])[5]",
+          "(//span[contains(@class, 'mat-button')])[49]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[46]",
+          "(//div[@id='cdk-step-content-0-4']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-4']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[5]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[17]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 18,
+      "xpath": "(//*[contains(@class, 'mat-select-min-line')])[5]",
+      "action": "click",
+      "title": "<span>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-select-placeholder')])[1]",
+          "(//span[contains(@class, 'mat-select-min-line')])[5]",
+          "(//span[contains(@class, 'mat-select-placeholder')])[1]",
+          "//div[@id='mat-select-value-17']//span",
+          "//div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-17']//span",
+          "(//span[contains(@class, 'mat-select-placeholder') and contains(@class, 'mat-select-min-line')])[1]",
+          "(//span[contains(@class, 'mat-select')])[9]",
+          "//mat-select[@id='mat-select-16']/div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-17']//span",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-min-line ')])[5]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-placeholder ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'mat-select-placeholder mat-select-min-line ng-tns-')])[1]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 19,
+      "xpath": "//span[contains(@class, 'mat-option-text') and normalize-space()='Сертификат']",
+      "action": "click",
+      "title": "Сертификат",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-option-text')])[1]",
+          "//mat-option[@id='mat-option-25']//span",
+          "(//span[contains(@class, 'mat-option-text')])[1]",
+          "//span[normalize-space()='Сертификат']",
+          "(//span[contains(@class, 'mat-option')])[1]",
+          "//div[@id='mat-select-16-panel']/mat-option[@id='mat-option-25']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-16-panel']/mat-option[@id='mat-option-25']//span",
+          "//span[contains(normalize-space(), 'Сертификат')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Сертификат']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 20,
+      "xpath": "(//input[contains(@data-placeholder, 'Номер')])[2]",
+      "action": "input",
+      "title": "#mat-input-15",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//*[@id='mat-input-15']",
+          "(//*[contains(@class, 'mat-input-element')])[17]",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[17]",
+          "(//input[contains(@class, 'mat-input-element')])[17]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[17]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[17]",
+          "(//input[contains(@class, 'mat-form')])[17]",
+          "(//input[contains(@class, 'mat-input')])[17]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[17]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[17]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[17]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[17]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[17]",
+          "//input[contains(@formcontrolname, 'num')]",
+          "(//input[contains(@aria-required, 'true')])[14]",
+          "//input[contains(@aria-describedby, 'mat-error-15')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[17]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "123",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 21,
+      "xpath": "//*[@id='mat-input-16']",
+      "action": "set_date",
+      "title": "#mat-input-16",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-input-element')])[18]",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[18]",
+          "(//input[contains(@class, 'mat-input-element')])[18]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[18]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[18]",
+          "(//input[contains(@class, 'mat-form')])[18]",
+          "(//input[contains(@class, 'mat-input')])[18]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[18]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[18]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[18]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[18]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[18]",
+          "//input[contains(@type, 'date')]",
+          "//input[contains(@max, '2026-03-19')]",
+          "//input[contains(@aria-invalid, 'true')]",
+          "//input[contains(@formcontrolname, 'date')]",
+          "(//input[contains(@aria-required, 'true')])[15]",
+          "//input[contains(@aria-describedby, 'mat-error-16')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[18]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "2026-03-19",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 22,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[20]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[6]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[20]",
+          "(//span[normalize-space()='Продолжить'])[6]",
+          "(//span[contains(@class, 'mat-button')])[58]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[55]",
+          "(//div[@id='cdk-step-content-0-5']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-5']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[6]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[20]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 23,
+      "xpath": "(//*[contains(@class, 'mat-select-min-line')])[6]",
+      "action": "click",
+      "title": "Лаборатория",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-select-placeholder')])[1]",
+          "//span[contains(@class, 'mat-select-placeholder') and normalize-space()='Лаборатория']",
+          "(//span[contains(@class, 'mat-select-min-line')])[6]",
+          "(//span[contains(@class, 'mat-select-placeholder')])[1]",
+          "//div[@id='mat-select-value-5']//span",
+          "//div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-5']//span",
+          "//mat-select[@id='mat-select-4']/div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-5']//span",
+          "(//span[contains(@class, 'mat-select-placeholder') and contains(@class, 'mat-select-min-line')])[1]",
+          "(//span[normalize-space()='Лаборатория'])[1]",
+          "(//span[contains(@class, 'mat-select')])[11]",
+          "(//span[contains(normalize-space(), 'Лаборатория')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-min-line ')])[6]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-placeholder ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'mat-select-placeholder mat-select-min-line ng-tns-')])[1]",
+          "//*[normalize-space()='Лаборатория']",
+          "//span[normalize-space()='Лаборатория']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 24,
+      "xpath": "//span[normalize-space()='Собственная лаборатория']",
+      "action": "click",
+      "title": "Собственная лаборатория",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-option-text')])[1]",
+          "//mat-option[@id='mat-option-27']//span",
+          "//span[contains(@class, 'mat-option-text') and normalize-space()='Собственная лаборатория']",
+          "(//span[contains(@class, 'mat-option-text')])[1]",
+          "(//span[contains(@class, 'mat-option')])[1]",
+          "//div[@id='mat-select-4-panel']/mat-option[@id='mat-option-27']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-4-panel']/mat-option[@id='mat-option-27']//span",
+          "//span[contains(normalize-space(), 'Собственная лаборатория')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Собственная лаборатория']",
+          "//span[normalize-space()='Собственная лаборатория']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 25,
+      "xpath": "//*[@id='mat-input-19']",
+      "action": "input",
+      "title": "Номер аттестата",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-input-element')])[19]",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[19]",
+          "(//input[contains(@class, 'mat-input-element')])[19]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[19]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[19]",
+          "(//input[contains(@class, 'mat-form')])[19]",
+          "(//input[contains(@class, 'mat-input')])[19]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[19]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[19]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[19]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[19]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[19]",
+          "(//input[contains(@aria-required, 'true')])[14]",
+          "//input[contains(@formcontrolname, 'certificate')]",
+          "//input[contains(@aria-describedby, 'mat-error-22')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@data-placeholder, 'Номер аттестата аккредитации')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[19]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "123123123123",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 26,
+      "xpath": "//*[@id='mat-input-20']",
+      "action": "set_date",
+      "title": "#mat-input-20",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-input-element')])[20]",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[20]",
+          "(//input[contains(@class, 'mat-input-element')])[20]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[20]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[20]",
+          "(//input[contains(@class, 'mat-form')])[20]",
+          "(//input[contains(@class, 'mat-input')])[20]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[20]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[20]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[20]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[20]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[20]",
+          "(//input[contains(@type, 'date')])[2]",
+          "(//input[contains(@max, '2026-03-19')])[2]",
+          "(//input[contains(@aria-invalid, 'false')])[20]",
+          "(//input[contains(@aria-required, 'true')])[15]",
+          "//input[contains(@formcontrolname, 'dateCertificate')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[20]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "2026-03-19",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 27,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[22]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[7]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[22]",
+          "(//span[normalize-space()='Продолжить'])[7]",
+          "(//span[contains(@class, 'mat-button')])[64]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[61]",
+          "(//div[@id='cdk-step-content-0-6']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-6']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[7]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[22]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 28,
+      "xpath": "(//*[contains(@class, 'mat-select-min-line')])[7]",
+      "action": "click",
+      "title": "Количество лет",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-select-placeholder')])[1]",
+          "//span[contains(@class, 'mat-select-placeholder') and normalize-space()='Количество лет']",
+          "(//span[contains(@class, 'mat-select-min-line')])[7]",
+          "(//span[contains(@class, 'mat-select-placeholder')])[1]",
+          "//div[@id='mat-select-value-7']//span",
+          "//div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-7']//span",
+          "//mat-select[@id='mat-select-6']/div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-7']//span",
+          "(//span[contains(@class, 'mat-select-placeholder') and contains(@class, 'mat-select-min-line')])[1]",
+          "(//span[normalize-space()='Количество лет'])[1]",
+          "(//span[contains(@class, 'mat-select')])[13]",
+          "(//span[contains(normalize-space(), 'Количество лет')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-min-line ')])[7]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-placeholder ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'mat-select-placeholder mat-select-min-line ng-tns-')])[1]",
+          "//*[normalize-space()='Количество лет']",
+          "//span[normalize-space()='Количество лет']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 29,
+      "xpath": "(//*[contains(@class, 'mat-option-text')])[2]",
+      "action": "click",
+      "title": "1",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//div[@id='mat-select-6-panel']/mat-option[@id='mat-option-42']//span",
+          "//span[contains(@class, 'mat-option-text') and normalize-space()='1']",
+          "(//span[contains(@class, 'mat-option-text')])[2]",
+          "//span[normalize-space()='1']",
+          "(//span[contains(@class, 'mat-option')])[2]",
+          "//mat-option[@id='mat-option-42']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-6-panel']/mat-option[@id='mat-option-42']//span",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='1']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 30,
+      "xpath": "(//*[contains(@class, 'mat-form-field-infix')])[28]",
+      "action": "click",
+      "title": "Количество месяцевКоличество месяцев *",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//div[contains(@class, 'mat-form-field-infix')])[28]",
+          "(//div[contains(@class, 'mat-form')])[192]",
+          "(//div[contains(@class, 'mat-form-field-flex')]//div)[58]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]//div)[58]",
+          "(//mat-form-field[contains(@class, 'mat-form-field')]/div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]//div)[58]",
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-infix ')])[28]",
+          "//div[contains(@class, 'mat-form-field-infix ng-tns-c82-105')]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Количество месяцевКоличество месяцев *']",
+          "//div[normalize-space()='Количество месяцевКоличество месяцев *']"
+        ],
+        "mandatory": true,
+        "stepColor": "#00b0ff",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 31,
+      "xpath": "(//*[contains(@class, 'mat-option-text')])[2]",
+      "action": "click",
+      "title": "1",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//div[@id='mat-select-28-panel']/mat-option[@id='mat-option-82']//span",
+          "//span[contains(@class, 'mat-option-text') and normalize-space()='1']",
+          "(//span[contains(@class, 'mat-option-text')])[2]",
+          "//span[normalize-space()='1']",
+          "(//span[contains(@class, 'mat-option')])[2]",
+          "//mat-option[@id='mat-option-82']//span",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-28-panel']/mat-option[@id='mat-option-82']//span",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='1']"
+        ],
+        "mandatory": true,
+        "stepColor": "#00b0ff",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 32,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[24]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[8]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[24]",
+          "(//span[normalize-space()='Продолжить'])[8]",
+          "(//span[contains(@class, 'mat-button')])[70]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[67]",
+          "(//div[@id='cdk-step-content-0-7']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-7']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[8]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[24]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 33,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[25]",
+      "action": "file_upload",
+      "title": "или выберите его",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='или выберите его'])[1]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[25]",
+          "(//span[normalize-space()='или выберите его'])[1]",
+          "(//span[contains(@class, 'mat-button')])[73]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[70]",
+          "(//div/button[contains(@class, 'mat-focus-indicator')]//span)[70]",
+          "(//div/div/button[contains(@class, 'mat-focus-indicator')]//span)[58]",
+          "(//span[contains(normalize-space(), 'или выберите его')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[25]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='или выберите его']",
+          "//span[normalize-space()='или выберите его']"
+        ],
+        "fileContentBase64": "JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK",
+        "fileName": "test.pdf",
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 34,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[27]",
+      "action": "file_upload",
+      "title": "или выберите его",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='или выберите его'])[2]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[27]",
+          "(//span[normalize-space()='или выберите его'])[2]",
+          "(//span[contains(@class, 'mat-button')])[79]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[76]",
+          "(//div/button[contains(@class, 'mat-focus-indicator')]//span)[76]",
+          "(//div/div/button[contains(@class, 'mat-focus-indicator')]//span)[64]",
+          "(//span[contains(normalize-space(), 'или выберите его')])[2]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[27]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='или выберите его']",
+          "//span[normalize-space()='или выберите его']"
+        ],
+        "fileContentBase64": "JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK",
+        "fileName": "test.pdf",
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 35,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[29]",
+      "action": "file_upload",
+      "title": "или выберите его",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='или выберите его'])[3]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[29]",
+          "(//span[normalize-space()='или выберите его'])[3]",
+          "(//span[contains(@class, 'mat-button')])[85]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[82]",
+          "(//div/button[contains(@class, 'mat-focus-indicator')]//span)[82]",
+          "(//div/div/button[contains(@class, 'mat-focus-indicator')]//span)[70]",
+          "(//span[contains(normalize-space(), 'или выберите его')])[3]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[29]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='или выберите его']",
+          "//span[normalize-space()='или выберите его']"
+        ],
+        "fileContentBase64": "JVBERi0xLjQKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTEKJSVFT0YK",
+        "fileName": "test.pdf",
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 36,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[32]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[9]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[32]",
+          "(//span[normalize-space()='Продолжить'])[9]",
+          "(//span[contains(@class, 'mat-button')])[94]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[91]",
+          "(//div[@id='cdk-step-content-0-8']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-8']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[9]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[32]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 37,
+      "xpath": "(//*[contains(@class, 'mat-select-min-line')])[9]",
+      "action": "click",
+      "title": "Тип оплаты",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-select-placeholder')])[2]",
+          "//span[contains(@class, 'mat-select-placeholder') and normalize-space()='Тип оплаты']",
+          "(//span[contains(@class, 'mat-select-min-line')])[9]",
+          "(//span[contains(@class, 'mat-select-placeholder')])[2]",
+          "//div[@id='mat-select-value-11']//span",
+          "//div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-11']//span",
+          "//mat-select[@id='mat-select-10']/div[contains(@class, 'mat-select-trigger')]/div[@id='mat-select-value-11']//span",
+          "(//span[contains(@class, 'mat-select-placeholder') and contains(@class, 'mat-select-min-line')])[2]",
+          "(//span[normalize-space()='Тип оплаты'])[1]",
+          "(//span[contains(@class, 'mat-select')])[16]",
+          "(//span[contains(normalize-space(), 'Тип оплаты')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-min-line ')])[9]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-select-placeholder ')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'mat-select-placeholder mat-select-min-line ng-tns-')])[2]",
+          "//*[normalize-space()='Тип оплаты']",
+          "//span[normalize-space()='Тип оплаты']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 38,
+      "xpath": "//span[normalize-space()='По реквизитам платежного поручения или УИН']",
+      "action": "click",
+      "title": "По реквизитам платежного поручения или УИН",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-option-text')])[1]",
+          "(//span[contains(@class, 'mat-option-text')])[1]",
+          "//mat-option[@id='mat-option-47']//span",
+          "//div[@id='mat-select-10-panel']/mat-option[@id='mat-option-47']//span",
+          "(//span[contains(@class, 'mat-option')])[1]",
+          "//div[contains(@class, 'mat-select-panel-wrap')]/div[@id='mat-select-10-panel']/mat-option[@id='mat-option-47']//span",
+          "//span[contains(normalize-space(), 'По реквизитам платежного поруч')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-option-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 39,
+      "xpath": "//*[@id='mat-input-21']",
+      "action": "input",
+      "title": "#mat-input-21",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-input-element')])[21]",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[21]",
+          "(//input[contains(@class, 'mat-input-element')])[21]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[21]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[21]",
+          "(//input[contains(@class, 'mat-form')])[21]",
+          "(//input[contains(@class, 'mat-input')])[21]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[21]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[21]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[21]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[21]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[21]",
+          "(//input[contains(@aria-required, 'true')])[16]",
+          "//input[contains(@formcontrolname, 'paymentNumber')]",
+          "//input[contains(@aria-describedby, 'mat-error-24')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@data-placeholder, 'Номер платежного поручения или УИН')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[21]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "11111111111",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 40,
+      "xpath": "//*[@id='mat-input-22']",
+      "action": "set_date",
+      "title": "#mat-input-22",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//*[contains(@class, 'mat-input-element')])[22]",
+          "(//*[contains(@class, 'mat-form-field-autofill-control')])[22]",
+          "(//input[contains(@class, 'mat-input-element')])[22]",
+          "(//input[contains(@class, 'mat-form-field-autofill-control')])[22]",
+          "(//input[contains(@class, 'mat-input-element') and contains(@class, 'mat-form-field-autofill-control')])[22]",
+          "(//input[contains(@class, 'mat-form')])[22]",
+          "(//input[contains(@class, 'mat-input')])[22]",
+          "(//div[contains(@class, 'mat-form-field-infix')]//input)[22]",
+          "(//div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[22]",
+          "(//div[contains(@class, 'mat-form-field-wrapper')]/div[contains(@class, 'mat-form-field-flex')]/div[contains(@class, 'mat-form-field-infix')]//input)[22]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-input-element ')])[22]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' mat-form-field-autofill-control ')])[22]",
+          "(//input[contains(@type, 'date')])[3]",
+          "(//input[contains(@max, '2026-03-19')])[3]",
+          "(//input[contains(@aria-invalid, 'false')])[22]",
+          "(//input[contains(@aria-required, 'true')])[17]",
+          "//input[contains(@formcontrolname, 'paymentDate')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//input[contains(@class, 'mat-input-element mat-form-field-autofill-control ')])[22]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "2026-03-19",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 41,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[34]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[10]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[34]",
+          "(//span[normalize-space()='Продолжить'])[10]",
+          "(//span[contains(@class, 'mat-button')])[100]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[97]",
+          "(//div[@id='cdk-step-content-0-9']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-9']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[10]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[34]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 42,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[36]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[11]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[36]",
+          "(//span[normalize-space()='Продолжить'])[11]",
+          "(//span[contains(@class, 'mat-button')])[106]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[103]",
+          "(//div[@id='cdk-step-content-0-10']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-10']/button[contains(@class, 'mat-focus-indicator')]//span)[4]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[11]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[36]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 43,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[45]",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Продолжить'])[12]",
+          "(//span[contains(@class, 'mat-button-wrapper')])[45]",
+          "(//span[normalize-space()='Продолжить'])[12]",
+          "(//span[contains(@class, 'mat-button')])[133]",
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[130]",
+          "(//div[contains(@class, 'mat-dialog-actions')]/button[contains(@class, 'mat-focus-indicator')]//span)[1]",
+          "(//app-agreement/div[contains(@class, 'mat-dialog-actions')]/button[contains(@class, 'mat-focus-indicator')]//span)[1]",
+          "(//span[contains(normalize-space(), 'Продолжить')])[12]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[45]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 44,
+      "xpath": "(//*[contains(@class, 'mat-button-wrapper')])[45]",
+      "action": "click",
+      "title": "Подписать и отправить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//button[contains(@class, 'mat-focus-indicator')]//span)[130]",
+          "(//div[contains(@class, 'mat-horizontal-content-container')]/div[@id='cdk-step-content-0-11']/button[contains(@class, 'mat-focus-indicator')]//span)[7]",
+          "//span[contains(@class, 'mat-button-wrapper') and normalize-space()='Подписать и отправить']",
+          "(//span[contains(@class, 'mat-button-wrapper')])[45]",
+          "//span[normalize-space()='Подписать и отправить']",
+          "(//span[contains(@class, 'mat-button')])[133]",
+          "(//div[@id='cdk-step-content-0-11']/button[contains(@class, 'mat-focus-indicator')]//span)[7]",
+          "//span[contains(normalize-space(), 'Подписать и отправить')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' mat-button-wrapper ')])[45]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//*[normalize-space()='Подписать и отправить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    }
+  ],
+  "id": "test_utm_grant_20260319_160802"
+}

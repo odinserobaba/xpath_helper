@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XPath Helper — Flow Editor</title>
+  <style>
+    :root { --bg:#0f0f1a; --bg2:#1a1a2e; --bg3:#16213e; --text:#eee; --muted:#aaa; --accent:#00d4aa; --err:#e74c3c; --ok:#2ecc71; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .app { display:grid; grid-template-columns: 320px 1fr 360px; height:100vh; gap:10px; padding:10px; }
+    .panel { background:var(--bg2); border:1px solid #2a2a4a; border-radius:10px; padding:12px; overflow:auto; }
+    .title { margin:0 0 8px 0; color:var(--accent); font-size:16px; }
+    .hint { color:var(--muted); font-size:12px; line-height:1.4; margin:6px 0; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn { display:inline-flex; align-items:center; gap:8px; background: linear-gradient(135deg, var(--accent), #00b894); color:#000; border:0; border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    .btn2 { background:var(--bg3); color:var(--text); border:1px solid #2a2a4a; border-radius:10px; padding:8px 10px; font-weight:600; cursor:pointer; text-decoration:none; }
+    .btn2:hover { border-color:var(--accent); }
+    input, textarea, select { width:100%; background:var(--bg3); border:1px solid #2a2a4a; border-radius:8px; padding:8px; color:var(--text); font-size:13px; }
+    textarea { min-height:90px; resize:vertical; }
+    .scenarioList { display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow:auto; margin-top:8px; }
+    .item { border:1px solid #2a2a4a; border-radius:8px; padding:8px; background:#0a0a14; cursor:pointer; }
+    .item:hover, .item.sel { border-color:var(--accent); }
+    .small { font-size:12px; color:var(--muted); }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background: rgba(0,212,170,0.2); color:var(--accent); }
+    .flowHost { height:100%; min-height:420px; border:1px solid #2a2a4a; border-radius:10px; overflow:hidden; background:#0a0a14; }
+    .groupItem { border:1px solid #2a2a4a; border-radius:8px; padding:8px; margin-top:8px; background:#0a0a14; }
+    .inlineColor { width:38px; padding:0; height:32px; border-radius:6px; border:1px solid #2a2a4a; }
+    @media (max-width: 1200px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto; height:auto; min-height:100vh; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import React, { useCallback, useEffect, useMemo, useState } from 'https://esm.sh/react@18.3.1';
+    import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client';
+    import ReactFlow, {
+      Background,
+      Controls,
+      MiniMap,
+      addEdge,
+      applyEdgeChanges,
+      applyNodeChanges,
+      MarkerType,
+      useNodesState,
+      useEdgesState,
+    } from 'https://esm.sh/reactflow@11.11.4';
+    import 'https://esm.sh/reactflow@11.11.4/dist/style.css';
+
+    const STEP_GAP_X = 260;
+    const STEP_GAP_Y = 130;
+
+    const emptyFlow = { nodes: [], edges: [], groups: [] };
+
+    function toast(msg) {
+      alert(msg);
+    }
+
+    function safeArray(v) {
+      return Array.isArray(v) ? v : [];
+    }
+
+    function buildInitialFlowFromSteps(steps) {
+      const nodes = safeArray(steps).map((s, idx) => ({
+        id: `step-${s.step || idx + 1}`,
+        type: 'default',
+        position: { x: 60 + (idx % 4) * STEP_GAP_X, y: 60 + Math.floor(idx / 4) * STEP_GAP_Y },
+        data: {
+          stepRef: Number(s.step || idx + 1),
+          title: String(s.title || `Step ${s.step || idx + 1}`),
+          action: String(s.action || ''),
+          xpath: String(s.xpath || ''),
+          comment: typeof s.comment === 'string' ? s.comment : '',
+        },
+      }));
+
+      const edges = [];
+      for (let i = 0; i < nodes.length - 1; i += 1) {
+        edges.push({
+          id: `e-${nodes[i].id}-${nodes[i + 1].id}`,
+          source: nodes[i].id,
+          target: nodes[i + 1].id,
+          type: 'smoothstep',
+          markerEnd: { type: MarkerType.ArrowClosed },
+          data: { kind: 'next' },
+        });
+      }
+      return { nodes, edges, groups: [] };
+    }
+
+    function normalizeFlow(rawFlow, steps) {
+      if (!rawFlow || typeof rawFlow !== 'object') return buildInitialFlowFromSteps(steps);
+      const nodes = safeArray(rawFlow.nodes).map((n, idx) => ({
+        id: String(n.id || `step-${idx + 1}`),
+        type: 'default',
+        position: {
+          x: Number(n?.position?.x ?? (60 + (idx % 4) * STEP_GAP_X)),
+          y: Number(n?.position?.y ?? (60 + Math.floor(idx / 4) * STEP_GAP_Y)),
+        },
+        data: {
+          stepRef: Number(n?.stepRef ?? idx + 1),
+          title: String(n?.title || `Step ${idx + 1}`),
+          action: String(n?.action || ''),
+          xpath: String(n?.xpath || ''),
+          comment: typeof n?.comment === 'string' ? n.comment : '',
+        },
+      }));
+      const edges = safeArray(rawFlow.edges).map((e, idx) => ({
+        id: String(e.id || `e-${idx + 1}`),
+        source: String(e.source || ''),
+        target: String(e.target || ''),
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { kind: String(e.kind || e?.data?.kind || 'next') },
+      })).filter((e) => e.source && e.target);
+      const groups = safeArray(rawFlow.groups).map((g, idx) => ({
+        id: String(g.id || `group-${idx + 1}`),
+        title: String(g.title || `Group ${idx + 1}`),
+        color: String(g.color || '#00d4aa'),
+        nodeIds: safeArray(g.nodeIds).map((x) => String(x)),
+      }));
+      if (!nodes.length) return buildInitialFlowFromSteps(steps);
+      return { nodes, edges, groups };
+    }
+
+    function toFlowPayload(nodes, edges, groups) {
+      return {
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          stepRef: Number(n?.data?.stepRef || 0),
+          position: { x: Number(n.position?.x || 0), y: Number(n.position?.y || 0) },
+          title: String(n?.data?.title || ''),
+          action: String(n?.data?.action || ''),
+          xpath: String(n?.data?.xpath || ''),
+          comment: String(n?.data?.comment || ''),
+        })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          kind: String(e?.data?.kind || 'next'),
+        })),
+        groups: groups.map((g) => ({
+          id: g.id,
+          title: g.title,
+          color: g.color,
+          nodeIds: safeArray(g.nodeIds),
+        })),
+      };
+    }
+
+    function syncBranchParams(steps, flowNodes, flowEdges) {
+      const stepToNode = new Map();
+      const nodeToStep = new Map();
+      for (const n of flowNodes) {
+        const stepRef = Number(n?.data?.stepRef || 0);
+        if (stepRef > 0) {
+          stepToNode.set(stepRef, n.id);
+          nodeToStep.set(n.id, stepRef);
+        }
+      }
+      const outgoing = new Map();
+      for (const e of flowEdges) {
+        if (!e.source || !e.target) continue;
+        const arr = outgoing.get(e.source) || [];
+        arr.push(e);
+        outgoing.set(e.source, arr);
+      }
+
+      return safeArray(steps).map((step) => {
+        if (!step || step.action !== 'branch') return step;
+        const stepNo = Number(step.step || 0);
+        const sourceNodeId = stepToNode.get(stepNo);
+        if (!sourceNodeId) return step;
+
+        const outEdges = outgoing.get(sourceNodeId) || [];
+        const yesEdge = outEdges.find((e) => (e?.data?.kind || 'next') === 'yes') || outEdges[0];
+        const noEdge = outEdges.find((e) => (e?.data?.kind || 'next') === 'no') || outEdges[1];
+
+        const yesNodeId = yesEdge?.target;
+        const noNodeId = noEdge?.target;
+        const yesStep = yesNodeId ? nodeToStep.get(yesNodeId) : null;
+        const noStep = noNodeId ? nodeToStep.get(noNodeId) : null;
+
+        const params = { ...(step.params || {}) };
+        if (yesStep) params.nextStep = Number(yesStep);
+        if (noStep) params.nextElseStep = Number(noStep);
+        if (yesNodeId) params.nextId = String(yesNodeId);
+        if (noNodeId) params.nextElseId = String(noNodeId);
+        return { ...step, params };
+      });
+    }
+
+    function App() {
+      const [scenarios, setScenarios] = useState([]);
+      const [selectedScenarioId, setSelectedScenarioId] = useState('');
+      const [scenario, setScenario] = useState(null);
+      const [groups, setGroups] = useState([]);
+      const [selectedNodeId, setSelectedNodeId] = useState('');
+      const [selectedGroupId, setSelectedGroupId] = useState('');
+      const [edgeKind, setEdgeKind] = useState('next');
+      const [loading, setLoading] = useState(false);
+
+      const [nodes, setNodes] = useNodesState([]);
+      const [edges, setEdges] = useEdgesState([]);
+
+      const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId) || null, [nodes, selectedNodeId]);
+      const selectedScenario = useMemo(() => scenarios.find((s) => s.id === selectedScenarioId) || null, [scenarios, selectedScenarioId]);
+
+      const loadScenarios = useCallback(async () => {
+        try {
+          const r = await fetch('/api/scenarios');
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error || 'Failed to load scenarios');
+          setScenarios(j.scenarios || []);
+        } catch (e) {
+          toast(`Ошибка загрузки сценариев: ${e?.message || e}`);
+        }
+      }, []);
+
+      const loadScenario = useCallback(async (id) => {
+        if (!id) return;
+        setLoading(true);
+        try {
+          const r = await fetch(`/api/scenarios/${id}`);
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error || 'Failed to load scenario');
+          const src = j.scenario || {};
+          const flow = normalizeFlow(src.flow, src.steps || []);
+          setScenario(src);
+          setNodes(flow.nodes);
+          setEdges(flow.edges);
+          setGroups(flow.groups);
+          setSelectedNodeId(flow.nodes[0]?.id || '');
+          setSelectedGroupId('');
+        } catch (e) {
+          toast(`Ошибка загрузки сценария: ${e?.message || e}`);
+        } finally {
+          setLoading(false);
+        }
+      }, [setEdges, setNodes]);
+
+      useEffect(() => { loadScenarios(); }, [loadScenarios]);
+      useEffect(() => { if (selectedScenarioId) loadScenario(selectedScenarioId); }, [selectedScenarioId, loadScenario]);
+
+      const onConnect = useCallback((connection) => {
+        const id = `e-${connection.source}-${connection.target}-${Date.now()}`;
+        setEdges((eds) => addEdge({
+          ...connection,
+          id,
+          type: 'smoothstep',
+          markerEnd: { type: MarkerType.ArrowClosed },
+          data: { kind: edgeKind },
+          label: edgeKind,
+        }, eds));
+      }, [edgeKind, setEdges]);
+
+      const onNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), [setNodes]);
+      const onEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), [setEdges]);
+
+      const updateSelectedNodeData = useCallback((patch) => {
+        if (!selectedNodeId) return;
+        setNodes((prev) => prev.map((n) => n.id === selectedNodeId ? { ...n, data: { ...n.data, ...patch } } : n));
+      }, [selectedNodeId, setNodes]);
+
+      const addGroup = useCallback(() => {
+        const id = `group-${Date.now()}`;
+        setGroups((prev) => [...prev, { id, title: 'Новая группа', color: '#00d4aa', nodeIds: [] }]);
+        setSelectedGroupId(id);
+      }, []);
+
+      const updateGroup = useCallback((groupId, patch) => {
+        setGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, ...patch } : g));
+      }, []);
+
+      const deleteGroup = useCallback((groupId) => {
+        setGroups((prev) => prev.filter((g) => g.id !== groupId));
+        if (selectedGroupId === groupId) setSelectedGroupId('');
+      }, [selectedGroupId]);
+
+      const assignNodeToSelectedGroup = useCallback(() => {
+        if (!selectedNodeId || !selectedGroupId) return;
+        setGroups((prev) => prev.map((g) => {
+          if (g.id !== selectedGroupId) return g;
+          const set = new Set(g.nodeIds || []);
+          set.add(selectedNodeId);
+          return { ...g, nodeIds: [...set] };
+        }));
+      }, [selectedNodeId, selectedGroupId]);
+
+      const removeNodeFromGroup = useCallback((groupId, nodeId) => {
+        setGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, nodeIds: (g.nodeIds || []).filter((x) => x !== nodeId) } : g));
+      }, []);
+
+      const saveScenario = useCallback(async () => {
+        if (!selectedScenarioId || !scenario) return;
+        try {
+          const currentFlow = toFlowPayload(nodes, edges, groups);
+          let steps = safeArray(scenario.steps).map((s) => ({ ...s }));
+
+          // Sync editable node fields back to steps.
+          const byStep = new Map(nodes.map((n) => [Number(n?.data?.stepRef || 0), n]));
+          steps = steps.map((s) => {
+            const n = byStep.get(Number(s.step || 0));
+            if (!n) return s;
+            return {
+              ...s,
+              title: String(n?.data?.title || s.title || ''),
+              xpath: String(n?.data?.xpath || s.xpath || ''),
+              comment: String(n?.data?.comment || ''),
+            };
+          });
+
+          steps = syncBranchParams(steps, nodes, edges);
+          const payload = {
+            ...scenario,
+            id: selectedScenarioId,
+            steps,
+            flow: currentFlow,
+            exportedAt: new Date().toISOString(),
+          };
+          const r = await fetch(`/api/scenarios/${selectedScenarioId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error || 'Save failed');
+          setScenario(payload);
+          toast('Сценарий сохранен');
+          loadScenarios();
+        } catch (e) {
+          toast(`Ошибка сохранения: ${e?.message || e}`);
+        }
+      }, [selectedScenarioId, scenario, nodes, edges, groups, loadScenarios]);
+
+      const selectedGroup = useMemo(() => groups.find((g) => g.id === selectedGroupId) || null, [groups, selectedGroupId]);
+
+      return (
+        React.createElement('div', { className: 'app' },
+          React.createElement('section', { className: 'panel' },
+            React.createElement('h1', { className: 'title' }, 'Flow Editor'),
+            React.createElement('div', { className: 'row' },
+              React.createElement('a', { className: 'btn2', href: '/' }, '← Web Runner'),
+              React.createElement('button', { className: 'btn2', type: 'button', onClick: loadScenarios }, '↻ Сценарии')
+            ),
+            React.createElement('p', { className: 'hint' }, 'Выберите сценарий и редактируйте последовательность как блок-схему.'),
+            React.createElement('div', { className: 'scenarioList' },
+              scenarios.map((s) =>
+                React.createElement('div', {
+                  key: s.id,
+                  className: `item ${selectedScenarioId === s.id ? 'sel' : ''}`,
+                  onClick: () => setSelectedScenarioId(s.id),
+                },
+                React.createElement('div', null, s.name || s.file || s.id),
+                React.createElement('div', { className: 'small' }, `${s.file} • ${s.stepsCount} steps`)
+                )
+              )
+            ),
+            React.createElement('div', { style: { marginTop: 10 } },
+              React.createElement('button', { className: 'btn', type: 'button', disabled: !selectedScenarioId || loading, onClick: saveScenario }, loading ? 'Загрузка...' : 'Сохранить')
+            ),
+            selectedScenario ? React.createElement('p', { className: 'hint' }, `Текущий: ${selectedScenario.name || selectedScenario.id}`) : null
+          ),
+
+          React.createElement('section', { className: 'panel', style: { padding: 8 } },
+            React.createElement('div', { className: 'row', style: { justifyContent: 'space-between', marginBottom: 8 } },
+              React.createElement('span', { className: 'small' }, 'Связи: перетяните коннектор между узлами'),
+              React.createElement('div', { className: 'row' },
+                React.createElement('label', { className: 'small' }, 'Тип новой связи'),
+                React.createElement('select', { value: edgeKind, onChange: (e) => setEdgeKind(e.target.value), style: { width: 120 } },
+                  React.createElement('option', { value: 'next' }, 'next'),
+                  React.createElement('option', { value: 'yes' }, 'yes'),
+                  React.createElement('option', { value: 'no' }, 'no')
+                )
+              )
+            ),
+            React.createElement('div', { className: 'flowHost' },
+              React.createElement(ReactFlow, {
+                nodes,
+                edges: edges.map((e) => ({ ...e, label: e?.data?.kind || '' })),
+                onNodesChange,
+                onEdgesChange,
+                onConnect,
+                onNodeClick: (_, n) => setSelectedNodeId(n.id),
+                fitView: true,
+              },
+              React.createElement(Background, { gap: 16, size: 1 }),
+              React.createElement(MiniMap, null),
+              React.createElement(Controls, null))
+            )
+          ),
+
+          React.createElement('section', { className: 'panel' },
+            React.createElement('h2', { className: 'title', style: { fontSize: 14 } }, 'Свойства узла'),
+            selectedNode ? React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'small' }, `Node: ${selectedNode.id}`),
+              React.createElement('div', { className: 'small' }, `Step: ${selectedNode?.data?.stepRef || '-'}`),
+              React.createElement('label', null, 'Title'),
+              React.createElement('input', {
+                value: selectedNode?.data?.title || '',
+                onChange: (e) => updateSelectedNodeData({ title: e.target.value }),
+              }),
+              React.createElement('label', null, 'Action'),
+              React.createElement('input', {
+                value: selectedNode?.data?.action || '',
+                onChange: (e) => updateSelectedNodeData({ action: e.target.value }),
+              }),
+              React.createElement('label', null, 'XPath'),
+              React.createElement('textarea', {
+                value: selectedNode?.data?.xpath || '',
+                onChange: (e) => updateSelectedNodeData({ xpath: e.target.value }),
+              }),
+              React.createElement('label', null, 'Комментарий'),
+              React.createElement('textarea', {
+                value: selectedNode?.data?.comment || '',
+                onChange: (e) => updateSelectedNodeData({ comment: e.target.value }),
+              }),
+              React.createElement('div', { className: 'row', style: { marginTop: 8 } },
+                React.createElement('select', {
+                  value: selectedGroupId,
+                  onChange: (e) => setSelectedGroupId(e.target.value),
+                  style: { flex: 1 },
+                },
+                React.createElement('option', { value: '' }, 'Выбрать группу'),
+                groups.map((g) => React.createElement('option', { key: g.id, value: g.id }, g.title))
+                ),
+                React.createElement('button', { className: 'btn2', type: 'button', onClick: assignNodeToSelectedGroup }, 'В группу')
+              )
+            ) : React.createElement('p', { className: 'hint' }, 'Кликните по узлу на канве'),
+
+            React.createElement('hr', { style: { borderColor: '#2a2a4a', margin: '14px 0' } }),
+            React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } },
+              React.createElement('h2', { className: 'title', style: { fontSize: 14, margin: 0 } }, 'Группы'),
+              React.createElement('button', { className: 'btn2', type: 'button', onClick: addGroup }, '+ Группа')
+            ),
+            groups.length === 0 ? React.createElement('p', { className: 'hint' }, 'Пока нет групп') : null,
+            groups.map((g) => React.createElement('div', { key: g.id, className: 'groupItem' },
+              React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } },
+                React.createElement('strong', null, g.title),
+                React.createElement('button', { className: 'btn2', type: 'button', onClick: () => deleteGroup(g.id) }, 'Удалить')
+              ),
+              React.createElement('label', null, 'Название'),
+              React.createElement('input', {
+                value: g.title,
+                onChange: (e) => updateGroup(g.id, { title: e.target.value }),
+              }),
+              React.createElement('label', null, 'Цвет'),
+              React.createElement('input', {
+                className: 'inlineColor',
+                type: 'color',
+                value: g.color || '#00d4aa',
+                onChange: (e) => updateGroup(g.id, { color: e.target.value }),
+              }),
+              React.createElement('div', { className: 'hint' }, `Узлы: ${(g.nodeIds || []).join(', ') || 'нет'}`),
+              (g.nodeIds || []).map((nodeId) => React.createElement('div', { key: `${g.id}-${nodeId}`, className: 'row' },
+                React.createElement('span', { className: 'small', style: { flex: 1 } }, nodeId),
+                React.createElement('button', { className: 'btn2', type: 'button', onClick: () => removeNodeFromGroup(g.id, nodeId) }, 'Убрать')
+              ))
+            )),
+            selectedGroup ? React.createElement('p', { className: 'hint' }, `Выбрана группа: ${selectedGroup.title}`) : null
+          )
+        )
+      );
+    }
+
+    createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>

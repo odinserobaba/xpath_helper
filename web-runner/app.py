@@ -39,7 +39,7 @@ app.add_middleware(
     allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
     allow_origin_regex=r"^chrome-extension://.*$",
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -1230,6 +1230,48 @@ def api_delete_scenario(scenario_id: str, request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+@app.put("/api/scenarios/{scenario_id}", response_class=JSONResponse)
+async def api_update_scenario(scenario_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+
+    raw = await request.json()
+    try:
+        name, steps = _parse_scenario(raw)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Invalid scenario format: {e}"}, status_code=400)
+
+    if not isinstance(raw, dict):
+        return JSONResponse({"ok": False, "error": "Scenario must be an object"}, status_code=400)
+
+    # Preserve stable id when editing existing scenario.
+    payload = dict(raw)
+    payload["id"] = scenario_id
+    if not payload.get("name"):
+        payload["name"] = name or scenario_id
+    if "version" not in payload:
+        payload["version"] = 1
+
+    _snapshot_scenario(scenario_id)
+    _write_json(p, payload)
+    _jsonl_append(
+        LOG_DIR / "web-runner.log",
+        {
+            "ts": time.time(),
+            "level": "info",
+            "event": "scenario_updated",
+            "scenarioId": scenario_id,
+            "name": str(payload.get("name") or scenario_id),
+            "stepsCount": len(steps),
+        },
+    )
+    return JSONResponse({"ok": True, "scenario": {"id": scenario_id, "name": str(payload.get("name") or scenario_id), "stepsCount": len(steps)}})
+
+
 @app.post("/api/runs", response_class=JSONResponse)
 async def api_run_scenario(request: Request) -> JSONResponse:
     unauthorized = _require_token(request)
@@ -1636,6 +1678,10 @@ def index(request: Request) -> HTMLResponse:
             "default_viewport": "1280x720",
         },
     )
+
+@app.get("/flow-editor", response_class=HTMLResponse)
+def flow_editor_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("flow_editor.html", {"request": request})
 
 
 @app.post("/run", response_class=HTMLResponse)
