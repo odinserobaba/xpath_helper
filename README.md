@@ -1,5 +1,81 @@
 # XPath Helper Pro
 
+[![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
+[![Playwright](https://img.shields.io/badge/Playwright-Python-45ba4b?logo=playwright&logoColor=white)](https://playwright.dev/python/)
+[![Python 3](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Contributing](https://img.shields.io/badge/Contributing-CONTRIBUTING.md-00d4aa)](CONTRIBUTING.md)
+
+**Запись шагов в браузере → JSON на диске → те же сценарии в Playwright:** инспектор XPath, список шагов, **Web Runner** (FastAPI), **Flow Editor** (блок-схема), live-прогон, отчёты и история версий — без облачной привязки к одному вендору.
+
+### Social proof
+
+> Блок для внешних сигналов доверия — добавьте при публикации на GitHub: **⭐ Stars**, ссылку на статью/доклад, цитату коллеги или кейс внедрения. Пока репозиторий только локальный — оставьте заглушку или удалите подзаголовок.
+
+<a id="audience"></a>
+
+## Для кого этот проект
+
+| Аудитория | Зачем |
+|-----------|--------|
+| **QA / SDET** | Быстро собирать сценарии с XPath, гонять их тем же движком в CI и локально |
+| **Команды без единого коммерческого Low-Code** | Прозрачный JSON, свой раннер, расширение под Chrome |
+| **Обучение e2e** | Видно связку «селектор → шаг → прогон Playwright» в одном контуре |
+| **Разработчики расширений** | Пример MV3 side panel + интеграция с локальным API |
+
+<a id="differentiators"></a>
+
+## Ключевые отличия
+
+- **Один сценарий — два мира UI:** запись в расширении и визуальное редактирование в **Flow Editor** (`/flow-editor`), общий JSON.
+- **Fallback XPath** и настройка стабильности — не «один хрупкий селектор».
+- **Локальный раннер** (Playwright + FastAPI): live-страница прогона, остановка между шагами, токен для API.
+- **История сценариев** (`.history`), дымовые метки, labels — удобно для регресса и отчётности.
+- **Экспорт** в шаблоны (в т.ч. Python/POM) — не только «внутренняя магия».
+
+<a id="screenshots"></a>
+
+## Скриншоты и демо
+
+Текст читают не все: **1–3 скриншота или коротких GIF** сильно повышают доверие к инструменту.
+
+**Рекомендуемые ролики (15–30 с каждый), затем GIF** (например [ezgif.com/video-to-gif](https://ezgif.com/video-to-gif)):
+
+1. Запись шага в расширении (инспектор → в список → в раннер).
+2. Редактирование сценария в **Flow Editor**.
+3. Запуск в **Web Runner** и live-прогресс.
+
+После экспорта положите файлы в [`docs/media/`](docs/media/) и раскомментируйте блок ниже (или вставьте свои пути):
+
+<!--
+<p align="center">
+  <img src="docs/media/extension-sidepanel.png" alt="Расширение: список шагов" width="720" />
+</p>
+<p align="center">
+  <img src="docs/media/flow-editor.png" alt="Flow Editor" width="720" />
+</p>
+<p align="center">
+  <img src="docs/media/runner-live.png" alt="Web Runner: live" width="720" />
+</p>
+-->
+
+*Пока файлов нет — блок закомментирован, чтобы не ломать отображение на GitHub.*
+
+<a id="repo-nav"></a>
+
+## Навигация по репозиторию
+
+| Файл | Назначение |
+|------|------------|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Как предлагать изменения и собирать проект |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Ожидаемое поведение в обсуждениях |
+| [LICENSE](LICENSE) | MIT — использование и указание авторства |
+| [docs/user-guide/](docs/user-guide/README.md) | Пошаговый гайд для пользователя |
+
+**Topics на GitHub** (настройки репозитория): `qa-automation`, `playwright`, `chrome-extension`, `e2e-testing`, `test-automation`, `python`, `xpath`.
+
+---
+
 **XPath Helper Pro** = Chrome extension для записи сценариев + локальный **Web Runner** для запуска сценариев в **Python Playwright** (UI + CLI/CI).
 
 ---
@@ -65,6 +141,10 @@ cd web-runner
 
 ## Содержание
 
+- [Для кого этот проект](#audience)
+- [Ключевые отличия](#differentiators)
+- [Скриншоты и демо](#screenshots)
+- [Навигация по репозиторию](#repo-nav)
 - [Концепция и архитектура](#концепция-и-архитектура)
 - [Часть 1. Расширение (Chrome MV3)](#часть-1-расширение-chrome-mv3)
   - [Установка](#установка)
@@ -837,4 +917,4 @@ cd web-runner
 
 ## Лицензия
 
-Проект можно использовать и дорабатывать по своему усмотрению.
+Распространяется под [MIT License](LICENSE): код можно использовать, изучать и встраивать с сохранением уведомления об авторстве. Подробности участия — в [CONTRIBUTING.md](CONTRIBUTING.md).

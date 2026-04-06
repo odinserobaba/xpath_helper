@@ -1,7 +1,7 @@
 {
-  "name": "new_prolong",
+  "name": "new_prolong — stabilized (2026-04-06 09:45)",
   "version": 1,
-  "exportedAt": "2026-04-06T06:38:09.325Z",
+  "exportedAt": "2026-04-06T07:31:03.833Z",
   "steps": [
     {
       "step": 1,
@@ -299,7 +299,7 @@
     },
     {
       "step": 15,
-      "xpath": "//span[normalize-space()='Верно']",
+      "xpath": "//span[contains(@class, 'ng-star-inserted')]",
       "action": "click",
       "title": "Верно",
       "tags": [],
@@ -320,7 +320,7 @@
     },
     {
       "step": 16,
-      "xpath": "//span[normalize-space()='Верно']",
+      "xpath": "//span[contains(@class, 'ng-star-inserted')]",
       "action": "click",
       "title": "Верно",
       "tags": [],
@@ -675,7 +675,7 @@
       }
     }
   ],
-  "id": "new_prolong_20260320_121008",
+  "id": "derived_42b5d8977c8d_20260406_094542",
   "runnerSettings": {
     "startUrl": "",
     "baseUrl": "",
@@ -700,8 +700,8 @@
         "id": "step-1",
         "stepRef": 1,
         "position": {
-          "x": 40,
-          "y": 40
+          "x": 48,
+          "y": 48
         },
         "title": "Начало",
         "action": "start",
@@ -717,8 +717,8 @@
         "id": "step-2",
         "stepRef": 2,
         "position": {
-          "x": 420,
-          "y": 40
+          "x": 432,
+          "y": 48
         },
         "title": "",
         "action": "navigate",
@@ -734,8 +734,8 @@
         "id": "step-3",
         "stepRef": 3,
         "position": {
-          "x": 40,
-          "y": 280
+          "x": 48,
+          "y": 288
         },
         "title": "Начать",
         "action": "click",
@@ -751,8 +751,8 @@
         "id": "step-4",
         "stepRef": 4,
         "position": {
-          "x": 420,
-          "y": 280
+          "x": 432,
+          "y": 288
         },
         "title": "Производство",
         "action": "click",
@@ -768,8 +768,8 @@
         "id": "step-5",
         "stepRef": 5,
         "position": {
-          "x": 40,
-          "y": 520
+          "x": 48,
+          "y": 528
         },
         "title": "Производство этилового спирта, алкогольной и спирт",
         "action": "click",
@@ -785,8 +785,8 @@
         "id": "step-6",
         "stepRef": 6,
         "position": {
-          "x": 420,
-          "y": 520
+          "x": 432,
+          "y": 528
         },
         "title": "Начните печатать и выберите вариант из списка, нажав стрелку Вниз",
         "action": "click",
@@ -802,8 +802,8 @@
         "id": "step-7",
         "stepRef": 7,
         "position": {
-          "x": 40,
-          "y": 760
+          "x": 48,
+          "y": 768
         },
         "title": "Производство, хранение и поставки произведённого э",
         "action": "click",
@@ -819,8 +819,8 @@
         "id": "step-8",
         "stepRef": 8,
         "position": {
-          "x": 420,
-          "y": 760
+          "x": 432,
+          "y": 768
         },
         "title": "Продолжить",
         "action": "click",
@@ -836,8 +836,8 @@
         "id": "step-9",
         "stepRef": 9,
         "position": {
-          "x": 40,
-          "y": 1000
+          "x": 48,
+          "y": 1008
         },
         "title": "В электронном виде",
         "action": "click",
@@ -853,8 +853,8 @@
         "id": "step-10",
         "stepRef": 10,
         "position": {
-          "x": 420,
-          "y": 1000
+          "x": 432,
+          "y": 1008
         },
         "title": "5 лет",
         "action": "click",
@@ -870,8 +870,8 @@
         "id": "step-11",
         "stepRef": 11,
         "position": {
-          "x": 40,
-          "y": 1240
+          "x": 48,
+          "y": 1248
         },
         "title": "Перейти к заявлению",
         "action": "click",
@@ -887,8 +887,8 @@
         "id": "step-12",
         "stepRef": 12,
         "position": {
-          "x": 420,
-          "y": 1240
+          "x": 432,
+          "y": 1248
         },
         "title": "Верно",
         "action": "click",
@@ -904,8 +904,8 @@
         "id": "step-13",
         "stepRef": 13,
         "position": {
-          "x": 40,
-          "y": 1480
+          "x": 48,
+          "y": 1488
         },
         "title": "Верно",
         "action": "click",
@@ -921,8 +921,8 @@
         "id": "step-14",
         "stepRef": 14,
         "position": {
-          "x": 420,
-          "y": 1480
+          "x": 432,
+          "y": 1488
         },
         "title": "Верно",
         "action": "click",
@@ -938,12 +938,12 @@
         "id": "step-15",
         "stepRef": 15,
         "position": {
-          "x": 40,
-          "y": 1720
+          "x": 48,
+          "y": 1728
         },
         "title": "Верно",
         "action": "click",
-        "xpath": "//span[normalize-space()='Верно']",
+        "xpath": "//span[contains(@class, 'ng-star-inserted')]",
         "comment": "",
         "note": "",
         "ticket": "",
@@ -955,12 +955,12 @@
         "id": "step-16",
         "stepRef": 16,
         "position": {
-          "x": 420,
-          "y": 1720
+          "x": 432,
+          "y": 1728
         },
         "title": "Верно",
         "action": "click",
-        "xpath": "//span[normalize-space()='Верно']",
+        "xpath": "//span[contains(@class, 'ng-star-inserted')]",
         "comment": "",
         "note": "",
         "ticket": "",
@@ -972,8 +972,8 @@
         "id": "step-17",
         "stepRef": 17,
         "position": {
-          "x": 40,
-          "y": 1960
+          "x": 48,
+          "y": 1968
         },
         "title": "Номер",
         "action": "input",
@@ -989,8 +989,8 @@
         "id": "step-18",
         "stepRef": 18,
         "position": {
-          "x": 420,
-          "y": 1960
+          "x": 432,
+          "y": 1968
         },
         "title": "Дата",
         "action": "input",
@@ -1006,8 +1006,8 @@
         "id": "step-19",
         "stepRef": 19,
         "position": {
-          "x": 40,
-          "y": 2200
+          "x": 48,
+          "y": 2208
         },
         "title": "Продолжить",
         "action": "click",
@@ -1023,8 +1023,8 @@
         "id": "step-20",
         "stepRef": 20,
         "position": {
-          "x": 420,
-          "y": 2200
+          "x": 432,
+          "y": 2208
         },
         "title": "Продолжить",
         "action": "click",
@@ -1040,8 +1040,8 @@
         "id": "step-21",
         "stepRef": 21,
         "position": {
-          "x": 40,
-          "y": 2440
+          "x": 48,
+          "y": 2448
         },
         "title": "<input>",
         "action": "click",
@@ -1057,8 +1057,8 @@
         "id": "step-22",
         "stepRef": 22,
         "position": {
-          "x": 420,
-          "y": 2440
+          "x": 432,
+          "y": 2448
         },
         "title": "По реквизитам платёжного поручения или УИН",
         "action": "click",
@@ -1074,8 +1074,8 @@
         "id": "step-23",
         "stepRef": 23,
         "position": {
-          "x": 40,
-          "y": 2680
+          "x": 48,
+          "y": 2688
         },
         "title": "<input>",
         "action": "input",
@@ -1091,8 +1091,8 @@
         "id": "step-24",
         "stepRef": 24,
         "position": {
-          "x": 420,
-          "y": 2680
+          "x": 432,
+          "y": 2688
         },
         "title": "Дата",
         "action": "input",
@@ -1108,8 +1108,8 @@
         "id": "step-25",
         "stepRef": 25,
         "position": {
-          "x": 40,
-          "y": 2920
+          "x": 48,
+          "y": 2928
         },
         "title": "Перейти к подписанию",
         "action": "click",
@@ -1125,8 +1125,8 @@
         "id": "step-26",
         "stepRef": 26,
         "position": {
-          "x": 420,
-          "y": 2920
+          "x": 432,
+          "y": 2928
         },
         "title": "Продолжить",
         "action": "click",
@@ -1142,8 +1142,8 @@
         "id": "step-27",
         "stepRef": 27,
         "position": {
-          "x": 40,
-          "y": 3160
+          "x": 48,
+          "y": 3168
         },
         "title": "Подписание происходит в браузере. Сертификат УКЭП",
         "action": "click",
@@ -1159,8 +1159,8 @@
         "id": "step-28",
         "stepRef": 28,
         "position": {
-          "x": 420,
-          "y": 3160
+          "x": 432,
+          "y": 3168
         },
         "title": "Подписать",
         "action": "click",
@@ -1176,8 +1176,8 @@
         "id": "step-29",
         "stepRef": 29,
         "position": {
-          "x": 40,
-          "y": 3400
+          "x": 48,
+          "y": 3408
         },
         "title": "ООО \"ЦентрИнформ\"",
         "action": "click",
@@ -1193,8 +1193,8 @@
         "id": "step-30",
         "stepRef": 30,
         "position": {
-          "x": 420,
-          "y": 3400
+          "x": 432,
+          "y": 3408
         },
         "title": "Продолжить",
         "action": "click",
@@ -1441,5 +1441,11 @@
         "textColor": "#ff9100"
       }
     ]
+  },
+  "derivedFrom": {
+    "runId": "42b5d8977c8d",
+    "scenarioId": "new_prolong_20260320_121008",
+    "createdAt": "2026-04-06T09:45:42",
+    "type": "stabilizedSelectors"
   }
 }
