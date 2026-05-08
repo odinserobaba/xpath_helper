@@ -1,5 +1,8 @@
 // content/xpath-generator.js - ПОЛНАЯ ГЕНЕРАЦИЯ XPath
-class XPathGenerator {
+(function xpathHelperRegisterGenerator() {
+    const g = typeof globalThis !== 'undefined' ? globalThis : window;
+    if (g.__XPATH_HELPER_XPATH_GENERATOR__) return;
+    class XPathGenerator {
     constructor(options = {}) {
         this.options = {
             maxAttrLength: 50,
@@ -341,5 +344,7 @@ class XPathGenerator {
         if (this.angularMatSelectors.has(element.tagName.toLowerCase())) return true;
         return data.classes.some(c => c.startsWith('mat-') || c.startsWith('cdk-'));
     }
-}
-console.log('[XPathGenerator] Loaded');
+    }
+    g.__XPATH_HELPER_XPATH_GENERATOR__ = XPathGenerator;
+    console.log('[XPathGenerator] Loaded');
+})();

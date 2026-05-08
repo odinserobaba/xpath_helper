@@ -781,12 +781,20 @@ cd web-runner
 
 ### Параметры запуска на сценарий
 
-В UI можно сохранить “дефолты” прямо в сценарий (кнопка **Сохранить параметры**). Они сохраняются в `runnerSettings` внутри `tests/scenarios/<scenarioId>.json`:
+В UI можно сохранить “дефолты” прямо в сценарий (кнопка **Сохранить в сценарий** на главной). Они сохраняются в `runnerSettings` внутри `tests/scenarios/<scenarioId>.json`:
 
 - `startUrl`, `baseUrl`
 - `headless`, `slowMoMs`, `viewport`, `defaultTimeoutMs`
 - `variables`
 - `dataRows`, `maxRows`, `stopOnFirstFail`
+- **`followFlowGraph`** (по умолчанию `true`): следующий шаг после исполнения берётся из **`flow.edges`** с `kind: "next"` (порядок как на блок-схеме). Рёбра `yes`/`no`/`decorate` на маршрут не влияют; ветвления **`branch`** по-прежнему по `params.nextStep` / `nextElseStep`. Если для шага нет исходящего `next`, используется **следующий элемент массива `steps`** (линейный запасной вариант). Снимите галочку в UI или задайте `"followFlowGraph": false` в `runnerSettings`, чтобы принудительно гнать сценарий **только по порядку `steps`** (удобно для отладки и регрессии «как раньше»).
+- В **`report.json`** поле **`flowGraph`**: `{ "followFlowGraph", "active", "nextEdges" }` — включён ли режим графа и сколько рёбер `next` участвовало.
+
+### Соответствие схеме и каталог сценариев
+
+- **Flow Editor** (`/flow-editor`): раскладка **«Сетка»** и **«По next»** упорядочивает узлы по **обходу графа** (BFS по `next`), а не только по номеру шага; это ближе к порядку прогона при peer review.
+- **Главная `/`**: список сценариев с диска, секции настроек, **клонирование** и **удаление** (и в строке списка, и для выбранного сценария). Клон: `POST /api/scenarios/<id>/clone` с телом `{}` или `{ "name": "Новое имя" }` — новый файл и новый `id` в JSON.
+- Если задан **`XPATH_RUNNER_TOKEN`**, главная страница, как и Flow Editor, шлёт заголовок **`x-runner-token`** ко всем запросам к `/api/*`.
 
 ### Data-driven (наборы данных)
 
@@ -845,6 +853,8 @@ Data-driven:
 ```bash
 ./cli.py --scenario-id <scenarioId> --headless --start-url "https://example.com" --data-file ../test_data/rows.json --stop-on-first-fail
 ```
+
+`cli.py` передаёт в раннер полный JSON сценария и читает **`runnerSettings.followFlowGraph`** (как и UI): при `false` прогон строго по порядку массива `steps`.
 
 ### Безопасность: token
 

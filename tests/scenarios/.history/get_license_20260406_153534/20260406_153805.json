@@ -1,0 +1,1770 @@
+{
+  "name": "get_license",
+  "version": 1,
+  "exportedAt": "2026-04-06T12:36:57.178Z",
+  "steps": [
+    {
+      "step": 1,
+      "xpath": "—",
+      "action": "start",
+      "title": "Начало",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#00e676",
+        "waitForLoad": false
+      }
+    },
+    {
+      "step": 2,
+      "xpath": "//span[normalize-space()='Начать']",
+      "action": "click",
+      "title": "Начать",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Начать')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Начать']",
+          "//span[normalize-space()='Начать']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 3,
+      "xpath": "//span[normalize-space()='Оборот']",
+      "action": "click",
+      "title": "Оборот",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Оборот')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[2]",
+          "(//span[contains(@class, 'answer-btn__title')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[6]",
+          "(//div/div//span)[6]",
+          "(//button/div/div//span)[4]",
+          "//*[normalize-space()='Оборот']",
+          "//span[normalize-space()='Оборот']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 4,
+      "xpath": "//span[normalize-space()='Закупка, хранение и поставки алкогольной и спиртосодержащей продукции']",
+      "action": "click",
+      "title": "Закупка, хранение и поставки алкогольной и спиртос",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Закупка, хранение и поставки а')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 5,
+      "xpath": "//*[@id='c55']",
+      "action": "click",
+      "title": "Вид дейтельности",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' search-input ')]",
+          "//input[contains(@type, 'text')]",
+          "//input[contains(@role, 'combobox')]",
+          "//input[contains(@autocomplete, 'off')]",
+          "//input[contains(@aria-expanded, 'false')]",
+          "//input[contains(@aria-haspopup, 'listbox')]",
+          "//input[contains(@aria-autocomplete, 'list')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'search-input ng-untouched ng-pristine ng-valid ng-')]",
+          "//input[contains(@aria-label, 'Начните печатать и выберите вариант из списка, наж')]",
+          "//div//input",
+          "//div/div//input",
+          "//lib-search-bar/div/div//input",
+          "//*[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
+          "//*[@role='combobox' and @aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']",
+          "//input[@aria-label='Начните печатать и выберите вариант из списка, нажав стрелку Вниз']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 6,
+      "xpath": "//span[normalize-space()='Закупка, хранение и поставки алкогольной продукции']",
+      "action": "click",
+      "title": "Закупка, хранение и поставки алкогольной продукции",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(normalize-space(), 'Закупка, хранение и поставки а')])[1]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' lookup-item-text ')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//span[contains(@class, 'lookup-item-text ng-star-inserted')])[1]",
+          "(//div//span)[4]",
+          "(//div/div//span)[4]",
+          "(//div/div/div//span)[4]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 7,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[9]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 8,
+      "xpath": "//span[normalize-space()='Да']",
+      "action": "click",
+      "title": "Да",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
+          "//*[normalize-space()='Да']",
+          "//span[normalize-space()='Да']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 9,
+      "xpath": "//span[normalize-space()='В электронном виде']",
+      "action": "click",
+      "title": "В электронном виде",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'В электронном виде')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[1]",
+          "(//span[contains(@class, 'answer-btn__title')])[1]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[3]",
+          "(//div/div//span)[3]",
+          "(//button/div/div//span)[1]",
+          "//*[normalize-space()='В электронном виде']",
+          "//span[normalize-space()='В электронном виде']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 10,
+      "xpath": "//span[normalize-space()='Перейти к заявлению']",
+      "action": "click",
+      "title": "Перейти к заявлению",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к заявлению')]",
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Перейти к заявлению']",
+          "//span[normalize-space()='Перейти к заявлению']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 11,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 12,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 13,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[4]",
+          "(//div/button//span)[3]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 14,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[4]",
+          "(//div/button//span)[3]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 15,
+      "xpath": "//span[normalize-space()='Верно']",
+      "action": "click",
+      "title": "Верно",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(@class, 'ng-star-inserted')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Верно']",
+          "//span[normalize-space()='Верно']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 16,
+      "xpath": "//*[@name='c99']",
+      "action": "input",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' invalid ')]",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' clearable ')]",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')]",
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' masked-input ')]",
+          "//input[contains(@type, 'text')]",
+          "//input[contains(@autocomplete, 'off')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'text-input masked-input clearable invalid')]",
+          "(//div//input)[1]",
+          "//lib-base-masked-input/div//input",
+          "//epgu-constructor-masked-input/lib-base-masked-input/div//input",
+          "//*[@name='c99']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "784133001",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 17,
+      "xpath": "//*[@id='search-input-c53b03e30c7a9']",
+      "action": "input",
+      "title": "#search-input-c53b03e30c7a9",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//textarea[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "//textarea[contains(concat(' ', normalize-space(@class), ' '), ' search-input ')]",
+          "//textarea[contains(@autocomplete, 'off')]",
+          "//textarea[contains(@class, 'search-input ng-pristine ng-valid ng-star-inserted')]",
+          "//textarea[contains(@style, 'height: 52px; overflow: hidden; outline: rgb(0, 21')]",
+          "//div//textarea",
+          "//div/div//textarea",
+          "//lib-search-bar/div/div//textarea"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "143968, обл. Московская, г. Реутов, ш. Автомагистраль Москва-Нижний Новгород, д. 1, кв. 5",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 18,
+      "xpath": "//div[contains(concat(' ', normalize-space(@class), ' '), ' item-container ')]",
+      "action": "click",
+      "title": "Московская обл, г Реутов, шоссе Автомагистраль Мос",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//div[contains(@class, 'item-container ng-star-inserted')]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//div)[45]",
+          "(//div/div//div)[44]",
+          "(//div/div/div//div)[39]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 19,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 20,
+      "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' error ')]",
+      "action": "click",
+      "title": "<button>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//button[contains(concat(' ', normalize-space(@class), ' '), ' reset ')])[3]",
+          "(//button[contains(concat(' ', normalize-space(@class), ' '), ' dropdown-arrow ')])[1]",
+          "(//button[contains(@type, 'button')])[1]",
+          "(//button[contains(@aria-hidden, 'true')])[1]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//button[contains(@class, 'dropdown-arrow reset ng-star-inserted error')]",
+          "(//div//button)[4]",
+          "(//div/div//button)[4]",
+          "(//lib-dropdown[@id='undefined']/div/div//button)[1]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 21,
+      "xpath": "//span[normalize-space()='143968, обл. Московская, г. Реутов, ш. Автомагистраль Москва-Нижний Новгород, д. 1, кв. 5']",
+      "action": "click",
+      "title": "143968, обл. Московская, г. Реутов, ш. Автомагистр",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), '143968, обл. Московская, г. Ре')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' text-plain ')])[3]",
+          "(//span[contains(@aria-hidden, 'false')])[2]",
+          "(//span[contains(@class, 'text-plain ng-star-inserted')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[6]",
+          "(//div/div//span)[6]",
+          "(//div/div/div//span)[6]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 22,
+      "xpath": "//epgu-constructor-repeatable-screen//epgu-cf-ui-screen-container",
+      "action": "click",
+      "title": "Назад Выберите объект недвижимости Если не нашли н",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//div/epgu-constructor-repeatable-screen//epgu-cf-ui-screen-container",
+          "//epgu-constructor-screen-resolver/div/epgu-constructor-repeatable-screen//epgu-cf-ui-screen-container"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 23,
+      "xpath": "//div[contains(concat(' ', normalize-space(@class), ' '), ' lookup-item ')]",
+      "action": "click",
+      "title": "Помещение, 41:01:0010112:1225, Камчатский край, г",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//div[contains(@role, 'option')])[3]",
+          "//div[contains(@itemid, '41:01:0010112:1225')]",
+          "//div[contains(@class, 'lookup-item ng-star-inserted')]",
+          "(//div//div)[75]",
+          "(//div/div//div)[74]",
+          "(//div/div/div//div)[68]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 24,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[9]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 25,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[37]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 26,
+      "xpath": "//button[normalize-space()='Выбрать файл']",
+      "action": "file_upload",
+      "title": "Выбрать файл",
+      "tags": [],
+      "params": {
+        "fileContentBase64": "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ZW5kb2JqCgoxNCAwIG9iago8PC9UeXBlL1N0cnVjdFRyZWVSb290Ci9QYXJlbnRUcmVlIDE1IDAgUgovUm9sZU1hcDw8L1N0YW5kYXJkL1AKPj4KL0tbNCAwIFIgIF0KPj4KZW5kb2JqCgoxNSAwIG9iago8PC9OdW1zWwowIFsgNSAwIFIgXQpdPj4KZW5kb2JqCgo2IDAgb2JqCjw8L1R5cGUvUGFnZXMKL1Jlc291cmNlcyAxMyAwIFIKL0tpZHNbIDEgMCBSIF0KL0NvdW50IDE+PgplbmRvYmoKCjE2IDAgb2JqCjw8L1R5cGUvQ2F0YWxvZy9QYWdlcyA2IDAgUgovUGFnZU1vZGUvVXNlT3V0bGluZXMKL09wZW5BY3Rpb25bMSAwIFIgL1hZWiBudWxsIG51bGwgMF0KL1N0cnVjdFRyZWVSb290IDE0IDAgUgovTGFuZyhlbi1VUykKL01hcmtJbmZvPDwvTWFya2VkIHRydWU+Pgo+PgplbmRvYmoKCjE3IDAgb2JqCjw8L0NyZWF0b3I8RkVGRjAwNTcwMDcyMDA2OTAwNzQwMDY1MDA3Mj4KL1Byb2R1Y2VyPEZFRkYwMDRDMDA2OTAwNjIwMDcyMDA2NTAwNEYwMDY2MDA2NjAwNjkwMDYzMDA2NTAwMjAwMDMyMDAzNDAwMkUwMDMyPgovQ3JlYXRpb25EYXRlKEQ6MjAyNjAyMjYxMDUzNDIrMDMnMDAnKT4+CmVuZG9iagoKeHJlZgowIDE4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwNTA2NyAwMDAwMCBuIAowMDAwMDAwMDE5IDAwMDAwIG4gCjAwMDAwMDAyMTkgMDAwMDAgbiAKMDAwMDAwNTMyNiAwMDAwMCBuIAowMDAwMDA1MjE2IDAwMDAwIG4gCjAwMDAwMDU1NDkgMDAwMDAgbiAKMDAwMDAwMDIzOSAwMDAwMCBuIAowMDAwMDA0MzA3IDAwMDAwIG4gCjAwMDAwMDQzMjggMDAwMDAgbiAKMDAwMDAwNDUyMyAwMDAwMCBuIAowMDAwMDA0ODE1IDAwMDAwIG4gCjAwMDAwMDQ5NzggMDAwMDAgbiAKMDAwMDAwNTAxMSAwMDAwMCBuIAowMDAwMDA1NDA4IDAwMDAwIG4gCjAwMDAwMDU1MDcgMDAwMDAgbiAKMDAwMDAwNTYyMyAwMDAwMCBuIAowMDAwMDA1NzkxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSAxOC9Sb290IDE2IDAgUgovSW5mbyAxNyAwIFIKL0lEIFsgPEU1NUNGRTNDNjFDMURCRDYzNDRCRUU3RjhBMTU0NzNBPgo8RTU1Q0ZFM0M2MUMxREJENjM0NEJFRTdGOEExNTQ3M0E+IF0KL0RvY0NoZWNrc3VtIC9GQkMxNEI4REZDQTBBMjc0M0EyOUE5MUU1NTNCNEJCMwo+PgpzdGFydHhyZWYKNTk3MAolJUVPRgo=",
+        "fileName": "test.pdf",
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 27,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[3]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[4]",
+          "(//div/button//span)[3]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 28,
+      "xpath": "//span[normalize-space()='Нет']",
+      "action": "click",
+      "title": "Нет",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' answer-btn__title ')])[2]",
+          "(//span[contains(@class, 'answer-btn__title')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[6]",
+          "(//div/div//span)[6]",
+          "(//button/div/div//span)[4]",
+          "//*[normalize-space()='Нет']",
+          "//span[normalize-space()='Нет']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 29,
+      "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+      "action": "click",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//input[contains(@readonly, 'true')]",
+          "//input[contains(@role, 'combobox')]",
+          "(//input[contains(@type, 'text')])[1]",
+          "//input[contains(@aria-expanded, 'true')]",
+          "//input[contains(@class, 'focusable-input')]",
+          "//input[contains(@aria-labelledby, 'label_0.8831698392168688')]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//input)[1]",
+          "(//div/div//input)[1]",
+          "//lib-dropdown[@id='undefined']/div/div//input"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 30,
+      "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+      "action": "click",
+      "title": "По реквизитам платёжного поручения или УИН",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'По реквизитам платёжного поруч')]",
+          "(//span[contains(concat(' ', normalize-space(@class), ' '), ' text-plain ')])[3]",
+          "(//span[contains(@aria-hidden, 'false')])[2]",
+          "(//span[contains(@class, 'text-plain ng-star-inserted')])[2]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div//span)[6]",
+          "(//div/div//span)[6]",
+          "(//div/div/div//span)[6]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 31,
+      "xpath": "//*[@name='c35']",
+      "action": "input",
+      "title": "<input>",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//input[contains(concat(' ', normalize-space(@class), ' '), ' focused ')]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' clearable ')])[2]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' text-input ')])[3]",
+          "(//input[contains(concat(' ', normalize-space(@class), ' '), ' masked-input ')])[2]",
+          "(//input[contains(@type, 'text')])[4]",
+          "(//input[contains(@autocomplete, 'off')])[3]",
+          "//input[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//input[contains(@class, 'text-input masked-input clearable focused')]",
+          "(//div//input)[4]",
+          "(//lib-base-masked-input/div//input)[2]",
+          "(//epgu-constructor-masked-input/lib-base-masked-input/div//input)[2]",
+          "//*[@name='c35']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "123",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 32,
+      "xpath": "//*[@name='c36']",
+      "action": "input",
+      "title": "Дата",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "value": "01.02.2026",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 33,
+      "xpath": "//span[normalize-space()='Перейти к подписанию']",
+      "action": "click",
+      "title": "Перейти к подписанию",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Перейти к подписанию')]",
+          "(//span[contains(@class, 'ng-star-inserted')])[7]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[3]",
+          "(//div/button//span)[2]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Перейти к подписанию']",
+          "//span[normalize-space()='Перейти к подписанию']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 34,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 35,
+      "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
+      "action": "click",
+      "title": "Подписание происходит в браузере. Сертификат УКЭП",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' small-text ')])[2]",
+          "(//div[contains(concat(' ', normalize-space(@class), ' '), ' choose__item-desc ')])[2]",
+          "//div[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//div[contains(@class, 'choose__item-desc small-text gray')])[2]",
+          "(//div//div)[26]",
+          "(//span/div//div)[8]",
+          "(//div/span/div//div)[8]"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 36,
+      "xpath": "//span[normalize-space()='Подписать']",
+      "action": "click",
+      "title": "Подписать",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Подписать')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[5]",
+          "(//div/button//span)[1]",
+          "//lib-button/div/button//span",
+          "//*[normalize-space()='Подписать']",
+          "//span[normalize-space()='Подписать']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 37,
+      "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+      "action": "click",
+      "title": "ООО \"ЦентрИнформ\"",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--shadow ')]",
+          "//button[contains(@class, 'btn--white btn--shadow')]",
+          "//button[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "//epgu-cf-ui-long-button//button",
+          "//epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//div/epgu-answer-button/epgu-cf-ui-long-button//button",
+          "//*[normalize-space()='ООО \"ЦентрИнформ\"']",
+          "//button[normalize-space()='ООО \"ЦентрИнформ\"']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 38,
+      "xpath": "//span[normalize-space()='Продолжить']",
+      "action": "click",
+      "title": "Продолжить",
+      "tags": [],
+      "params": {
+        "fallbackXPaths": [
+          "//span[contains(normalize-space(), 'Продолжить')]",
+          "//span[contains(@style, 'outline: rgb(0, 212, 170) solid 3px;')]",
+          "(//button//span)[2]",
+          "(//div/button//span)[2]",
+          "(//lib-button/div/button//span)[2]",
+          "//*[normalize-space()='Продолжить']",
+          "//span[normalize-space()='Продолжить']"
+        ],
+        "mandatory": true,
+        "stepColor": "#ff1744",
+        "waitForLoad": true
+      }
+    },
+    {
+      "step": 39,
+      "xpath": "—",
+      "action": "navigate",
+      "title": "Новый шаг 39",
+      "tags": [],
+      "params": {
+        "mandatory": true,
+        "stepColor": "#ff4081",
+        "url": "https://svcdev-beta.test.gosuslugi.ru/609992/1/form"
+      }
+    }
+  ],
+  "id": "get_license_20260406_153534",
+  "smoke": false,
+  "labels": {},
+  "flow": {
+    "nodes": [
+      {
+        "id": "step-1",
+        "stepRef": 1,
+        "position": {
+          "x": 352,
+          "y": -272
+        },
+        "title": "Начало",
+        "action": "start",
+        "xpath": "—",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#00e676"
+      },
+      {
+        "id": "step-2",
+        "stepRef": 2,
+        "position": {
+          "x": 528,
+          "y": 80
+        },
+        "title": "Начать",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Начать']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-3",
+        "stepRef": 3,
+        "position": {
+          "x": 40,
+          "y": 280
+        },
+        "title": "Оборот",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Оборот']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-4",
+        "stepRef": 4,
+        "position": {
+          "x": 420,
+          "y": 280
+        },
+        "title": "Закупка, хранение и поставки алкогольной и спиртос",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Закупка, хранение и поставки алкогольной и спиртосодержащей продукции']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-5",
+        "stepRef": 5,
+        "position": {
+          "x": 40,
+          "y": 520
+        },
+        "title": "Вид дейтельности",
+        "action": "click",
+        "xpath": "//*[@id='c55']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-6",
+        "stepRef": 6,
+        "position": {
+          "x": 420,
+          "y": 520
+        },
+        "title": "Закупка, хранение и поставки алкогольной продукции",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Закупка, хранение и поставки алкогольной продукции']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-7",
+        "stepRef": 7,
+        "position": {
+          "x": 40,
+          "y": 760
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-8",
+        "stepRef": 8,
+        "position": {
+          "x": 420,
+          "y": 760
+        },
+        "title": "Да",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Да']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-9",
+        "stepRef": 9,
+        "position": {
+          "x": 40,
+          "y": 1000
+        },
+        "title": "В электронном виде",
+        "action": "click",
+        "xpath": "//span[normalize-space()='В электронном виде']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-10",
+        "stepRef": 10,
+        "position": {
+          "x": 420,
+          "y": 1000
+        },
+        "title": "Перейти к заявлению",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Перейти к заявлению']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-11",
+        "stepRef": 11,
+        "position": {
+          "x": 40,
+          "y": 1240
+        },
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-12",
+        "stepRef": 12,
+        "position": {
+          "x": 420,
+          "y": 1240
+        },
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-13",
+        "stepRef": 13,
+        "position": {
+          "x": 40,
+          "y": 1480
+        },
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-14",
+        "stepRef": 14,
+        "position": {
+          "x": 420,
+          "y": 1480
+        },
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-15",
+        "stepRef": 15,
+        "position": {
+          "x": 40,
+          "y": 1720
+        },
+        "title": "Верно",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Верно']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-16",
+        "stepRef": 16,
+        "position": {
+          "x": 420,
+          "y": 1720
+        },
+        "title": "<input>",
+        "action": "input",
+        "xpath": "//*[@name='c99']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-17",
+        "stepRef": 17,
+        "position": {
+          "x": 40,
+          "y": 1960
+        },
+        "title": "#search-input-c53b03e30c7a9",
+        "action": "input",
+        "xpath": "//*[@id='search-input-c53b03e30c7a9']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-18",
+        "stepRef": 18,
+        "position": {
+          "x": 420,
+          "y": 1960
+        },
+        "title": "Московская обл, г Реутов, шоссе Автомагистраль Мос",
+        "action": "click",
+        "xpath": "//div[contains(concat(' ', normalize-space(@class), ' '), ' item-container ')]",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-19",
+        "stepRef": 19,
+        "position": {
+          "x": 40,
+          "y": 2200
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-20",
+        "stepRef": 20,
+        "position": {
+          "x": 420,
+          "y": 2200
+        },
+        "title": "<button>",
+        "action": "click",
+        "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' error ')]",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-21",
+        "stepRef": 21,
+        "position": {
+          "x": 40,
+          "y": 2440
+        },
+        "title": "143968, обл. Московская, г. Реутов, ш. Автомагистр",
+        "action": "click",
+        "xpath": "//span[normalize-space()='143968, обл. Московская, г. Реутов, ш. Автомагистраль Москва-Нижний Новгород, д. 1, кв. 5']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-22",
+        "stepRef": 22,
+        "position": {
+          "x": 420,
+          "y": 2440
+        },
+        "title": "Назад Выберите объект недвижимости Если не нашли н",
+        "action": "click",
+        "xpath": "//epgu-constructor-repeatable-screen//epgu-cf-ui-screen-container",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-23",
+        "stepRef": 23,
+        "position": {
+          "x": 40,
+          "y": 2680
+        },
+        "title": "Помещение, 41:01:0010112:1225, Камчатский край, г",
+        "action": "click",
+        "xpath": "//div[contains(concat(' ', normalize-space(@class), ' '), ' lookup-item ')]",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-24",
+        "stepRef": 24,
+        "position": {
+          "x": 420,
+          "y": 2680
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-25",
+        "stepRef": 25,
+        "position": {
+          "x": 40,
+          "y": 2920
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-26",
+        "stepRef": 26,
+        "position": {
+          "x": 420,
+          "y": 2920
+        },
+        "title": "Выбрать файл",
+        "action": "file_upload",
+        "xpath": "//button[normalize-space()='Выбрать файл']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-27",
+        "stepRef": 27,
+        "position": {
+          "x": 40,
+          "y": 3160
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-28",
+        "stepRef": 28,
+        "position": {
+          "x": 420,
+          "y": 3160
+        },
+        "title": "Нет",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Нет']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-29",
+        "stepRef": 29,
+        "position": {
+          "x": 40,
+          "y": 3400
+        },
+        "title": "<input>",
+        "action": "click",
+        "xpath": "//input[contains(concat(' ', normalize-space(@class), ' '), ' focusable-input ')]",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-30",
+        "stepRef": 30,
+        "position": {
+          "x": 420,
+          "y": 3400
+        },
+        "title": "По реквизитам платёжного поручения или УИН",
+        "action": "click",
+        "xpath": "//span[normalize-space()='По реквизитам платёжного поручения или УИН']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-31",
+        "stepRef": 31,
+        "position": {
+          "x": 40,
+          "y": 3640
+        },
+        "title": "<input>",
+        "action": "input",
+        "xpath": "//*[@name='c35']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-32",
+        "stepRef": 32,
+        "position": {
+          "x": 420,
+          "y": 3640
+        },
+        "title": "Дата",
+        "action": "input",
+        "xpath": "//*[@name='c36']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-33",
+        "stepRef": 33,
+        "position": {
+          "x": 40,
+          "y": 3880
+        },
+        "title": "Перейти к подписанию",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Перейти к подписанию']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-34",
+        "stepRef": 34,
+        "position": {
+          "x": 420,
+          "y": 3880
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-35",
+        "stepRef": 35,
+        "position": {
+          "x": 40,
+          "y": 4120
+        },
+        "title": "Подписание происходит в браузере. Сертификат УКЭП",
+        "action": "click",
+        "xpath": "(//div[contains(concat(' ', normalize-space(@class), ' '), ' gray ')])[2]",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-36",
+        "stepRef": 36,
+        "position": {
+          "x": 420,
+          "y": 4120
+        },
+        "title": "Подписать",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Подписать']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-37",
+        "stepRef": 37,
+        "position": {
+          "x": 40,
+          "y": 4360
+        },
+        "title": "ООО \"ЦентрИнформ\"",
+        "action": "click",
+        "xpath": "//button[contains(concat(' ', normalize-space(@class), ' '), ' btn--white ')]",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-38",
+        "stepRef": 38,
+        "position": {
+          "x": 420,
+          "y": 4360
+        },
+        "title": "Продолжить",
+        "action": "click",
+        "xpath": "//span[normalize-space()='Продолжить']",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff1744"
+      },
+      {
+        "id": "step-39-1775478986953",
+        "stepRef": 39,
+        "position": {
+          "x": 336,
+          "y": -96
+        },
+        "title": "Новый шаг 39",
+        "action": "navigate",
+        "xpath": "",
+        "comment": "",
+        "note": "",
+        "ticket": "",
+        "qaStatus": "",
+        "tags": [],
+        "stepColor": "#ff4081"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-step-2-step-3",
+        "source": "step-2",
+        "target": "step-3",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-3-step-4",
+        "source": "step-3",
+        "target": "step-4",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-4-step-5",
+        "source": "step-4",
+        "target": "step-5",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-5-step-6",
+        "source": "step-5",
+        "target": "step-6",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-6-step-7",
+        "source": "step-6",
+        "target": "step-7",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-7-step-8",
+        "source": "step-7",
+        "target": "step-8",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-8-step-9",
+        "source": "step-8",
+        "target": "step-9",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-9-step-10",
+        "source": "step-9",
+        "target": "step-10",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-10-step-11",
+        "source": "step-10",
+        "target": "step-11",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-11-step-12",
+        "source": "step-11",
+        "target": "step-12",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-12-step-13",
+        "source": "step-12",
+        "target": "step-13",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-13-step-14",
+        "source": "step-13",
+        "target": "step-14",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-14-step-15",
+        "source": "step-14",
+        "target": "step-15",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-15-step-16",
+        "source": "step-15",
+        "target": "step-16",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-16-step-17",
+        "source": "step-16",
+        "target": "step-17",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-17-step-18",
+        "source": "step-17",
+        "target": "step-18",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-18-step-19",
+        "source": "step-18",
+        "target": "step-19",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-19-step-20",
+        "source": "step-19",
+        "target": "step-20",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-20-step-21",
+        "source": "step-20",
+        "target": "step-21",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-21-step-22",
+        "source": "step-21",
+        "target": "step-22",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-22-step-23",
+        "source": "step-22",
+        "target": "step-23",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-23-step-24",
+        "source": "step-23",
+        "target": "step-24",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-24-step-25",
+        "source": "step-24",
+        "target": "step-25",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-25-step-26",
+        "source": "step-25",
+        "target": "step-26",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-26-step-27",
+        "source": "step-26",
+        "target": "step-27",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-27-step-28",
+        "source": "step-27",
+        "target": "step-28",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-28-step-29",
+        "source": "step-28",
+        "target": "step-29",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-29-step-30",
+        "source": "step-29",
+        "target": "step-30",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-30-step-31",
+        "source": "step-30",
+        "target": "step-31",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-31-step-32",
+        "source": "step-31",
+        "target": "step-32",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-32-step-33",
+        "source": "step-32",
+        "target": "step-33",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-33-step-34",
+        "source": "step-33",
+        "target": "step-34",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-34-step-35",
+        "source": "step-34",
+        "target": "step-35",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-35-step-36",
+        "source": "step-35",
+        "target": "step-36",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-36-step-37",
+        "source": "step-36",
+        "target": "step-37",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-37-step-38",
+        "source": "step-37",
+        "target": "step-38",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-1-step-39-1775478986953-1775479005876",
+        "source": "step-1",
+        "target": "step-39-1775478986953",
+        "kind": "next",
+        "label": ""
+      },
+      {
+        "id": "e-step-39-1775478986953-step-2-1775479011073",
+        "source": "step-39-1775478986953",
+        "target": "step-2",
+        "kind": "next",
+        "label": ""
+      }
+    ],
+    "groups": [],
+    "annotations": []
+  }
+}

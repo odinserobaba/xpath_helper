@@ -29,10 +29,13 @@ const STORAGE_KEY_DATA_ROWS = 'xpath-helper-data-rows';
 const STORAGE_KEY_PYTHON_SETTINGS = 'xpath-helper-python-settings';
 const STORAGE_KEY_RUNNER_URL = 'xpath-helper-runner-url';
 const STORAGE_KEY_RUNNER_TOKEN = 'xpath-helper-runner-token';
+const STORAGE_KEY_BOUND_TAB_ID = 'xpath-helper-bound-tab-id';
+/** Предупреждение о заполненности chrome.storage.local (~лимит 10 MB) */
+const STORAGE_WARNING_BYTES = 8 * 1024 * 1024;
 const RUNNER_DEFAULT_URL = 'http://127.0.0.1:8000';
 const PYTHON_DEFAULTS = {
-    executablePath: '/opt/chromium-gost/chromium-gost',
-    userDataDir: '/home/nuanred/.config/chromium',
+    executablePath: '',
+    userDataDir: '',
     debugPort: 9222,
     headless: false
 };
@@ -267,6 +270,15 @@ let environments = { dev: { baseUrl: '' }, stage: { baseUrl: '' }, prod: { baseU
 let currentEnv = '';
 let runnerBaseUrl = RUNNER_DEFAULT_URL;
 let runnerToken = '';
+/** Если задан — выполнение и проверки идут на эту вкладку; иначе активная вкладка текущего окна */
+let boundTabId = null;
+/** Один активный пошаговый раннер — иначе два запуска переплетают лог и executeStep */
+let branchingRunnerLocked = false;
+let branchingRunnerTargetTabId = null;
+let lastTabPingOk = false;
+/** Отмена после «Очистить всё» */
+let undoClearSnapshot = null;
+let undoClearTimer = null;
 let lastHoveredElement = null;
 
 function runnerFetch(path, options = {}) {
@@ -506,7 +518,437 @@ function showBfcacheBanner() {
     if (banner) { show(banner); banner.classList.remove('hidden'); }
 }
 
+function isMissingContentScriptError(e) {
+    const msg = String(e?.message || e || '').toLowerCase();
+    return msg.includes('receiving end') || msg.includes('could not establish connection');
+}
+
+function isRestrictedScriptUrl(url) {
+    if (!url || typeof url !== 'string') return true;
+    const u = url.trim().toLowerCase();
+    return u.startsWith('chrome://') || u.startsWith('chrome-extension://') || u.startsWith('edge://') || u.startsWith('about:') || u.startsWith('devtools://') || u.startsWith('view-source:');
+}
+
+async function ensureContentScripts(tabId) {
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        if (isRestrictedScriptUrl(tab.url)) return false;
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content/xpath-generator.js', 'content/content.js']
+        });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function pingContentScript(tabId) {
+    return new Promise((resolve) => {
+        chrome.tabs.sendMessage(tabId, { action: 'xpathHelperPing' }, (resp) => {
+            const err = chrome.runtime.lastError;
+            if (err) resolve({ ok: false, error: err.message });
+            else resolve(resp?.ok === false ? { ok: false, error: 'ping rejected' } : { ok: true, ...resp });
+        });
+    });
+}
+
+async function getTargetTabId() {
+    if (boundTabId != null) {
+        try {
+            const t = await chrome.tabs.get(boundTabId);
+            if (t?.id != null && !isRestrictedScriptUrl(t.url)) return t.id;
+        } catch (_) {}
+        boundTabId = null;
+        chrome.storage.local.remove(STORAGE_KEY_BOUND_TAB_ID);
+    }
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs[0]?.id ?? null;
+}
+
+async function sendMessagePlainWithInject(tabId, msg) {
+    const once = () =>
+        new Promise((resolve, reject) => {
+            chrome.tabs.sendMessage(tabId, msg, (resp) => {
+                const err = chrome.runtime.lastError;
+                if (err) reject(new Error(err.message));
+                else resolve(resp);
+            });
+        });
+    try {
+        return await once();
+    } catch (e) {
+        if (isMissingContentScriptError(e)) {
+            const injected = await ensureContentScripts(tabId);
+            if (injected) {
+                await new Promise((r) => setTimeout(r, 250));
+                return await once();
+            }
+        }
+        throw e;
+    }
+}
+
+/** После полной перезагрузки вкладки (navigate) ждём ready + ответ XPath Helper на странице — иначе следующий executeStep часто ловит таймаут панели. */
+async function waitForTabScriptReady(tabId, { maxMs = 30000 } = {}) {
+    const t0 = Date.now();
+    let lastPingErr = '';
+    while (Date.now() - t0 < maxMs) {
+        try {
+            const tab = await chrome.tabs.get(tabId);
+            if (tab.status !== 'complete') {
+                await new Promise((r) => setTimeout(r, 280));
+                continue;
+            }
+            await ensureContentScripts(tabId);
+            await new Promise((r) => setTimeout(r, 350));
+            const ping = await pingContentScript(tabId);
+            if (ping.ok) return true;
+            lastPingErr = ping.error || 'нет ответа';
+        } catch (e) {
+            lastPingErr = e?.message || String(e);
+        }
+        await new Promise((r) => setTimeout(r, 380));
+    }
+    appendExecutionLog(`⚠ За ${maxMs}мс не получили стабильный ping скрипта${lastPingErr ? ': ' + String(lastPingErr).slice(0, 100) : ''}. Продолжаем; при ошибке обновите вкладку (F5).`);
+    return false;
+}
+
+/** Перед executeStep: если скрипт не отвечает — пробуем инъекцию (тяжёлые SPA). */
+async function prepareTabBeforeExecuteStep(tabId) {
+    let ping = await pingContentScript(tabId);
+    if (ping.ok) return;
+    if (await ensureContentScripts(tabId)) await new Promise((r) => setTimeout(r, 480));
+    ping = await pingContentScript(tabId);
+    if (!ping.ok) await new Promise((r) => setTimeout(r, 400));
+}
+
+async function refreshTabContextUI() {
+    const titleEl = $('tabContextTitle');
+    const urlEl = $('tabContextUrl');
+    const statusDot = $('tabContextStatus');
+    const favEl = $('tabContextFavicon');
+    const unbindBtn = $('unbindTabBtn');
+    const tabId = await getTargetTabId();
+    if (!tabId) {
+        if (titleEl) titleEl.textContent = 'Нет вкладки';
+        if (urlEl) urlEl.textContent = 'Откройте страницу в браузере';
+        if (statusDot) {
+            statusDot.classList.add('tab-context-off');
+            statusDot.classList.remove('tab-context-ok');
+            statusDot.title = 'Нет целевой вкладки';
+        }
+        if (favEl) favEl.classList.add('hidden');
+        if (unbindBtn) unbindBtn.classList.add('hidden');
+        lastTabPingOk = false;
+        return;
+    }
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        const title = tab.title || '—';
+        if (titleEl) titleEl.textContent = title.length > 56 ? `${title.slice(0, 56)}…` : title;
+        const url = tab.url || '';
+        if (urlEl) {
+            urlEl.textContent = isRestrictedScriptUrl(url) ? '(встроенная страница браузера)' : url.length > 80 ? `${url.slice(0, 80)}…` : url;
+        }
+        if (favEl) {
+            if (tab.favIconUrl) {
+                favEl.src = tab.favIconUrl;
+                favEl.classList.remove('hidden');
+            } else favEl.classList.add('hidden');
+        }
+        if (unbindBtn) unbindBtn.classList.toggle('hidden', boundTabId == null);
+        const ping = await pingContentScript(tabId);
+        lastTabPingOk = !!ping?.ok;
+        if (statusDot) {
+            statusDot.classList.toggle('tab-context-ok', lastTabPingOk);
+            statusDot.classList.toggle('tab-context-off', !lastTabPingOk);
+            statusDot.title = lastTabPingOk ? 'Скрипт XPath Helper на странице отвечает' : (ping?.error || 'Нет ответа — обновите страницу (F5) или «Проверить»');
+        }
+    } catch (_) {
+        lastTabPingOk = false;
+        if (statusDot) {
+            statusDot.classList.add('tab-context-off');
+            statusDot.classList.remove('tab-context-ok');
+            statusDot.title = 'Не удалось прочитать вкладку';
+        }
+    }
+}
+
+function storageLocalSetWithWarn(payload) {
+    try {
+        chrome.storage.local.getBytesInUse(null, (bytesInUse) => {
+            if (typeof bytesInUse === 'number' && bytesInUse >= STORAGE_WARNING_BYTES) {
+                appendExecutionLog(`⚠ Хранилище расширения ~${(bytesInUse / (1024 * 1024)).toFixed(1)} MB — экспортируйте сценарии или очистите историю.`);
+            }
+            chrome.storage.local.set(payload, () => {
+                const err = chrome.runtime.lastError;
+                if (err && String(err.message || '').toLowerCase().includes('quota')) {
+                    appendExecutionLog('✗ Превышен лимит chrome.storage: удалите историю элементов или лишние сценарии.');
+                }
+            });
+        });
+    } catch (_) {
+        chrome.storage.local.set(payload);
+    }
+}
+
+async function runnerFetchWithRetry(path, options = {}, retries = 4) {
+    let lastErr = null;
+    for (let i = 0; i < retries; i++) {
+        try {
+            const resp = await runnerFetch(path, options);
+            if (resp.status === 429 || resp.status >= 500) {
+                await new Promise((r) => setTimeout(r, 380 * Math.pow(2, i)));
+                continue;
+            }
+            return resp;
+        } catch (e) {
+            lastErr = e;
+            await new Promise((r) => setTimeout(r, 380 * Math.pow(2, i)));
+        }
+    }
+    if (lastErr) throw lastErr;
+    return runnerFetch(path, options);
+}
+
+function setExecLive(text) {
+    const el = $('execLiveRegion');
+    if (el) el.textContent = text || '';
+}
+
+function persistBoundTabId(tabId) {
+    boundTabId = tabId;
+    if (tabId == null) chrome.storage.local.remove(STORAGE_KEY_BOUND_TAB_ID);
+    else chrome.storage.local.set({ [STORAGE_KEY_BOUND_TAB_ID]: tabId });
+}
+
 let lastExecutionReport = [];
+
+async function copyDiagnosticsToClipboard() {
+    const tabId = await getTargetTabId();
+    let tabMeta = {};
+    try {
+        if (tabId) {
+            const t = await chrome.tabs.get(tabId);
+            tabMeta = { id: t.id, title: t.title, url: (t.url || '').slice(0, 800) };
+        }
+    } catch (_) {}
+    const manifest = chrome.runtime.getManifest();
+    const payload = {
+        extensionVersion: manifest?.version,
+        boundTabId,
+        targetTab: tabMeta,
+        contentScriptPingOk: lastTabPingOk,
+        stepsCount: executionList.length,
+        scenariosCount: scenarios.length,
+        timestamp: new Date().toISOString(),
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    };
+    await copyToClipboard(JSON.stringify(payload, null, 2));
+}
+
+/** Отправка в content script без ожидания sendResponse — результат приходит через executionResult.
+ *  Устраняет ошибку "message channel closed" при навигации/bfcache. Повтор с инъекцией при отсутствии receiver. */
+const executionPending = new Map();
+
+/**
+ * Лимит ответа панели для одного executeStep: должен быть больше любого сценария в content (поиск по XPath,
+ * шаг wait, assert с waitMode, несколько попыток), иначе типичная гонка ~120с — страница успевает завершить шаг,
+ * но таймер панели уже оборвал ожидание.
+ */
+function computeExecuteStepPanelTimeoutMs(step, selectorTimeout) {
+    const elemOrSel = step?.params?.timeoutMs ?? selectorTimeout;
+    let longest = Math.max(0, elemOrSel);
+    if (step?.action === 'wait') {
+        const d = step.params?.delayMs;
+        const waitMs = d != null && Number.isFinite(Number(d)) ? Math.max(0, Number(d)) : 500;
+        longest = Math.max(longest, waitMs);
+    }
+    if (step?.action === 'assert' && step?.params?.waitMode) {
+        const pollTo = step.params?.timeoutMs ?? elemOrSel;
+        longest = Math.max(longest, Math.max(0, pollTo));
+    }
+    const retries = Math.max(
+        1,
+        Number(step?.params?.retryCount) >= 1 ? Number(step.params.retryCount) : step?.params?.retryOnError ? 3 : 1
+    );
+    const retryDelay = step?.params?.retryDelayMs != null && Number.isFinite(Number(step.params.retryDelayMs))
+        ? Math.max(0, Number(step.params.retryDelayMs))
+        : 300;
+    const postActionBudget = 40000;
+    const perAttempt = longest + 25000 + postActionBudget;
+    const stacked = perAttempt * retries + retryDelay * Math.max(0, retries - 1);
+    return Math.max(120000, stacked) + 75000;
+}
+
+/**
+ * Сообщение executeStep теряется, если после клика вкладка перезагружает документ (контекст content script уничтожается
+ * до chrome.runtime.sendMessage). Ловим loading→complete или смену URL и завершаем шаг успешно после ping нового скрипта.
+ */
+async function sendToContentAndWait(tabId, msg, timeoutMs = 120000, options = {}) {
+    const navigateAssistStep = options.navigateAssistStep;
+    const navigateAssist =
+        navigateAssistStep &&
+        (navigateAssistStep.action === 'click' || navigateAssistStep.action === 'click_if_exists');
+
+    let lastErr = null;
+    for (let injectRound = 0; injectRound < 2; injectRound++) {
+        const requestId = crypto.randomUUID();
+        try {
+            let startUrl = '';
+            if (navigateAssist) {
+                try {
+                    const t = await chrome.tabs.get(tabId);
+                    startUrl = t?.url || '';
+                } catch (_) {}
+            }
+
+            return await new Promise((resolve, reject) => {
+                let settled = false;
+                let pollIv = null;
+                let tabListener = null;
+                let heartbeatIv = null;
+                const sentAt = Date.now();
+
+                function cleanupAssist() {
+                    if (heartbeatIv != null) {
+                        clearInterval(heartbeatIv);
+                        heartbeatIv = null;
+                    }
+                    if (pollIv != null) {
+                        clearInterval(pollIv);
+                        pollIv = null;
+                    }
+                    if (tabListener) {
+                        chrome.tabs.onUpdated.removeListener(tabListener);
+                        tabListener = null;
+                    }
+                }
+
+                function finish(r) {
+                    if (settled) return;
+                    settled = true;
+                    cleanupAssist();
+                    clearTimeout(timer);
+                    executionPending.delete(requestId);
+                    resolve(r);
+                }
+
+                function fail(e) {
+                    if (settled) return;
+                    settled = true;
+                    cleanupAssist();
+                    clearTimeout(timer);
+                    executionPending.delete(requestId);
+                    reject(e);
+                }
+
+                const timer = setTimeout(() => {
+                    void (async () => {
+                        if (settled) return;
+                        const act = msg?.action || '?';
+                        const parts = [];
+                        try {
+                            const tab = await chrome.tabs.get(tabId);
+                            if (tab?.status && tab.status !== 'complete') parts.push(`вкладка «${tab.status}»`);
+                        } catch (_) {
+                            parts.push('вкладка недоступна');
+                        }
+                        try {
+                            const ping = await pingContentScript(tabId);
+                            if (ping.ok) {
+                                parts.push(
+                                    'ping XPath Helper OK — связь с вкладкой есть; ответа по шагу нет (долгий поиск элемента, сценарий внутри страницы или блокирующий диалог подписи/сертификата — попробуйте шаг «Действие пользователя»)'
+                                );
+                            } else {
+                                parts.push(`нет ping: ${String(ping.error || '—').slice(0, 140)}`);
+                                await ensureContentScripts(tabId);
+                            }
+                        } catch (pe) {
+                            parts.push(`ошибка проверки: ${String(pe?.message || pe).slice(0, 100)}`);
+                        }
+                        appendExecutionLog(
+                            `⚠ Нет ответа страницы за ${timeoutMs}мс (${act}). ${parts.join(' · ')}`
+                        );
+                        fail(new Error(`Таймаут: страница не ответила (${timeoutMs}мс, ${act})`));
+                    })();
+                }, timeoutMs);
+
+                executionPending.set(requestId, {
+                    resolve: finish,
+                    reject: fail,
+                });
+
+                if (timeoutMs > 55000) {
+                    heartbeatIv = setInterval(() => {
+                        if (settled || !executionPending.has(requestId)) return;
+                        void (async () => {
+                            const ping = await pingContentScript(tabId);
+                            if (settled) return;
+                            if (!ping.ok) {
+                                appendExecutionLog(
+                                    `⚠ Долгое ожидание (${Math.round((Date.now() - sentAt) / 1000)}с): ping не прошёл — повторная инъекция скрипта на вкладку`
+                                );
+                                await ensureContentScripts(tabId);
+                                await new Promise((r) => setTimeout(r, 380));
+                            }
+                        })();
+                    }, 45000);
+                }
+
+                let sawLoadingAfterSend = false;
+                let navAssistConsumed = false;
+
+                async function trySyntheticNavigateOk(reason) {
+                    if (!navigateAssist || settled || navAssistConsumed) return;
+                    navAssistConsumed = true;
+                    await waitForTabScriptReady(tabId, { maxMs: 35000 });
+                    if (settled || !executionPending.has(requestId)) return;
+                    appendExecutionLog(
+                        `◆ После клика сработала навигация вкладки (${reason}); ответ со страницы не пришёл — шаг засчитан. При ошибках отключите автопереход или добавьте паузу.`
+                    );
+                    finish({ ok: true, syntheticAfterNavigate: true });
+                }
+
+                if (navigateAssist) {
+                    tabListener = (updatedTabId, info) => {
+                        if (updatedTabId !== tabId || settled || !executionPending.has(requestId)) return;
+                        if (info.status === 'loading' && Date.now() - sentAt > 40) sawLoadingAfterSend = true;
+                        if (sawLoadingAfterSend && info.status === 'complete') void trySyntheticNavigateOk('loading→complete');
+                    };
+                    chrome.tabs.onUpdated.addListener(tabListener);
+
+                    pollIv = setInterval(() => {
+                        if (settled || !executionPending.has(requestId)) return;
+                        chrome.tabs
+                            .get(tabId)
+                            .then((tab) => {
+                                if (settled || !executionPending.has(requestId) || !tab?.url) return;
+                                if (tab.url !== startUrl && Date.now() - sentAt > 80 && tab.status === 'complete') {
+                                    void trySyntheticNavigateOk('смена URL');
+                                }
+                            })
+                            .catch(() => {});
+                    }, 450);
+                }
+
+                chrome.tabs.sendMessage(tabId, { ...msg, requestId }).catch((e) => fail(e));
+            });
+        } catch (e) {
+            lastErr = e;
+            if (injectRound === 0 && isMissingContentScriptError(e)) {
+                const injected = await ensureContentScripts(tabId);
+                if (injected) {
+                    await new Promise((r) => setTimeout(r, 280));
+                    continue;
+                }
+            }
+            throw e;
+        }
+    }
+    throw lastErr;
+}
 
 async function captureScreenshotOnError(tabId) {
     try {
@@ -538,25 +980,6 @@ function waitForUserAction(message) {
     });
 }
 
-/** Отправка в content script без ожидания sendResponse — результат приходит через executionResult.
- *  Устраняет ошибку "message channel closed" при навигации/bfcache. */
-const executionPending = new Map();
-function sendToContentAndWait(tabId, msg, timeoutMs = 120000) {
-    const requestId = crypto.randomUUID();
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            executionPending.delete(requestId);
-            reject(new Error('Таймаут: страница не ответила'));
-        }, timeoutMs);
-        const finish = (r) => { clearTimeout(timer); executionPending.delete(requestId); resolve(r); };
-        executionPending.set(requestId, { resolve: finish, reject: (e) => { clearTimeout(timer); executionPending.delete(requestId); reject(e); } });
-        chrome.tabs.sendMessage(tabId, { ...msg, requestId }).catch((e) => {
-            executionPending.delete(requestId);
-            clearTimeout(timer);
-            reject(e);
-        });
-    });
-}
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'session') return;
     for (const key of Object.keys(changes || {})) {
@@ -970,21 +1393,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         renderResults(applyFilter(result));
     }
     if (request.action === 'executionProgress') {
+        const msgTabId = sender.tab?.id;
+        const progressTargetTab = branchingRunnerTargetTabId ?? boundTabId;
+        if (msgTabId != null && progressTargetTab != null && msgTabId !== progressTargetTab) {
+            sendResponse({ received: true });
+            return true;
+        }
         const phase = request.phase;
         const stepId = request.stepId || null;
         if (phase === 'start') {
             currentExecutingStepId = stepId;
             if (stepId) setStepStatus(stepId, 'running', '');
-            appendExecutionLog(`▶ Шаг ${(request.index ?? 0) + 1}/${request.total ?? 0}`);
+            appendExecutionLog(`▶ ${stepId || 'шаг'} [выполнение на странице ${(request.index ?? 0) + 1}/${request.total ?? '?'}]`);
+            setExecLive(`Выполняется ${stepId || 'шаг'}`);
             renderExecutionList();
         } else if (phase === 'end') {
             if (stepId) {
                 if (request.ok) setStepStatus(stepId, 'ok', '');
                 else setStepStatus(stepId, 'error', request.error || 'Ошибка');
             }
+            setExecLive(stepId ? (request.ok ? `Шаг выполнен` : `Ошибка шага`) : '');
             renderExecutionList();
+        } else if (phase === 'waiting') {
+            const sid = request.stepId || '';
+            const det = request.detail || 'ожидание';
+            const el = request.elapsedMs != null ? `, уже ${request.elapsedMs}мс` : '';
+            appendExecutionLog(`… ${sid || 'шаг'}: ${det}${el}`);
         } else if (phase === 'done') {
             currentExecutingStepId = null;
+            setExecLive('Готово');
             renderExecutionList();
         }
     }
@@ -1039,10 +1476,11 @@ document.addEventListener('click', (e) => {
 
     const highlightBtn = e.target.closest('.btn-highlight');
     if (highlightBtn) {
-        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-            if (!tab?.id) return;
+        void (async () => {
+            const tabId = await getTargetTabId();
+            if (!tabId) return;
             chrome.scripting.executeScript({
-                target: { tabId: tab.id },
+                target: { tabId },
                 func: (xp) => {
                     const r = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
                     const el = r.singleNodeValue;
@@ -1055,7 +1493,7 @@ document.addEventListener('click', (e) => {
                 },
                 args: [highlightBtn.dataset.xpath]
             });
-        });
+        })();
     }
 });
 
@@ -1079,18 +1517,32 @@ document.querySelectorAll('.tab').forEach((tab) => {
         } else {
             if (tabList) { tabList.classList.add('active'); tabList.hidden = false; renderExecutionList(); }
         }
+        refreshTabContextUI();
     });
 });
 
 // ——— Hotkeys (panel) ———
-// Ctrl+Enter: run list, Esc: stop, Ctrl+S: save, Ctrl+F: focus search, M: toggle mini view
+// Ctrl+Enter: run list, Esc: stop / закрыть справку, Ctrl+S: save, Ctrl+F: focus search, ?: справка
 document.addEventListener('keydown', (e) => {
     const tag = (e.target?.tagName || '').toLowerCase();
     const inInput = tag === 'input' || tag === 'textarea' || e.target?.isContentEditable;
+    if (e.key === 'Escape') {
+        const hm = $('helpShortcutsModal');
+        if (hm && !hm.classList.contains('hidden')) {
+            hm.classList.add('hidden');
+            return;
+        }
+        stopExecuteBtn?.click();
+        return;
+    }
     if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); executeListBtn?.click(); return; }
-    if (e.key === 'Escape') { stopExecuteBtn?.click(); return; }
     if (e.ctrlKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveListBtn?.click(); return; }
     if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); listSearch?.focus(); return; }
+    if (!inInput && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+        e.preventDefault();
+        $('helpShortcutsModal')?.classList.remove('hidden');
+        return;
+    }
     if (!inInput && (e.key === 'm' || e.key === 'M')) {
         document.body.classList.toggle('mini-view');
     }
@@ -1274,25 +1726,24 @@ function applyEditorStep() {
     renderExecutionList();
 }
 
-function highlightElementOnPage(xpath) {
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        if (!tab?.id) return;
-        chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: (xp) => {
-                try {
-                    const r = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-                    const el = r.singleNodeValue;
-                    if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const orig = el.style.outline;
-                        el.style.outline = '3px solid #00d4aa';
-                        setTimeout(() => { el.style.outline = orig; }, 2000);
-                    }
-                } catch (_) {}
-            },
-            args: [xpath]
-        });
+async function highlightElementOnPage(xpath) {
+    const tabId = await getTargetTabId();
+    if (!tabId) return;
+    chrome.scripting.executeScript({
+        target: { tabId },
+        func: (xp) => {
+            try {
+                const r = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                const el = r.singleNodeValue;
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const orig = el.style.outline;
+                    el.style.outline = '3px solid #00d4aa';
+                    setTimeout(() => { el.style.outline = orig; }, 2000);
+                }
+            } catch (_) {}
+        },
+        args: [xpath]
     });
 }
 
@@ -1386,10 +1837,12 @@ function closeEnvModal(save) {
 
 // ——— Execution list: load, save, render ———
 function loadExecutionList() {
-    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH, STORAGE_KEY_PYTHON_SETTINGS, STORAGE_KEY_RUNNER_URL, STORAGE_KEY_RUNNER_TOKEN], (data) => {
+    chrome.storage.local.get([STORAGE_KEY_EXECUTION_LIST, STORAGE_KEY_SCENARIOS, STORAGE_KEY_ENVIRONMENTS, STORAGE_KEY_CURRENT_ENV, STORAGE_KEY_DATA_ROWS, STORAGE_KEY_REPORT_PATH, STORAGE_KEY_PYTHON_SETTINGS, STORAGE_KEY_RUNNER_URL, STORAGE_KEY_RUNNER_TOKEN, STORAGE_KEY_BOUND_TAB_ID], (data) => {
         executionList = Array.isArray(data[STORAGE_KEY_EXECUTION_LIST]) ? data[STORAGE_KEY_EXECUTION_LIST] : [];
+        const rawBound = data[STORAGE_KEY_BOUND_TAB_ID];
+        boundTabId = typeof rawBound === 'number' && Number.isFinite(rawBound) ? rawBound : null;
         if (ensureStartStepInExecutionList()) {
-            chrome.storage.local.set({ [STORAGE_KEY_EXECUTION_LIST]: executionList });
+            storageLocalSetWithWarn({ [STORAGE_KEY_EXECUTION_LIST]: executionList });
         }
         scenarios = Array.isArray(data[STORAGE_KEY_SCENARIOS]) ? data[STORAGE_KEY_SCENARIOS] : [];
         if (data[STORAGE_KEY_ENVIRONMENTS]) {
@@ -1407,6 +1860,7 @@ function loadExecutionList() {
         renderScenarioSelect();
         renderExecutionList();
         renderEditorStepList();
+        refreshTabContextUI();
     });
 }
 
@@ -1419,8 +1873,8 @@ function renderScenarioSelect() {
 
 function saveExecutionList() {
     ensureStartStepInExecutionList();
-    chrome.storage.local.set({ [STORAGE_KEY_EXECUTION_LIST]: executionList });
     const name = (scenarioName?.value || '').trim();
+    const payload = { [STORAGE_KEY_EXECUTION_LIST]: executionList };
     if (name) {
         const idx = scenarios.findIndex((s) => s.id === currentScenarioId);
         if (idx >= 0) {
@@ -1429,9 +1883,10 @@ function saveExecutionList() {
             currentScenarioId = 'scn-' + Date.now();
             scenarios.push({ id: currentScenarioId, name, steps: [...executionList] });
         }
-        chrome.storage.local.set({ [STORAGE_KEY_SCENARIOS]: scenarios });
+        payload[STORAGE_KEY_SCENARIOS] = scenarios;
         renderScenarioSelect();
     }
+    storageLocalSetWithWarn(payload);
 }
 
 if (envSelect) {
@@ -1529,10 +1984,17 @@ function renderExecutionList() {
         listHint.classList.remove('hidden');
         listHint.style.display = '';
         listHint.textContent = searchQ ? 'Нет совпадений' : 'Наведите на элемент в инспекторе, затем «Добавить текущий».';
+        const onboard = $('listOnboarding');
+        if (onboard) onboard.classList.add('hidden');
         return;
     }
     listHint.classList.add('hidden');
     listHint.style.display = 'none';
+    const onboardEl = $('listOnboarding');
+    if (onboardEl) {
+        const substantive = executionList.filter((s) => s.action !== 'separator' && s.action !== 'start');
+        onboardEl.classList.toggle('hidden', substantive.length > 0);
+    }
     filtered.forEach((step, displayIdx) => {
         const actualIdx = executionList.indexOf(step);
         const li = document.createElement('li');
@@ -2167,33 +2629,32 @@ document.addEventListener('click', (e) => {
         const xpath = replaceVariables(String(xpathRaw), getCurrentVariables());
         const countEl = document.querySelector(`[data-count-for="${CSS.escape(stepId)}:${CSS.escape(kind)}:${CSS.escape(idx)}"]`);
         if (countEl) { countEl.textContent = '...'; countEl.className = 'selector-count'; }
-        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-            if (!tab?.id) return;
+        void (async () => {
+            const tabId = await getTargetTabId();
+            if (!tabId) {
+                if (countEl) { countEl.textContent = 'err'; countEl.classList.add('err'); }
+                return;
+            }
             try {
-                chrome.tabs.sendMessage(tab.id, { action: 'validateXpath', xpath }, (resp) => {
-                    const err = chrome.runtime.lastError;
-                    if (err) {
-                        if (countEl) { countEl.textContent = 'err'; countEl.classList.add('err'); }
-                        appendExecutionLog(`validateXpath error: ${err.message || err}`);
-                        return;
-                    }
-                    const ok = resp?.ok;
-                    const c = resp?.count;
-                    if (!countEl) return;
-                    if (!ok) {
-                        countEl.textContent = 'err';
-                        countEl.classList.add('err');
-                        return;
-                    }
-                    countEl.textContent = String(c);
-                    if (c === 1) countEl.classList.add('ok');
-                    else if (c > 1) countEl.classList.add('warn');
-                    else countEl.classList.add('err');
-                });
+                const resp = await sendMessagePlainWithInject(tabId, { action: 'validateXpath', xpath });
+                const ok = resp?.ok;
+                const c = resp?.count;
+                if (!countEl) return;
+                if (!ok) {
+                    countEl.textContent = 'err';
+                    countEl.classList.add('err');
+                    return;
+                }
+                countEl.textContent = String(c);
+                countEl.classList.remove('ok', 'warn', 'err');
+                if (c === 1) countEl.classList.add('ok');
+                else if (c > 1) countEl.classList.add('warn');
+                else countEl.classList.add('err');
             } catch (ex) {
                 if (countEl) { countEl.textContent = 'err'; countEl.classList.add('err'); }
+                appendExecutionLog(`validateXpath error: ${ex?.message || ex}`);
             }
-        });
+        })();
         return;
     }
 
@@ -2231,8 +2692,14 @@ document.addEventListener('click', (e) => {
         currentExecutingStepId = step.id;
         setStepStatus(step.id, 'running', '');
         renderExecutionList();
-        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-            if (!tab?.id) return;
+        void (async () => {
+            const tabId = await getTargetTabId();
+            if (!tabId) {
+                setStepStatus(step.id, 'error', 'Нет целевой вкладки');
+                currentExecutingStepId = null;
+                renderExecutionList();
+                return;
+            }
             if (step.action === 'navigate') {
                 const url = (step.params?.url || '').trim();
                 if (!url) {
@@ -2241,7 +2708,7 @@ document.addEventListener('click', (e) => {
                     renderExecutionList();
                     return;
                 }
-                chrome.tabs.update(tab.id, { url: url.startsWith('http') ? url : 'https://' + url }).then(() => {
+                chrome.tabs.update(tabId, { url: url.startsWith('http') ? url : 'https://' + url }).then(() => {
                     setStepStatus(step.id, 'ok', '');
                     currentExecutingStepId = null;
                     renderExecutionList();
@@ -2253,7 +2720,7 @@ document.addEventListener('click', (e) => {
                 return;
             }
             const stepWithVars = replaceVariablesInStep(step, getCurrentVariables());
-            sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true, ...getWaitAfterStepOptions() }).then((resp) => {
+            sendToContentAndWait(tabId, { action: 'executeList', steps: [stepWithVars], continueOnError: true, ...getWaitAfterStepOptions() }).then((resp) => {
                 const r = resp?.results?.[0];
                 if (r?.ok) setStepStatus(step.id, 'ok', '');
                 else setStepStatus(step.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -2266,7 +2733,7 @@ document.addEventListener('click', (e) => {
                 renderExecutionList();
                 if (isBfcacheError(err)) showBfcacheBanner();
             });
-        });
+        })();
         return;
     }
 
@@ -2289,6 +2756,12 @@ document.addEventListener('click', (e) => {
 
     const delBtn = e.target.closest('.btn-delete-step');
     if (delBtn) {
+        const toRemove = executionList.find((s) => s.id === delBtn.dataset.id);
+        if (toRemove?.action === 'start') {
+            appendExecutionLog('Шаг «Начало» нельзя удалить');
+            return;
+        }
+        if (!confirm('Удалить этот шаг?')) return;
         executionList = executionList.filter((s) => s.id !== delBtn.dataset.id);
         saveExecutionList();
         renderExecutionList();
@@ -2399,8 +2872,9 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
     const step = executionList.find((s) => s.id === selectedEditorStepId);
     if (!step || step.action === 'separator') return;
     applyEditorStep();
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        if (!tab?.id) return;
+    void (async () => {
+        const tabId = await getTargetTabId();
+        if (!tabId) return;
         const stepToRun = executionList.find((s) => s.id === selectedEditorStepId);
         if (!stepToRun) return;
         currentExecutingStepId = stepToRun.id;
@@ -2408,7 +2882,7 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
         renderExecutionList();
         renderEditorStepList();
         const stepWithVars = replaceVariablesInStep(stepToRun, getCurrentVariables());
-        sendToContentAndWait(tab.id, { action: 'executeList', steps: [stepWithVars], continueOnError: true, ...getWaitAfterStepOptions() }).then((resp) => {
+        sendToContentAndWait(tabId, { action: 'executeList', steps: [stepWithVars], continueOnError: true, ...getWaitAfterStepOptions() }).then((resp) => {
             const r = resp?.results?.[0];
             if (r?.ok) setStepStatus(stepToRun.id, 'ok', '');
             else setStepStatus(stepToRun.id, 'error', r?.error || resp?.error || 'Ошибка');
@@ -2427,7 +2901,7 @@ if (editorTestBtn) editorTestBtn.addEventListener('click', () => {
             setTimeout(() => { editorTestBtn.textContent = 'Тест шага'; }, 2000);
             if (isBfcacheError(err)) showBfcacheBanner();
         });
-    });
+    })();
 });
 if (editorChooseFileBtn) editorChooseFileBtn.addEventListener('click', () => editorFileInput?.click());
 if (editorFileInput) editorFileInput.addEventListener('change', () => {
@@ -2490,10 +2964,10 @@ async function saveScenarioToLocalRunner() {
     saveToLocalBtn.textContent = 'Сохраняю...';
     logEvent('info', 'save_to_runner_click', { stepsCount: stepsToExport.length });
     try {
-        const resp = await runnerFetch('/api/scenarios', { method: 'POST', body: JSON.stringify(payload) });
+        const resp = await runnerFetchWithRetry('/api/scenarios', { method: 'POST', body: JSON.stringify(payload) });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-        appendExecutionLog(`💾 Сохранено в раннер: ${data.scenario?.id || 'ok'}`);
+        appendExecutionLog(`💾 Сохранено в раннер: ${data.scenario?.id || 'ok'}. В Web Runner порядок прогона задаётся flow.edges (прогон по графу).`);
         saveToLocalBtn.textContent = '✓ Сохранено';
         setTimeout(() => { saveToLocalBtn.textContent = '💾 В раннер'; }, 1500);
     } catch (e) {
@@ -2502,8 +2976,6 @@ async function saveScenarioToLocalRunner() {
         logEvent('error', 'save_to_runner_failed', { error: msg });
         saveToLocalBtn.textContent = '✗ Ошибка';
         setTimeout(() => { saveToLocalBtn.textContent = '💾 В раннер'; }, 2000);
-    } finally {
-        // keep button enabled
     }
 }
 
@@ -2522,6 +2994,22 @@ function parseImportFile(data) {
     })).filter((s) => s.xpath || s.action === 'separator' || s.action === 'start' || s.action === 'end');
 }
 
+function hideUndoClearBanner() {
+    const el = $('undoClearBanner');
+    if (el) el.classList.add('hidden');
+    clearTimeout(undoClearTimer);
+    undoClearTimer = null;
+    undoClearSnapshot = null;
+}
+
+function showUndoClearBanner() {
+    const el = $('undoClearBanner');
+    if (!el) return;
+    el.classList.remove('hidden');
+    clearTimeout(undoClearTimer);
+    undoClearTimer = setTimeout(() => hideUndoClearBanner(), 25000);
+}
+
 function clearAllSteps() {
     if (!clearStepsBtn) return;
     if (executionList.length === 0) {
@@ -2531,6 +3019,7 @@ function clearAllSteps() {
     }
     const ok = confirm(`Очистить все шаги? (${executionList.length})`);
     if (!ok) return;
+    undoClearSnapshot = JSON.parse(JSON.stringify(executionList));
     executionList = [makeDefaultStartStep()];
     lastExecutionReport = [];
     currentExecutingStepId = null;
@@ -2540,10 +3029,11 @@ function clearAllSteps() {
     if (tabFlow?.classList?.contains('active')) renderFlowCanvas();
     if (executionLog) executionLog.textContent = '';
     document.querySelector('.tab[data-tab="log"]')?.classList.remove('log-has-content');
-    appendExecutionLog('Список шагов очищен');
+    appendExecutionLog('Список шагов очищён');
     logEvent('info', 'steps_cleared', { count: 0 });
     clearStepsBtn.textContent = '✓ Очищено';
     setTimeout(() => { clearStepsBtn.textContent = '🗑 Очистить'; }, 1500);
+    showUndoClearBanner();
 }
 
 function showImportModal(steps) {
@@ -2670,9 +3160,9 @@ if (exportTemplatesBtn) exportTemplatesBtn.addEventListener('click', exportToTem
 // ——— Python Playwright settings ———
 function savePythonSettings() {
     pythonSettings = {
-        executablePath: (pythonExecutablePath?.value || '').trim() || PYTHON_DEFAULTS.executablePath,
-        userDataDir: (pythonUserDataDir?.value || '').trim() || PYTHON_DEFAULTS.userDataDir,
-        debugPort: parseInt(pythonDebugPort?.value, 10) || PYTHON_DEFAULTS.debugPort,
+        executablePath: (pythonExecutablePath?.value || '').trim(),
+        userDataDir: (pythonUserDataDir?.value || '').trim(),
+        debugPort: parseInt(pythonDebugPort?.value, 10) || 9222,
         headless: !!pythonHeadless?.checked
     };
     chrome.storage.local.set({ [STORAGE_KEY_PYTHON_SETTINGS]: pythonSettings });
@@ -2680,9 +3170,9 @@ function savePythonSettings() {
 
 function getPythonLaunchCode() {
     const esc = (s) => (s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const ep = esc(pythonSettings.executablePath || PYTHON_DEFAULTS.executablePath);
-    const ud = esc(pythonSettings.userDataDir || PYTHON_DEFAULTS.userDataDir);
-    const port = pythonSettings.debugPort ?? PYTHON_DEFAULTS.debugPort;
+    const ep = esc((pythonSettings.executablePath || '').trim() || '__PATH_TO_CHROMIUM__');
+    const ud = esc((pythonSettings.userDataDir || '').trim() || '__USER_DATA_DIR__');
+    const port = pythonSettings.debugPort ?? 9222;
     const headless = pythonSettings.headless ? 'True' : 'False';
     const pad = '        ';
     return `${pad}browser = p.chromium.launch(
@@ -2696,9 +3186,9 @@ ${pad})`;
 }
 
 if (pythonSettingsBtn) pythonSettingsBtn.addEventListener('click', () => {
-    if (pythonExecutablePath) pythonExecutablePath.value = pythonSettings.executablePath || PYTHON_DEFAULTS.executablePath;
-    if (pythonUserDataDir) pythonUserDataDir.value = pythonSettings.userDataDir || PYTHON_DEFAULTS.userDataDir;
-    if (pythonDebugPort) pythonDebugPort.value = pythonSettings.debugPort ?? PYTHON_DEFAULTS.debugPort;
+    if (pythonExecutablePath) pythonExecutablePath.value = pythonSettings.executablePath ?? '';
+    if (pythonUserDataDir) pythonUserDataDir.value = pythonSettings.userDataDir ?? '';
+    if (pythonDebugPort) pythonDebugPort.value = pythonSettings.debugPort ?? 9222;
     if (pythonHeadless) pythonHeadless.checked = !!pythonSettings.headless;
     if (pythonSettingsModal) pythonSettingsModal.classList.remove('hidden');
 });
@@ -2902,9 +3392,9 @@ function exportToPomTemplate() {
     const steps = executionList.filter((s) => s.action !== 'separator');
     const launchCode = getPythonLaunchCode();
     const esc = (x) => (x || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const ep = esc(pythonSettings.executablePath || PYTHON_DEFAULTS.executablePath);
-    const ud = esc(pythonSettings.userDataDir || PYTHON_DEFAULTS.userDataDir);
-    const port = pythonSettings.debugPort ?? PYTHON_DEFAULTS.debugPort;
+    const ep = esc((pythonSettings.executablePath || '').trim() || '__PATH_TO_CHROMIUM__');
+    const ud = esc((pythonSettings.userDataDir || '').trim() || '__USER_DATA_DIR__');
+    const port = pythonSettings.debugPort ?? 9222;
     const rows = dataRows.length > 0 ? dataRows : [];
     const hasData = rows.length > 0;
 
@@ -3441,11 +3931,13 @@ async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, origina
                 });
                 lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: 0, timestamp: new Date().toISOString() });
                 currentIdx++;
-                await new Promise((r) => setTimeout(r, 1500));
+                await waitForTabScriptReady(tabId);
+                await new Promise((r) => setTimeout(r, 600));
                 continue;
             }
-            const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
-            const resp = await sendToContentAndWait(tabId, { action: 'executeStep', step, selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout, ...getWaitAfterStepOptions() }, stepTimeout);
+            const stepTimeout = computeExecuteStepPanelTimeoutMs(step, selectorTimeout);
+            await prepareTabBeforeExecuteStep(tabId);
+            const resp = await sendToContentAndWait(tabId, { action: 'executeStep', step, selectorTimeoutMs: step.params?.timeoutMs ?? selectorTimeout, ...getWaitAfterStepOptions() }, stepTimeout, { navigateAssistStep: step });
             if (!resp?.ok) {
                 lastExecutionReport.push({ stepId: step.id, step, ok: false, error: resp?.error, durationMs: 0, timestamp: new Date().toISOString() });
                 highlightElementOnError(tabId, step);
@@ -3469,10 +3961,14 @@ async function runExecutionWithBranchingForDataRow(tabId, stepsWithVars, origina
 }
 
 if (executeDataDrivenBtn) executeDataDrivenBtn.addEventListener('click', () => {
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        if (!tab?.id) return;
-        runDataDrivenExecution(tab.id);
-    });
+    void (async () => {
+        const tabId = await getTargetTabId();
+        if (!tabId) {
+            appendExecutionLog('Нет целевой вкладки — откройте страницу в браузере или снимите привязку 📌.');
+            return;
+        }
+        runDataDrivenExecution(tabId);
+    })();
 });
 
 // ——— Execute list ———
@@ -3517,6 +4013,13 @@ function needsStepByStepExecution() {
 }
 
 async function runExecutionWithBranching(tabId, fromStepId) {
+    if (branchingRunnerLocked) {
+        appendExecutionLog('⚠ Уже идёт выполнение сценария — дождитесь конца или нажмите «Стоп».');
+        return;
+    }
+    branchingRunnerLocked = true;
+    branchingRunnerTargetTabId = tabId;
+    try {
     const stepsToRun = executionList.filter((s) => s.action !== 'separator');
     if (stepsToRun.length === 0) return;
     const runList = fromStepId ? executionList : normalizeRunOrderForExecution(executionList);
@@ -3546,6 +4049,7 @@ async function runExecutionWithBranching(tabId, fromStepId) {
         currentExecutingStepId = step.id;
         renderExecutionList();
         if (stepDelay > 0 && okCount > 0) await new Promise((r) => setTimeout(r, stepDelay));
+        let execStepWallMs = 0;
         try {
             if (step.action === 'start') {
                 const t0 = Date.now();
@@ -3611,18 +4115,21 @@ async function runExecutionWithBranching(tabId, fromStepId) {
                 appendExecutionLog(`✓ ${step.id} → ${url} (${Date.now() - t0}мс)`);
                 lastExecutionReport.push({ stepId: step.id, step, ok: true, durationMs: Date.now() - t0, timestamp: new Date().toISOString() });
                 currentIdx++;
-                await new Promise((r) => setTimeout(r, 1500)); // даём content script загрузиться на новой странице
+                await waitForTabScriptReady(tabId);
+                await new Promise((r) => setTimeout(r, 600));
                 continue;
             }
-            const stepTimeout = Math.max(60000, (step.params?.timeoutMs ?? selectorTimeout) + 15000);
-            const t0 = Date.now();
             const stepWithVars = replaceVariablesInStep(step, getCurrentVariables());
+            const stepTimeout = computeExecuteStepPanelTimeoutMs(stepWithVars, selectorTimeout);
+            execStepWallMs = Date.now();
+            const t0 = execStepWallMs;
+            await prepareTabBeforeExecuteStep(tabId);
             const resp = await sendToContentAndWait(tabId, {
                 action: 'executeStep',
                 step: stepWithVars,
                 selectorTimeoutMs: stepWithVars.params?.timeoutMs ?? selectorTimeout,
                 ...getWaitAfterStepOptions()
-            }, stepTimeout);
+            }, stepTimeout, { navigateAssistStep: stepWithVars });
             if (!resp?.ok) {
                 const errMsg = resp?.error || 'Ошибка';
                 setStepStatus(step.id, 'error', errMsg);
@@ -3634,6 +4141,10 @@ async function runExecutionWithBranching(tabId, fromStepId) {
                 if (mandatory && !continueOnError) break;
                 currentIdx++;
                 continue;
+            }
+            if (resp?.syntheticAfterNavigate) {
+                await waitForTabScriptReady(tabId, { maxMs: 25000 });
+                await new Promise((r) => setTimeout(r, 1400));
             }
             okCount++;
             setStepStatus(step.id, 'ok', '');
@@ -3651,7 +4162,7 @@ async function runExecutionWithBranching(tabId, fromStepId) {
             }
         } catch (err) {
             const msg = getTabErrorMessage(err);
-            const durationMs = typeof t0 !== 'undefined' ? Date.now() - t0 : 0;
+            const durationMs = execStepWallMs ? Date.now() - execStepWallMs : 0;
             setStepStatus(step.id, 'error', msg);
             appendExecutionLog(`✗ ${step.id}: ${msg} (${durationMs}мс)`);
             highlightElementOnError(tabId, step);
@@ -3669,6 +4180,10 @@ async function runExecutionWithBranching(tabId, fromStepId) {
     appendExecutionLog(stopExecutionRequested ? 'Остановлено' : `Готово: ${okCount} шагов (всего ${totalDuration}мс)`);
     executeListBtn.textContent = `✓ ${okCount}`;
     setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2500);
+    } finally {
+        branchingRunnerLocked = false;
+        branchingRunnerTargetTabId = null;
+    }
 }
 
 function runExecutionFromStep(fromStepId) {
@@ -3676,12 +4191,16 @@ function runExecutionFromStep(fromStepId) {
     if (idx < 0) return;
     const stepsToRun = executionList.slice(idx).filter((s) => s.action !== 'separator');
     if (stepsToRun.length === 0) return;
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        if (!tab?.id) return;
+    void (async () => {
+        const tabId = await getTargetTabId();
+        if (!tabId) {
+            appendExecutionLog('Нет целевой вкладки — откройте страницу в браузере или снимите привязку 📌.');
+            return;
+        }
         if (needsStepByStepExecution()) {
             if (executionLog) executionLog.textContent = '';
             setExecutionUIRunning(true);
-            runExecutionWithBranching(tab.id, fromStepId);
+            runExecutionWithBranching(tabId, fromStepId);
             return;
         }
         const continueOnError = !stopOnErrorEl?.checked;
@@ -3695,7 +4214,7 @@ function runExecutionFromStep(fromStepId) {
         lastExecutionReport = [];
         const batchStart = Date.now();
         const stepsWithVars = stepsToRun.map((s) => replaceVariablesInStep(s, getCurrentVariables()));
-        sendToContentAndWait(tab.id, {
+        sendToContentAndWait(tabId, {
             action: 'executeList',
             steps: stepsWithVars,
             continueOnError,
@@ -3721,8 +4240,8 @@ function runExecutionFromStep(fromStepId) {
             if (firstFailedStep) {
                 const failedEntry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
                 const step = failedEntry?.step || stepsToRun.find((s) => s.id === firstFailedStep.id);
-                if (step) highlightElementOnError(tab.id, step);
-                const screenshot = await captureScreenshotOnError(tab.id);
+                if (step) highlightElementOnError(tabId, step);
+                const screenshot = await captureScreenshotOnError(tabId);
                 const entry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
                 if (entry) entry.screenshotBase64 = screenshot;
             }
@@ -3739,14 +4258,16 @@ function runExecutionFromStep(fromStepId) {
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
             if (isBfcacheError(err)) showBfcacheBanner();
         });
-    });
+    })();
 }
 
 function appendExecutionLog(line) {
     if (!executionLog) return;
     const t = new Date().toLocaleTimeString('ru-RU', { hour12: false });
-    executionLog.textContent += `[${t}] ${maskSecretsInText(String(line))}\n`;
+    const masked = maskSecretsInText(String(line));
+    executionLog.textContent += `[${t}] ${masked}\n`;
     executionLog.scrollTop = executionLog.scrollHeight;
+    setExecLive(masked.slice(0, 400));
     const logTab = document.querySelector('.tab[data-tab="log"]');
     if (logTab && !logTab.classList.contains('log-has-content')) {
         logTab.classList.add('log-has-content');
@@ -3759,8 +4280,12 @@ executeListBtn.addEventListener('click', () => {
         setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 2000);
         return;
     }
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        if (!tab?.id) return;
+    void (async () => {
+        const tabId = await getTargetTabId();
+        if (!tabId) {
+            appendExecutionLog('Нет целевой вкладки — откройте страницу в браузере или снимите привязку 📌.');
+            return;
+        }
         const startIx = findScenarioStartIndex(executionList);
         const stepsToRun = executionList.slice(startIx).filter((s) => s.action !== 'separator');
         if (stepsToRun.length === 0) {
@@ -3772,7 +4297,7 @@ executeListBtn.addEventListener('click', () => {
             if (executionLog) executionLog.textContent = '';
             appendExecutionLog(`Старт (пошагово) с позиции ${startIx + 1}: ${stepsToRun.length} шагов`);
             setExecutionUIRunning(true);
-            runExecutionWithBranching(tab.id, null);
+            runExecutionWithBranching(tabId, null);
             return;
         }
         const continueOnError = !stopOnErrorEl?.checked;
@@ -3786,7 +4311,7 @@ executeListBtn.addEventListener('click', () => {
         lastExecutionReport = [];
         const batchStart = Date.now();
         const stepsWithVars = stepsToRun.map((s) => replaceVariablesInStep(s, getCurrentVariables()));
-        sendToContentAndWait(tab.id, {
+        sendToContentAndWait(tabId, {
             action: 'executeList',
             steps: stepsWithVars,
             continueOnError,
@@ -3812,8 +4337,8 @@ executeListBtn.addEventListener('click', () => {
             if (firstFailedStep) {
                 const failedEntry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
                 const step = failedEntry?.step || stepsToRun.find((s) => s.id === firstFailedStep.id);
-                if (step) highlightElementOnError(tab.id, step);
-                const screenshot = await captureScreenshotOnError(tab.id);
+                if (step) highlightElementOnError(tabId, step);
+                const screenshot = await captureScreenshotOnError(tabId);
                 const entry = lastExecutionReport.find((e) => e.stepId === firstFailedStep.id && !e.ok);
                 if (entry) entry.screenshotBase64 = screenshot;
             }
@@ -3830,7 +4355,7 @@ executeListBtn.addEventListener('click', () => {
             setTimeout(() => { executeListBtn.textContent = '▶ Выполнить'; }, 3000);
             if (isBfcacheError(err)) showBfcacheBanner();
         });
-    });
+    })();
 });
 
 async function runHealthCheck(tabId) {
@@ -3848,7 +4373,7 @@ async function runHealthCheck(tabId) {
         fx.slice(0, 5).forEach((xp, i) => { if (xp) xps.push({ kind: 'fallback', idx: i, xp: String(xp) }); });
         for (const item of xps) {
             const xp = replaceVariables(item.xp, getCurrentVariables());
-            const resp = await sendToContentAndWait(tabId, { action: 'validateXpath', xpath: xp }, 8000).catch((e) => ({ ok: false, error: e?.message || String(e) }));
+            const resp = await sendMessagePlainWithInject(tabId, { action: 'validateXpath', xpath: xp }).catch((e) => ({ ok: false, error: e?.message || String(e) }));
             const count = resp?.count;
             const line = `HC #${step.id} ${item.kind}${item.kind === 'fallback' ? '[' + item.idx + ']' : ''} → ${typeof count === 'number' ? count : 'err'}: ${truncate(xp, 80)}`;
             if (!resp?.ok) { bad++; appendExecutionLog(line + ` (${resp?.error || 'error'})`); continue; }
@@ -3862,30 +4387,106 @@ async function runHealthCheck(tabId) {
 
 if (healthCheckBtn) {
     healthCheckBtn.addEventListener('click', () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, async ([tab]) => {
-            if (!tab?.id) return;
+        void (async () => {
+            const tabId = await getTargetTabId();
+            if (!tabId) return;
             const prev = healthCheckBtn.textContent;
             healthCheckBtn.textContent = '…';
             try {
-                await runHealthCheck(tab.id);
+                await runHealthCheck(tabId);
             } finally {
                 healthCheckBtn.textContent = prev;
             }
-        });
+        })();
     });
 }
 
 if (stopExecuteBtn) {
     stopExecuteBtn.addEventListener('click', () => {
         stopExecutionRequested = true;
-        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-            if (tab?.id) chrome.tabs.sendMessage(tab.id, { action: 'stopExecution' });
+        void (async () => {
+            const tabId = await getTargetTabId();
+            if (tabId) chrome.tabs.sendMessage(tabId, { action: 'stopExecution' });
             setExecutionUIRunning(false);
             currentExecutingStepId = null;
             renderExecutionList();
+        })();
+    });
+}
+
+if ($('pingTabBtn')) $('pingTabBtn').addEventListener('click', () => refreshTabContextUI());
+if ($('bindTabBtn')) {
+    $('bindTabBtn').addEventListener('click', () => {
+        void (async () => {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const id = tabs[0]?.id;
+            if (id != null) {
+                persistBoundTabId(id);
+                appendExecutionLog(`Выполнение привязано к вкладке (id ${id})`);
+                refreshTabContextUI();
+            }
+        })();
+    });
+}
+if ($('unbindTabBtn')) {
+    $('unbindTabBtn').addEventListener('click', () => {
+        persistBoundTabId(null);
+        appendExecutionLog('Режим: всегда активная вкладка окна');
+        refreshTabContextUI();
+    });
+}
+if ($('gotoTabBtn')) {
+    $('gotoTabBtn').addEventListener('click', () => {
+        void (async () => {
+            const tabId = await getTargetTabId();
+            if (!tabId) return;
+            await chrome.tabs.update(tabId, { active: true });
+        })();
+    });
+}
+if ($('copyDiagnosticsBtn')) {
+    $('copyDiagnosticsBtn').addEventListener('click', () => {
+        copyDiagnosticsToClipboard().then(() => {
+            const b = $('copyDiagnosticsBtn');
+            if (!b) return;
+            const o = b.textContent;
+            b.textContent = '✓';
+            setTimeout(() => { b.textContent = o; }, 1500);
         });
     });
 }
+if ($('helpShortcutsBtn')) $('helpShortcutsBtn').addEventListener('click', () => $('helpShortcutsModal')?.classList.remove('hidden'));
+if ($('helpShortcutsClose')) $('helpShortcutsClose').addEventListener('click', () => $('helpShortcutsModal')?.classList.add('hidden'));
+const helpShortcutsModalEl = $('helpShortcutsModal');
+if (helpShortcutsModalEl) {
+    helpShortcutsModalEl.addEventListener('click', (e) => {
+        if (e.target === helpShortcutsModalEl) helpShortcutsModalEl.classList.add('hidden');
+    });
+}
+if ($('undoClearRestoreBtn')) {
+    $('undoClearRestoreBtn').addEventListener('click', () => {
+        if (!undoClearSnapshot) return;
+        executionList = undoClearSnapshot;
+        undoClearSnapshot = null;
+        hideUndoClearBanner();
+        saveExecutionList();
+        renderExecutionList();
+        renderEditorStepList();
+        appendExecutionLog('Список восстановлен после очистки');
+    });
+}
+if ($('undoClearDismissBtn')) $('undoClearDismissBtn').addEventListener('click', () => hideUndoClearBanner());
+
+try {
+    chrome.tabs.onActivated.addListener(() => refreshTabContextUI());
+    chrome.tabs.onUpdated.addListener((tabId, info) => {
+        if (info.status === 'complete' || info.title != null || info.url != null) {
+            void getTargetTabId().then((tid) => {
+                if (tid === tabId) refreshTabContextUI();
+            });
+        }
+    });
+} catch (_) {}
 
 loadExecutionList();
 
@@ -3905,9 +4506,10 @@ chrome.runtime.sendMessage({ action: 'ping' }, () => {
 });
 
 function reloadActiveTab() {
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        if (tab?.id) chrome.tabs.reload(tab.id);
-    });
+    void (async () => {
+        const tabId = await getTargetTabId();
+        if (tabId) chrome.tabs.reload(tabId);
+    })();
 }
 if (reloadTabBtn) reloadTabBtn.addEventListener('click', reloadActiveTab);
 const reloadTabBtnBfcache = $('reloadTabBtnBfcache');

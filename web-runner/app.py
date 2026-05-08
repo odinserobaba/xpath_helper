@@ -32,6 +32,8 @@ SCENARIOS_DIR = REPO_ROOT / "tests" / "scenarios"
 LOG_DIR = REPO_ROOT / "tests" / "logs"
 RUNNER_TOKEN = os.environ.get("XPATH_RUNNER_TOKEN", "").strip() or None
 SCENARIO_HISTORY_DIR = REPO_ROOT / "tests" / "scenarios" / ".history"
+# Подробные логи перебора XPath (waitForLoad, порядок fallback, skip, ошибки). Отключить: XPATH_RUNNER_SELECTOR_LOG=0
+_SELECTOR_LOG_VERBOSE = os.environ.get("XPATH_RUNNER_SELECTOR_LOG", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app = FastAPI(title="XPath Helper — Web Runner")
@@ -315,6 +317,38 @@ def _xpath_for_sse(action: str, xpath: str) -> Optional[str]:
     return x[:520]
 
 
+def _xpath_is_extension_highlight_noise(xp: str) -> bool:
+    """
+    Fallbacks recorded while the Chrome extension outlines the hovered element (same green as runner highlight).
+    In a cold Playwright page those inline styles are absent, so the XPath matches nothing useful and each
+    attempt wastes the full step timeout — avoid them in the runner.
+    """
+    s = (xp or "").lower().replace(" ", "")
+    if "outline" not in s:
+        return False
+    if "rgb(0,212,170)" in s or "0,212,170" in s:
+        return True
+    if "00d4aa" in s or "#00d4aa" in s:
+        return True
+    return False
+
+
+def _dedupe_selectors_preserve_order(candidates: List[str]) -> List[str]:
+    seen: set[str] = set()
+    out: List[str] = []
+    for c in candidates:
+        if not c or c in seen:
+            continue
+        seen.add(c)
+        out.append(c)
+    return out
+
+
+def _selectors_for_runner(candidates: List[str]) -> List[str]:
+    """Drop extension-only noise and duplicate XPaths (keeps primary + fallbacks order)."""
+    return _dedupe_selectors_preserve_order([c for c in candidates if not _xpath_is_extension_highlight_noise(c)])
+
+
 def _step_done_timing(s: Step, step_t0: float) -> Dict[str, Any]:
     """duration + метаданные шага для SSE step_done."""
     return {
@@ -432,6 +466,113 @@ def _resolve_branch_jump_index(target: Any, steps: List[Step]) -> Optional[int]:
     if step_no >= 1_000_000_000_000:
         return None
     return next((j for j, st in enumerate(steps) if st.step == step_no), None)
+
+
+def _flow_node_id_to_step_ref(node_id: str) -> Optional[int]:
+    """Номер шага из id узла Flow Editor: ``step-12``, ``step-12-<ts>`` (как в branch)."""
+    nid = (node_id or "").strip()
+    if not nid:
+        return None
+    if nid.isdigit():
+        v = int(nid)
+        return v if v > 0 else None
+    m_ref_ts = re.match(r"^step-(\d+)-(\d+)", nid, re.I)
+    if m_ref_ts:
+        seg1, seg2 = int(m_ref_ts.group(1)), int(m_ref_ts.group(2))
+        if seg2 >= 1_000_000_000_000:
+            return seg1
+        if seg1 >= 1_000_000_000_000:
+            return None
+        return seg1
+    m = re.match(r"^step-(\d+)$", nid, re.I)
+    if m:
+        return int(m.group(1))
+    m2 = re.search(r"(?:^|[-_/])(?:step[-_]?|s)(\d+)", nid, re.I)
+    if m2:
+        cand = int(m2.group(1))
+        if cand < 1_000_000_000_000:
+            return cand
+    return None
+
+
+def _edge_kind_for_flow_run(e: Dict[str, Any]) -> str:
+    """kind из плоского JSON или из data.kind (старые сохранения)."""
+    k = str(e.get("kind") or "").strip().lower()
+    if k:
+        return k
+    data = e.get("data")
+    if isinstance(data, dict):
+        return str(data.get("kind") or "").strip().lower()
+    return ""
+
+
+def _build_flow_next_map(raw: Any, steps: List[Step]) -> Tuple[Optional[Dict[int, int]], List[str]]:
+    """
+    Карта step_no -> следующий step_no по рёбрам flow с kind=next (первое в порядке JSON).
+    Рёбра yes/no/decorate не используются (ветвление — по branch/assert в коде).
+    """
+    warnings: List[str] = []
+    if not isinstance(raw, dict):
+        return None, warnings
+    flow = raw.get("flow")
+    if not isinstance(flow, dict):
+        return None, warnings
+    edges = flow.get("edges")
+    if not isinstance(edges, list) or not edges:
+        return None, warnings
+    known = {s.step for s in steps}
+    next_map: Dict[int, int] = {}
+    dup_warned: set = set()
+
+    for e in edges:
+        if not isinstance(e, dict):
+            continue
+        kind = _edge_kind_for_flow_run(e)
+        if not kind:
+            kind = "next"
+        if kind == "decorate":
+            continue
+        if kind in ("yes", "no"):
+            continue
+        if kind != "next":
+            continue
+        src = _flow_node_id_to_step_ref(str(e.get("source") or ""))
+        tgt = _flow_node_id_to_step_ref(str(e.get("target") or ""))
+        if src is None or tgt is None:
+            continue
+        if src not in known or tgt not in known:
+            continue
+        if src in next_map:
+            if next_map[src] != tgt and src not in dup_warned:
+                dup_warned.add(src)
+                warnings.append(
+                    f"шаг {src}: несколько рёбер next в flow (берётся первое в JSON: → {next_map[src]}; пропуск → {tgt})"
+                )
+            continue
+        next_map[src] = tgt
+
+    if not next_map:
+        return None, warnings
+    return next_map, warnings
+
+
+def _next_idx_after_step(
+    idx: int,
+    steps: List[Step],
+    step_to_idx: Dict[int, int],
+    next_map: Optional[Dict[int, int]],
+    use_graph: bool,
+) -> Optional[int]:
+    """Следующий индекс в steps: по графу или линейно idx+1; None — конец."""
+    if not use_graph or not next_map:
+        return idx + 1 if idx + 1 < len(steps) else None
+    cur = steps[idx].step
+    tgt = next_map.get(cur)
+    if tgt is not None:
+        j = step_to_idx.get(tgt)
+        if j is not None:
+            return j
+    return idx + 1 if idx + 1 < len(steps) else None
 
 
 def _scenario_steps_count(raw: Any) -> int:
@@ -591,6 +732,8 @@ def run_scenario(
     debug_breakpoints: Optional[Any] = None,
     capture_console: bool = False,
     cancel_request_dir: Optional[Path] = None,
+    scenario_raw: Optional[Dict[str, Any]] = None,
+    follow_flow_graph: bool = True,
 ) -> Dict[str, Any]:
     logs: List[str] = []
     results: List[Dict[str, Any]] = []
@@ -652,6 +795,23 @@ def run_scenario(
                     f"▶ Запуск с шага #{target} (позиция в списке {jump}). Проверьте startUrl — страница должна соответствовать этому месту сценария.",
                 )
 
+    step_to_idx: Dict[int, int] = {st.step: i for i, st in enumerate(steps)}
+    next_map: Optional[Dict[int, int]] = None
+    flow_graph_warnings: List[str] = []
+    use_flow_graph = False
+    if follow_flow_graph and isinstance(scenario_raw, dict):
+        next_map, flow_graph_warnings = _build_flow_next_map(scenario_raw, steps)
+        if next_map:
+            use_flow_graph = True
+            for w in flow_graph_warnings:
+                _log_line(logs, f"⚠ Flow: {w}")
+            _log_line(
+                logs,
+                "▶ Режим графа: следующий шаг по flow.edges (kind=next). "
+                "Ветки branch/assert — по полям nextStep в шаге; рёбра yes/no на схеме не задают порядок. "
+                "Если для шага нет ребра next — берётся следующий шаг в списке steps.",
+            )
+
     _emit_run_event(run_dir, {"ts": time.time(), "event": "run_start", "scenario": scenario_name, "stepsCount": len(steps)})
 
     _jsonl_append(
@@ -677,6 +837,16 @@ def run_scenario(
             browser = p.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
             context = browser.new_context(viewport={"width": width, "height": height})
             page = context.new_page()
+
+        def log_sel(msg: str) -> None:
+            if not _SELECTOR_LOG_VERBOSE:
+                return
+            _log_line(logs, f"↳ [sel] {msg}")
+
+        def xp_snip(xp: str, n: int = 160) -> str:
+            x = (xp or "").replace("\n", " ")
+            return (x[: n - 3] + "...") if len(x) > n else x
+
         console_lines: List[str] = []
         if capture_console:
 
@@ -810,6 +980,7 @@ def run_scenario(
 
         def try_open_listbox_hint() -> None:
             """Best-effort: open combobox/listbox via keyboard to make options visible."""
+            log_sel("listbox hint: combobox focus + ArrowDown ×2 (best-effort)")
             try:
                 # 1) focus an existing combobox if present
                 try:
@@ -862,6 +1033,101 @@ def run_scenario(
             except Exception as e:
                 return {"total": 0, "visible": 0, "error": str(e)}
 
+        def pick_first_visible_xpath_priority(candidates: List[str]) -> Optional[str]:
+            """First XPath in priority list that has ≥1 visible node (fast DOM probe, no long Playwright wait)."""
+            for cand in candidates:
+                if not cand:
+                    continue
+                try:
+                    vis = element_visibility_summary_by_xpath(cand)
+                    if int(vis.get("visible") or 0) > 0:
+                        return cand
+                except Exception:
+                    continue
+            return None
+
+        def build_selector_candidate_order(candidates: List[str], *, prefer_visible: bool) -> List[str]:
+            """
+            Put the first visible-matching XPath first so we do not spend defaultTimeoutMs
+            waiting on a primary selector that matches only hidden/off-DOM nodes.
+            """
+            cleaned = [c for c in candidates if c]
+            if not cleaned:
+                log_sel("порядок XPath: список кандидатов пуст")
+                return []
+            if not prefer_visible:
+                log_sel(f"порядок XPath: preferVisible=false — исходный порядок, всего {len(cleaned)}")
+                for i, c in enumerate(cleaned[:20]):
+                    log_sel(f"  [{i + 1}/{len(cleaned)}] {xp_snip(c)}")
+                if len(cleaned) > 20:
+                    log_sel(f"  … ещё {len(cleaned) - 20} XPath")
+                return cleaned
+            picked = pick_first_visible_xpath_priority(cleaned)
+            if picked is None:
+                log_sel("видимых совпадений нет — подсказка listbox (стрелки вниз) + пауза 120ms")
+                try_open_listbox_hint()
+                page.wait_for_timeout(120)
+                picked = pick_first_visible_xpath_priority(cleaned)
+            if picked is None:
+                log_sel(f"после listbox видимых по-прежнему нет — обход в исходном порядке ({len(cleaned)} XPath)")
+                for i, c in enumerate(cleaned[:20]):
+                    vis = element_visibility_summary_by_xpath(c)
+                    log_sel(
+                        f"  [{i + 1}/{len(cleaned)}] total={vis.get('total')} visible={vis.get('visible')} {xp_snip(c)}"
+                    )
+                if len(cleaned) > 20:
+                    log_sel(f"  … ещё {len(cleaned) - 20} XPath")
+                return cleaned
+            rest = [c for c in cleaned if c != picked]
+            log_sel(f"приоритет по видимости: первый «{xp_snip(picked)}», затем ещё {len(rest)}")
+            ordered = [picked] + rest
+            for i, c in enumerate(ordered[:20]):
+                vis = element_visibility_summary_by_xpath(c)
+                log_sel(f"  [{i + 1}/{len(ordered)}] total={vis.get('total')} visible={vis.get('visible')} {xp_snip(c)}")
+            if len(ordered) > 20:
+                log_sel(f"  … ещё {len(ordered) - 20} XPath")
+            return ordered
+
+        def maybe_wait_for_load_after_page_load(
+            params: Dict[str, Any],
+            selector_candidates: Optional[List[str]] = None,
+        ) -> None:
+            """
+            Honor params.waitForLoad (extension JSON), but avoid redundant waits:
+            if the page is already fully loaded and/or the step's locators are already visible,
+            do not call wait_for_load_state (saves time; load wait does not help when selector is already there).
+            """
+            if not bool(params.get("waitForLoad")):
+                return
+            log_sel("waitForLoad=true: проверка перед шагом…")
+            # 1) Any candidate already visible → DOM is ready for this step; no load wait.
+            if selector_candidates:
+                try:
+                    cleaned = [c for c in selector_candidates if c]
+                    if cleaned and pick_first_visible_xpath_priority(cleaned) is not None:
+                        log_sel("пропуск wait_for_load: уже есть видимый узел по одному из XPath кандидатов")
+                        return
+                except Exception as ex:
+                    log_sel(f"проба видимости для waitForLoad: {ex!s}")
+            # 2) document.readyState === 'complete' → "load" already fired; Playwright wait adds nothing.
+            try:
+                rs = page.evaluate("() => document.readyState")
+                if str(rs) == "complete":
+                    log_sel("пропуск wait_for_load: document.readyState=complete")
+                    return
+                log_sel(f"readyState={rs!r} — при необходимости ждём load")
+            except Exception as ex:
+                log_sel(f"readyState: ошибка чтения {ex!s}")
+            # 3) Still loading or no visible match yet — wait for load (e.g. after navigation).
+            try:
+                cap = int(params.get("waitForLoadTimeoutMs") or 30000)
+                cap = max(1000, min(cap, 120_000))
+                log_sel(f"page.wait_for_load_state('load', timeout={cap}ms)…")
+                page.wait_for_load_state("load", timeout=cap)
+                log_sel("wait_for_load_state(load) завершён")
+            except Exception as ex:
+                log_sel(f"wait_for_load_state(load): исключение (продолжаем шаг): {ex!s}")
+
         try:
             if start_url:
                 _log_line(logs, f"Start URL: {start_url}")
@@ -870,7 +1136,16 @@ def run_scenario(
                 maybe_bring_to_front()
 
             idx = entry_idx
+            flow_step_guard = 0
+            flow_step_limit = max(300, len(steps) * 50)
             while idx < len(steps):
+                flow_step_guard += 1
+                if flow_step_guard > flow_step_limit:
+                    _log_line(
+                        logs,
+                        f"■ Остановка: превышен лимит {flow_step_limit} исполнений шагов (возможный цикл по графу)",
+                    )
+                    break
                 s = steps[idx]
                 if _run_cancel_requested(_cancel_chk):
                     run_cancelled = True
@@ -922,8 +1197,18 @@ def run_scenario(
                     _substitute_vars(x, variables) for x in (s.fallback_xpaths or [])
                     if isinstance(x, str) and x.strip()
                 ]
-                selector_candidates = [xpath] + fallback_xpaths
+                selector_candidates = _selectors_for_runner([xpath] + fallback_xpaths)
                 selector_used = xpath
+                if s.action in {"click", "click_if_exists", "input", "set_date", "wait_for_element"} and selector_candidates:
+                    log_sel(
+                        f"шаг #{s.step} {s.action}: timeoutMs={step_timeout_ms} waitState={wait_state} "
+                        f"preferVisible={prefer_visible} requireEnabled={require_enabled} retryOnFlaky={retry_on_flaky}"
+                    )
+                    log_sel(f"  кандидатов после фильтра (outline/дедуп): {len(selector_candidates)}")
+                    for i, c in enumerate(selector_candidates[:25]):
+                        log_sel(f"  [{i + 1}] {xp_snip(c)}")
+                    if len(selector_candidates) > 25:
+                        log_sel(f"  … ещё {len(selector_candidates) - 25} XPath")
 
                 if s.action == "navigate":
                     nav_u = _url_for_log(str(params.get("url") or ""), 200)
@@ -1029,16 +1314,26 @@ def run_scenario(
                     elif s.action == "wait_for_element":
                         if not xpath:
                             raise ValueError("wait_for_element requires xpath")
+                        maybe_wait_for_load_after_page_load(params, selector_candidates)
                         ok_found = False
-                        for cand in selector_candidates:
+                        _order_by_visible = prefer_visible and wait_state == "visible"
+                        wfe_order = build_selector_candidate_order(
+                            selector_candidates, prefer_visible=_order_by_visible
+                        )
+                        for wi, cand in enumerate(wfe_order):
                             if not cand:
                                 continue
                             try:
+                                log_sel(
+                                    f"wait_for_element: [{wi + 1}/{len(wfe_order)}] wait_for({wait_state!r}) {step_timeout_ms}ms — {xp_snip(cand)}"
+                                )
                                 page.locator(f"xpath={cand}").first.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
                                 selector_used = cand
                                 ok_found = True
+                                log_sel("wait_for_element: условие выполнено")
                                 break
-                            except PlaywrightTimeoutError:
+                            except PlaywrightTimeoutError as e:
+                                log_sel(f"wait_for_element: таймаут на этом XPath: {xp_snip(cand)} — {str(e)[:200]}")
                                 continue
                         if not ok_found:
                             raise PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for any selector (primary + fallbacks)")
@@ -1054,23 +1349,35 @@ def run_scenario(
                     elif s.action == "click_if_exists":
                         if not xpath:
                             raise ValueError("click_if_exists requires xpath")
-                        for cand in selector_candidates:
+                        maybe_wait_for_load_after_page_load(params, selector_candidates)
+                        cie_order = build_selector_candidate_order(selector_candidates, prefer_visible=prefer_visible)
+                        for ci, cand in enumerate(cie_order):
                             if not cand:
                                 continue
+                            role = "primary" if cand == xpath else "fallback"
                             loc_all = page.locator(f"xpath={cand}")
-                            if loc_all.count() > 0:
+                            cnt = loc_all.count()
+                            if cand != xpath and cnt == 0:
+                                log_sel(f"click_if_exists [{ci + 1}/{len(cie_order)}] {role} пропуск count=0 — {xp_snip(cand)}")
+                                continue
+                            if cnt > 0:
+                                log_sel(f"click_if_exists [{ci + 1}/{len(cie_order)}] {role} count={cnt} — {xp_snip(cand)}")
                                 selector_used = cand
                                 # Prefer JS click on first visible match (handles virtualized lists / hidden clones)
                                 if prefer_visible:
                                     if js_click_first_visible_by_xpath(cand):
+                                        log_sel("click_if_exists: JS click OK")
                                         break
                                     vis = element_visibility_summary_by_xpath(cand)
+                                    log_sel(f"click_if_exists: total={vis.get('total')} visible={vis.get('visible')}")
                                     if int(vis.get("total") or 0) > 0 and int(vis.get("visible") or 0) == 0:
                                         # Options exist but hidden → try opening listbox and retry
                                         try_open_listbox_hint()
                                         if js_click_first_visible_by_xpath(cand):
+                                            log_sel("click_if_exists: после hint JS click OK")
                                             break
                                 loc = first_visible(loc_all) if prefer_visible else loc_all.first
+                                log_sel(f"click_if_exists: wait_for(attached) {step_timeout_ms}ms…")
                                 loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
                                 ensure_enabled(loc)
                                 maybe_bring_to_front()
@@ -1079,6 +1386,7 @@ def run_scenario(
                                     loc.click(timeout=max(0, step_timeout_ms), force=click_force)
                                 except Exception:
                                     loc.click(timeout=max(0, step_timeout_ms), force=True)
+                                log_sel("click_if_exists: Playwright click OK")
                                 break
                         shot_after = screenshot(f"step_{s.step}_after")
                         try:
@@ -1092,31 +1400,54 @@ def run_scenario(
                     elif s.action == "click":
                         if not xpath:
                             raise ValueError("click requires xpath")
+                        maybe_wait_for_load_after_page_load(params, selector_candidates)
                         last_click_err = None
                         clicked = False
                         attempts = max(1, max_attempts) if retry_on_flaky else 1
                         for attempt in range(attempts):
-                            for cand in selector_candidates:
+                            log_sel(f"click: попытка {attempt + 1}/{attempts} (flaky retry)")
+                            ordered_candidates = build_selector_candidate_order(
+                                selector_candidates, prefer_visible=prefer_visible
+                            )
+                            for ci, cand in enumerate(ordered_candidates):
                                 if not cand:
                                     continue
+                                role = "primary" if cand == xpath else "fallback"
                                 try:
                                     loc_all = page.locator(f"xpath={cand}")
+                                    cnt = loc_all.count()
+                                    # Fallback with zero nodes in DOM: skip (do not burn full step_timeout per dead XPath).
+                                    if cand != xpath and cnt == 0:
+                                        log_sel(
+                                            f"  [{ci + 1}/{len(ordered_candidates)}] {role} пропуск: count=0 в DOM — {xp_snip(cand)}"
+                                        )
+                                        continue
+                                    log_sel(
+                                        f"  [{ci + 1}/{len(ordered_candidates)}] {role} count={cnt} — {xp_snip(cand)}"
+                                    )
                                     # Fast path: click first visible match via JS (best for virtualized menus/lists)
                                     if prefer_visible:
                                         if js_click_first_visible_by_xpath(cand):
+                                            log_sel("     → JS click по первому видимому: OK")
                                             selector_used = cand
                                             clicked = True
                                             break
                                         vis = element_visibility_summary_by_xpath(cand)
+                                        log_sel(f"     visibility probe: total={vis.get('total')} visible={vis.get('visible')}")
                                         if int(vis.get("total") or 0) > 0 and int(vis.get("visible") or 0) == 0:
                                             # Found only hidden matches → likely listbox closed. Try open and retry.
+                                            log_sel("     → только скрытые узлы — listbox hint и повтор JS click")
                                             try_open_listbox_hint()
                                             if js_click_first_visible_by_xpath(cand):
+                                                log_sel("     → после hint JS click: OK")
                                                 selector_used = cand
                                                 clicked = True
                                                 break
+                                    log_sel(f"     Playwright: wait_for(attached) до {step_timeout_ms}ms…")
                                     loc = first_visible(loc_all) if prefer_visible else loc_all.first
                                     loc.wait_for(state="attached", timeout=max(0, step_timeout_ms))
+                                    log_sel("     wait_for(attached): OK")
+                                    log_sel("     ensure_enabled (если disabled — ждём visible)…")
                                     ensure_enabled(loc)
                                     selector_used = cand
                                     maybe_bring_to_front()
@@ -1151,15 +1482,19 @@ def run_scenario(
                                         except Exception:
                                             pass
                                     clicked = True
+                                    log_sel(f"     → клик выполнен, использован селектор: {xp_snip(cand)}")
                                     break
                                 except (PlaywrightTimeoutError, PlaywrightError) as e:
                                     last_click_err = e
+                                    log_sel(f"     ✗ ошибка на этом XPath: {str(e)[:420]}")
                                     if retry_on_flaky and attempt < attempts - 1 and is_flaky_error(e):
+                                        log_sel(f"     flaky: пауза {retry_delay_ms}ms и следующая попытка шага")
                                         page.wait_for_timeout(max(0, retry_delay_ms))
                                         continue
                             if clicked:
                                 break
                         if not clicked:
+                            log_sel(f"click: все кандидаты исчерпаны, последняя ошибка: {last_click_err!s}")
                             raise last_click_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for click")
                         shot_after = screenshot(f"step_{s.step}_after")
                         try:
@@ -1176,31 +1511,47 @@ def run_scenario(
                         value = params.get("value")
                         if value is None:
                             value = ""
+                        maybe_wait_for_load_after_page_load(params, selector_candidates)
                         last_fill_err = None
                         filled = False
                         attempts = max(1, max_attempts) if retry_on_flaky else 1
+                        _pv = prefer_visible and wait_state == "visible"
                         for attempt in range(attempts):
-                            for cand in selector_candidates:
+                            log_sel(f"input: попытка {attempt + 1}/{attempts}")
+                            ordered_input = build_selector_candidate_order(
+                                selector_candidates, prefer_visible=_pv
+                            )
+                            for ii, cand in enumerate(ordered_input):
                                 if not cand:
                                     continue
+                                role = "primary" if cand == xpath else "fallback"
                                 try:
-                                    loc = page.locator(f"xpath={cand}").first
+                                    loc_all_in = page.locator(f"xpath={cand}")
+                                    ic = loc_all_in.count()
+                                    if cand != xpath and ic == 0:
+                                        log_sel(f"input [{ii + 1}/{len(ordered_input)}] {role} пропуск count=0 — {xp_snip(cand)}")
+                                        continue
+                                    log_sel(f"input [{ii + 1}/{len(ordered_input)}] {role} count={ic} wait_for({wait_state}) {step_timeout_ms}ms — {xp_snip(cand)}")
+                                    loc = loc_all_in.first
                                     loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
                                     ensure_enabled(loc)
                                     selector_used = cand
                                     maybe_bring_to_front()
                                     highlight_locator(loc)
                                     loc.fill(str(value), timeout=max(0, step_timeout_ms))
+                                    log_sel("input: fill OK")
                                     filled = True
                                     break
                                 except (PlaywrightTimeoutError, PlaywrightError) as e:
                                     last_fill_err = e
+                                    log_sel(f"input: ошибка {str(e)[:320]}")
                                     if retry_on_flaky and attempt < attempts - 1 and is_flaky_error(e):
                                         page.wait_for_timeout(max(0, retry_delay_ms))
                                         continue
                             if filled:
                                 break
                         if not filled:
+                            log_sel(f"input: не удалось, последняя ошибка: {last_fill_err!s}")
                             raise last_fill_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for input")
                         shot_after = screenshot(f"step_{s.step}_after")
                         try:
@@ -1221,12 +1572,25 @@ def run_scenario(
                         last_set_err = None
                         done = False
                         attempts = max(1, max_attempts) if retry_on_flaky else 1
+                        maybe_wait_for_load_after_page_load(params, selector_candidates)
+                        _pv = prefer_visible and wait_state == "visible"
                         for attempt in range(attempts):
-                            for cand in selector_candidates:
+                            log_sel(f"set_date: попытка {attempt + 1}/{attempts}")
+                            ordered_date = build_selector_candidate_order(
+                                selector_candidates, prefer_visible=_pv
+                            )
+                            for di, cand in enumerate(ordered_date):
                                 if not cand:
                                     continue
+                                role = "primary" if cand == xpath else "fallback"
                                 try:
-                                    loc = page.locator(f"xpath={cand}").first
+                                    loc_all_sd = page.locator(f"xpath={cand}")
+                                    dc = loc_all_sd.count()
+                                    if cand != xpath and dc == 0:
+                                        log_sel(f"set_date [{di + 1}/{len(ordered_date)}] {role} пропуск count=0 — {xp_snip(cand)}")
+                                        continue
+                                    log_sel(f"set_date [{di + 1}/{len(ordered_date)}] {role} count={dc} wait_for({wait_state}) {step_timeout_ms}ms — {xp_snip(cand)}")
+                                    loc = loc_all_sd.first
                                     loc.wait_for(state=wait_state, timeout=max(0, step_timeout_ms))
                                     ensure_enabled(loc)
                                     selector_used = cand
@@ -1242,16 +1606,19 @@ def run_scenario(
                                         }""",
                                         str(value),
                                     )
+                                    log_sel("set_date: evaluate value+events OK")
                                     done = True
                                     break
                                 except (PlaywrightTimeoutError, PlaywrightError) as e:
                                     last_set_err = e
+                                    log_sel(f"set_date: ошибка {str(e)[:320]}")
                                     if retry_on_flaky and attempt < attempts - 1 and is_flaky_error(e):
                                         page.wait_for_timeout(max(0, retry_delay_ms))
                                         continue
                             if done:
                                 break
                         if not done:
+                            log_sel(f"set_date: не удалось, последняя ошибка: {last_set_err!s}")
                             raise last_set_err or PlaywrightTimeoutError(f"Timeout {step_timeout_ms}ms exceeded for set_date")
                         shot_after = screenshot(f"step_{s.step}_after")
                         try:
@@ -1575,7 +1942,24 @@ def run_scenario(
                 if s.action == "end":
                     _log_line(logs, "■ Завершение по шагу «Конец» (end)")
                     break
-                idx += 1
+                next_idx = _next_idx_after_step(
+                    idx,
+                    steps,
+                    step_to_idx,
+                    next_map if use_flow_graph else None,
+                    use_flow_graph,
+                )
+                if next_idx is None:
+                    break
+                if use_flow_graph and next_map and next_idx != idx + 1:
+                    _log_line(
+                        logs,
+                        f"↳ Переход по графу: #{steps[idx].step} → #{steps[next_idx].step}",
+                    )
+                if next_idx == idx:
+                    _log_line(logs, f"■ Остановка: ребро next зацикливает шаг #{steps[idx].step}")
+                    break
+                idx = next_idx
 
         finally:
             try:
@@ -1628,6 +2012,11 @@ def run_scenario(
         "steps": results,
         "log": logs,
         "cancelled": run_cancelled,
+        "flowGraph": {
+            "followFlowGraph": bool(follow_flow_graph),
+            "active": bool(use_flow_graph),
+            "nextEdges": len(next_map) if next_map else 0,
+        },
         "summary": {
             "topSlowSteps": [{"step": x["step"], "action": x["action"], "durationMs": x.get("durationMs")} for x in slow],
         },
@@ -1798,6 +2187,65 @@ def api_delete_scenario(scenario_id: str, request: Request) -> JSONResponse:
     p.unlink()
     _jsonl_append(LOG_DIR / "web-runner.log", {"ts": time.time(), "level": "info", "event": "scenario_deleted", "scenarioId": scenario_id})
     return JSONResponse({"ok": True})
+
+
+@app.post("/api/scenarios/{scenario_id}/clone", response_class=JSONResponse)
+async def api_clone_scenario(scenario_id: str, request: Request) -> JSONResponse:
+    unauthorized = _require_token(request)
+    if unauthorized:
+        return unauthorized
+    src = _scenario_path(scenario_id)
+    if not src.exists():
+        return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    raw_any = _read_json(src)
+    if not isinstance(raw_any, dict):
+        return JSONResponse({"ok": False, "error": "Invalid scenario file"}, status_code=400)
+    raw: Dict[str, Any] = dict(raw_any)
+    try:
+        name, steps = _parse_scenario(raw)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+    name_override = str(body.get("name") or "").strip()
+    orig_name = str(raw.get("name") or name or scenario_id)
+    new_name = name_override or f"{orig_name} — копия"
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    base = _slugify(new_name)
+    new_id = f"{base}_{ts}"
+    path = SCENARIOS_DIR / f"{new_id}.json"
+    if path.exists():
+        new_id = f"{new_id}_{uuid.uuid4().hex[:6]}"
+        path = SCENARIOS_DIR / f"{new_id}.json"
+
+    raw["id"] = new_id
+    raw["name"] = new_name
+    raw["exportedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    _snapshot_scenario(new_id)
+    _jsonl_append(
+        LOG_DIR / "web-runner.log",
+        {
+            "ts": time.time(),
+            "level": "info",
+            "event": "scenario_cloned",
+            "scenarioId": new_id,
+            "from": scenario_id,
+            "name": new_name,
+            "stepsCount": len(steps),
+        },
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "scenario": {"id": new_id, "name": new_name, "stepsCount": len(steps)},
+        }
+    )
 
 
 @app.put("/api/scenarios/{scenario_id}", response_class=JSONResponse)
@@ -1975,6 +2423,10 @@ async def api_run_scenario(request: Request) -> JSONResponse:
     dbg_bp = body.get("debugBreakpoints", runner_defaults.get("debugBreakpoints"))
     capture_console = bool(body.get("captureConsole", runner_defaults.get("captureConsole", False)))
 
+    follow_flow_raw = body.get("followFlowGraph", runner_defaults.get("followFlowGraph"))
+    follow_flow_graph = True if follow_flow_raw is None else bool(follow_flow_raw)
+    scenario_raw_arg: Optional[Dict[str, Any]] = raw if isinstance(raw, dict) else None
+
     run_id = uuid.uuid4().hex[:12]
     run_dir = OUTPUTS_DIR / run_id
     _ensure_dir(run_dir)
@@ -2023,6 +2475,7 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                 "labels": run_labels,
                 "debugBreakpoints": dbg_bp if isinstance(dbg_bp, list) else None,
                 "captureConsole": capture_console,
+                "followFlowGraph": follow_flow_graph,
             },
         },
     )
@@ -2079,6 +2532,8 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                             debug_breakpoints=dbg_bp,
                             capture_console=capture_console,
                             cancel_request_dir=run_dir,
+                            scenario_raw=scenario_raw_arg,
+                            follow_flow_graph=follow_flow_graph,
                         )
                     )
                     row_reports.append({"rowIndex": i, "okCount": rep.get("okCount"), "failCount": rep.get("failCount"), "totalMs": rep.get("totalMs")})
@@ -2118,6 +2573,8 @@ async def api_run_scenario(request: Request) -> JSONResponse:
                         start_step_no=start_step_no,
                         debug_breakpoints=dbg_bp,
                         capture_console=capture_console,
+                        scenario_raw=scenario_raw_arg,
+                        follow_flow_graph=follow_flow_graph,
                     )
                 )
         except Exception as e:
@@ -2513,6 +2970,7 @@ def index(request: Request) -> HTMLResponse:
             "default_headless": True,
             "default_slow_mo": 0,
             "default_viewport": "1280x720",
+            "runner_token": RUNNER_TOKEN or "",
         },
     )
 
@@ -2582,6 +3040,8 @@ def run(
             slow_mo_ms=int(slow_mo_ms or 0),
             viewport=str(viewport or "1280x720"),
             run_dir=run_dir,
+            scenario_raw=raw if isinstance(raw, dict) else None,
+            follow_flow_graph=True,
         )
     except Exception as e:
         report = {"scenario": scenario_name, "okCount": 0, "failCount": 0, "totalMs": 0, "steps": [], "log": [], "error": str(e)}

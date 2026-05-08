@@ -71,12 +71,15 @@ def main() -> int:
             variables.update(v)
 
     data_rows = _load_json_file(args.data_file) if args.data_file else None
+    follow_flow_graph = True
     if isinstance(raw, dict) and isinstance(raw.get("runnerSettings"), dict):
         rs = raw.get("runnerSettings") or {}
         # only fill missing
         args.start_url = args.start_url or str(rs.get("startUrl") or "")
         args.viewport = args.viewport or str(rs.get("viewport") or "1280x720")
         args.default_timeout_ms = args.default_timeout_ms or int(rs.get("defaultTimeoutMs") or 15000)
+        if "followFlowGraph" in rs:
+            follow_flow_graph = bool(rs.get("followFlowGraph"))
 
     out_root = Path(args.outputs_dir) if args.outputs_dir else OUTPUTS_DIR
     run_id = f"cli_{int(time.time())}"
@@ -137,6 +140,8 @@ def main() -> int:
                         bring_to_front=bool(args.bring_to_front),
                         highlight_steps=not bool(args.no_highlight),
                         run_dir=run_dir / "rows" / f"row_{i+1}",
+                        scenario_raw=raw if isinstance(raw, dict) else None,
+                        follow_flow_graph=follow_flow_graph,
                     )
                 )
                 row_reports.append(rep)
@@ -168,6 +173,8 @@ def main() -> int:
                 bring_to_front=bool(args.bring_to_front),
                 highlight_steps=not bool(args.no_highlight),
                 run_dir=run_dir,
+                scenario_raw=raw if isinstance(raw, dict) else None,
+                follow_flow_graph=follow_flow_graph,
             )
         )
 

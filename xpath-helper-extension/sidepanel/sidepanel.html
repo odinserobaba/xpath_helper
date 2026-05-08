@@ -8,11 +8,34 @@
 <body>
     <div class="panel-container">
         <header class="header">
-            <h1>✦ XPath Helper</h1>
-            <div class="controls">
-                <button id="refreshBtn" class="btn" aria-label="Обновить панель">↻</button>
+            <div class="header-brand">
+                <h1>✦ XPath Helper</h1>
+                <div id="tabContextBar" class="tab-context-bar">
+                    <span id="tabContextStatus" class="tab-context-dot tab-context-off" title="Статус скрипта на странице" aria-hidden="true">●</span>
+                    <img id="tabContextFavicon" class="tab-context-favicon hidden" alt="" width="16" height="16" decoding="async">
+                    <div class="tab-context-meta">
+                        <div id="tabContextTitle" class="tab-context-title">…</div>
+                        <div id="tabContextUrl" class="tab-context-url"></div>
+                    </div>
+                    <button type="button" id="gotoTabBtn" class="btn btn-sm" title="Перейти к целевой вкладке">↗</button>
+                    <button type="button" id="bindTabBtn" class="btn btn-sm" title="Привязать выполнение к текущей активной вкладке">📌</button>
+                    <button type="button" id="unbindTabBtn" class="btn btn-sm hidden" title="Убрать привязку — использовать активную вкладку">✕</button>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button type="button" id="pingTabBtn" class="btn btn-sm" title="Проверить ответ content-script на странице">Проверить</button>
+                <button type="button" id="helpShortcutsBtn" class="btn btn-sm" title="Горячие клавиши">?</button>
+                <button type="button" id="copyDiagnosticsBtn" class="btn btn-sm" title="Скопировать версию, вкладку, счётчики для отладки">📋</button>
+                <button type="button" id="refreshBtn" class="btn" aria-label="Обновить панель">↻</button>
             </div>
         </header>
+
+        <div id="undoClearBanner" class="undo-banner hidden" role="status">
+            <span>Список очищен.</span>
+            <button type="button" id="undoClearRestoreBtn" class="btn btn-sm">Отменить</button>
+            <button type="button" id="undoClearDismissBtn" class="btn btn-sm">Скрыть</button>
+        </div>
+        <div id="execLiveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
         <nav class="tabs" role="tablist">
             <button type="button" class="tab active" data-tab="inspect" aria-selected="true">Инспектор</button>
@@ -95,7 +118,7 @@
                     <span>Только уникальные XPath</span>
                 </label>
             </div>
-            <p class="setting-hint">Alt+X — вкл/выкл режим инспекции (без удержания Ctrl)</p>
+            <p class="setting-hint">Alt+X — вкл/выкл режим инспекции (без удержания Ctrl). Элементы внутри закрытых shadow DOM и содержимое iframe этим скриптом не видны.</p>
         </section>
         
         <div id="status" class="status">Ожидание элемента...</div>
@@ -200,6 +223,14 @@
                     <button type="button" id="importDataBtn" class="btn" title="Data-driven: CSV/JSON с данными для прогона по строкам">📊 Данные</button>
                     <button type="button" id="executeDataDrivenBtn" class="btn btn-execute" title="Выполнить сценарий для каждой строки данных">▶ Data-driven</button>
                 </div>
+                <div id="listOnboarding" class="onboarding-panel hidden">
+                    <p class="onboarding-title">Быстрый старт</p>
+                    <ol class="onboarding-steps">
+                        <li>Вкладка «Инспектор»: зажмите <strong>Ctrl</strong> или <strong>Alt+X</strong>, наведите на элемент.</li>
+                        <li>Вернитесь в «Список» → «Добавить текущий» или «Вручную», задайте действие.</li>
+                        <li>При нескольких вкладках нажмите <strong>📌</strong> в шапке, чтобы зафиксировать целевую вкладку.</li>
+                    </ol>
+                </div>
                 <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
                 <input type="file" id="importDataInput" accept=".json,.csv,application/json,text/csv" hidden>
                 <div class="search-row">
@@ -224,7 +255,8 @@
                 </div>
                 <div class="editor-detail-pane">
                     <div id="editorEmpty" class="editor-empty">
-                        <p>Выберите шаг слева для редактирования</p>
+                        <p class="editor-empty-title">Выберите шаг слева</p>
+                        <p class="setting-hint">Шаги добавляются на вкладке «Список» или кнопками Flow. Инспектор записывает XPath на вкладке «Инспектор».</p>
                     </div>
                     <div id="editorDetail" class="editor-detail hidden">
                         <h3 class="editor-pane-title">Редактирование шага</h3>
@@ -334,6 +366,7 @@
                             <select id="editorBranchNextId" class="step-next-select"></select>
                             <label for="editorBranchNextElseId">Если нет → шаг</label>
                             <select id="editorBranchNextElseId" class="step-next-select"></select>
+                            <p class="setting-hint branch-step-hint">Пошаговая кнопка «▶» для ветвления только проверяет условие; переход по «Если да/нет → шаг» выполняется при полном прогоне «▶ Выполнить».</p>
                         </div>
                         <div class="form-row">
                             <label for="editorTimeoutMs" class="setting-hint">Таймаут (мс), 0 = по умолчанию</label>
@@ -380,6 +413,7 @@
             </section>
             <div class="flow-container">
                 <h3 class="editor-pane-title">Flow-схема</h3>
+                <p class="setting-hint flow-intro-hint">Стрелки между карточками вставляют шаг. В Web Runner порядок может задаваться графом <code style="font-size:10px">flow.edges</code>.</p>
                 <p class="flow-hint">Клик по стрелке — вставить шаг между карточками</p>
                 <div id="flowCanvas" class="flow-canvas"></div>
             </div>
@@ -570,14 +604,14 @@
         <div class="modal-content">
             <h3 class="modal-title">Настройки Python Playwright</h3>
             <div class="modal-body">
-                <p class="setting-hint">Используются при экспорте test_*.py и conftest.py</p>
+                <p class="setting-hint">Укажите пути к своему Chromium и профилю или оставьте пустым — в коде подставятся плейсхолдеры <code>__PATH_TO_CHROMIUM__</code> и <code>__USER_DATA_DIR__</code>.</p>
                 <div class="form-row">
                     <label for="pythonExecutablePath">executable_path (путь к chromium)</label>
-                    <input type="text" id="pythonExecutablePath" placeholder="/opt/chromium-gost/chromium-gost">
+                    <input type="text" id="pythonExecutablePath" placeholder="Например /usr/bin/chromium">
                 </div>
                 <div class="form-row">
                     <label for="pythonUserDataDir">user-data-dir (профиль браузера)</label>
-                    <input type="text" id="pythonUserDataDir" placeholder="/home/user/.config/chromium">
+                    <input type="text" id="pythonUserDataDir" placeholder="Например ~/.config/chromium">
                 </div>
                 <div class="form-row">
                     <label for="pythonDebugPort">remote-debugging-port</label>
@@ -593,6 +627,26 @@
             <div class="modal-actions">
                 <button type="button" id="pythonSettingsSave" class="btn btn-save">Сохранить</button>
                 <button type="button" id="pythonSettingsCancel" class="btn">Отмена</button>
+            </div>
+        </div>
+    </div>
+    <div id="helpShortcutsModal" class="modal hidden" role="dialog" aria-labelledby="helpShortcutsTitle">
+        <div class="modal-content help-modal-content">
+            <h3 id="helpShortcutsTitle" class="modal-title">Горячие клавиши и подсказки</h3>
+            <div class="modal-body help-shortcuts-body">
+                <ul class="help-shortcuts-list">
+                    <li><kbd>Alt</kbd>+<kbd>X</kbd> — вкл/выкл инспекцию на странице</li>
+                    <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> — выполнить список шагов</li>
+                    <li><kbd>Ctrl</kbd>+<kbd>S</kbd> — сохранить список в storage</li>
+                    <li><kbd>Ctrl</kbd>+<kbd>F</kbd> — поиск в списке шагов</li>
+                    <li><kbd>?</kbd> — это окно</li>
+                    <li><kbd>Esc</kbd> — стоп прогона / закрыть окно</li>
+                    <li><kbd>M</kbd> — компактный режим панели (не в полях ввода)</li>
+                </ul>
+                <p class="setting-hint">На странице: перетащите виджет «✦ XPath Helper», двойной клик — компактный вид.</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="helpShortcutsClose" class="btn btn-save">Закрыть</button>
             </div>
         </div>
     </div>

@@ -17,15 +17,21 @@ cd web-runner
 ./run.sh
 ```
 
-3) Откройте `http://127.0.0.1:8000`, загрузите JSON сценария, нажмите **Run**.
+3) Откройте `http://127.0.0.1:8000`: список сценариев из `tests/scenarios/`, настройки запуска, **Run** (откроется live `/runs/<runId>`). Можно **клонировать** и **удалять** сценарии; дефолты сохраняются в **`runnerSettings`** внутри JSON сценария.
 
-**Flow Editor** (`/flow-editor`): визуальная блок-схема сценариев. Статика собирается в `web-runner/static/` при `./install.sh` (нужен Node.js) или вручную: `cd flow-editor-src && npm ci && npm run build`.
+**Flow Editor** (`/flow-editor`): визуальная блок-схема. Раскладка **Сетка** / **По next** следует порядку обхода рёбер `kind=next` (ближе к прогону). Статика: `web-runner/static/` — при `./install.sh` (Node.js) или `cd flow-editor-src && npm ci && npm run build`.
 
 ## Что поддерживается
 
 - **Actions**: `start` (точка входа — выполнение с этого шага), `navigate`, `click`, `click_if_exists`, `input`, `file_upload`, `wait`, `wait_for_element`, `assert`, `branch` (частично), `user_action` (пропускается). Без `start` прогон начинается с первого шага (см. лог).
 - **Переменные**: подстановка `{{var}}` из `Variables JSON` и `baseUrl`
-- **Артефакты**: сохраняются в `web-runner/outputs/<runId>/` (`input.json`, `log.txt`, `report.json`, `screenshots/`)
+- **Граф сценария**: при **`runnerSettings.followFlowGraph`** = true (по умолчанию) следующий шаг после исполнения выбирается по **`flow.edges`** с `kind: "next"`; при отсутствии ребра — следующий элемент **`steps`**. Ветки **`branch`** — по `nextStep` / `nextElseStep`. В отчёте: `flowGraph.active`, `flowGraph.nextEdges`.
+- **API сценариев**: `POST /api/scenarios/<id>/clone` (тело `{}` или `{ "name": "…" }`), `DELETE /api/scenarios/<id>`.
+- **Артефакты**: `web-runner/outputs/<runId>/` (`input.json`, `log.txt`, `report.json`, `screenshots/`)
+
+### Логи перебора XPath (отладка)
+
+В текстовый лог прогона попадают строки с префиксом **`↳ [sel]`**: кандидаты после фильтра, порядок обхода, `waitForLoad`, `count` в DOM, `total`/`visible` для probe, шаги JS/Playwright-клика и текст ошибки по каждому XPath. Чтобы отключить (меньше шума): `export XPATH_RUNNER_SELECTOR_LOG=0`.
 
 ## Ограничения
 
@@ -41,7 +47,7 @@ export XPATH_RUNNER_TOKEN="my-secret"
 uvicorn app:app --reload --port 8000
 ```
 
-Тогда расширение должно отправлять заголовок `x-runner-token: my-secret` (ключ хранится локально в storage расширения).
+Тогда клиенты должны слать заголовок `x-runner-token: my-secret`: расширение (из storage), **главная `/`** и **Flow Editor** (встроенный `window.__XPATH_RUNNER_TOKEN__`), любые скрипты с `fetch` к `/api/*`.
 
 ## CLI/CI запуск (без UI)
 

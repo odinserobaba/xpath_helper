@@ -1,12 +1,20 @@
 // content/content.js
-console.log('[Content] Script started');
+(function xpathHelperContentMain() {
+    const g = typeof globalThis !== 'undefined' ? globalThis : window;
+    if (g.__XPATH_HELPER_CONTENT_INITIALIZED__) {
+        console.log('[Content] Skip duplicate injection');
+        return;
+    }
+    g.__XPATH_HELPER_CONTENT_INITIALIZED__ = true;
 
-if (typeof document === 'undefined' || !chrome?.runtime?.id) {
-    console.error('[Content] ABORT');
-    throw new Error('No context');
-}
+    console.log('[Content] Script started');
 
-const STORAGE_KEY_DEBOUNCE = 'xpath-helper-debounce-ms';
+    if (typeof document === 'undefined' || !chrome?.runtime?.id) {
+        console.error('[Content] ABORT');
+        return;
+    }
+
+    const STORAGE_KEY_DEBOUNCE = 'xpath-helper-debounce-ms';
 const STORAGE_KEY_SELECTOR_TIMEOUT = 'xpath-helper-selector-timeout-ms';
 const DEBOUNCE_DEFAULT = 120;
 const DEBOUNCE_MIN = 80;
@@ -25,12 +33,13 @@ function isContextInvalidatedError(e) {
 
 function init() {
     console.log('[Content] Initializing...');
-    if (typeof XPathGenerator === 'undefined') {
+    const GeneratorCls = g.__XPATH_HELPER_XPATH_GENERATOR__;
+    if (!GeneratorCls) {
         console.error('[Content] XPathGenerator not loaded!');
         return;
     }
 
-    const generator = new XPathGenerator();
+    const generator = new GeneratorCls();
     let isCtrlPressed = false;
     let isInspectMode = false;
     let currentElement = null;
@@ -89,10 +98,11 @@ function init() {
         const active = isHoverActive();
         indicator.classList.toggle('xpath-indicator-active', active);
         indicator.setAttribute('aria-pressed', active ? 'true' : 'false');
+        const dragHint = ' Перетащите виджет; двойной клик — компактный вид.';
         if (active) {
-            indicator.title = 'Режим инспекции включён. Клик — открыть панель. Alt+X — выключить.';
+            indicator.title = 'Режим инспекции включён. Клик — открыть панель. Alt+X — выключить.' + dragHint;
         } else {
-            indicator.title = 'XPath Helper. Зажмите Ctrl или нажмите Alt+X. Клик — открыть панель.';
+            indicator.title = 'XPath Helper. Зажмите Ctrl или нажмите Alt+X. Клик — открыть панель.' + dragHint;
         }
     }
 
@@ -120,7 +130,85 @@ function init() {
     // Поднимаем индикатор выше, чтобы не перекрывал системные/чат-виджеты
     indicator.style.cssText = 'position:fixed;bottom:96px;right:20px;padding:10px 20px;background:linear-gradient(135deg,#00d4aa,#0099ff);color:white;border-radius:8px;font-family:sans-serif;font-weight:bold;z-index:2147483647;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:background .2s, box-shadow .2s;';
     indicator.innerHTML = '✦ XPath Helper';
-    indicator.addEventListener('click', () => sendToPanel({ action: 'openPanel' }));
+    const INDICATOR_LAYOUT_KEY = 'xpath-helper-indicator-layout';
+    let suppressIndicatorClick = false;
+    function readIndicatorLayout(raw) {
+        const o = raw && typeof raw === 'object' ? raw : {};
+        const bottom = Math.min(400, Math.max(8, Number(o.bottom) || 96));
+        const right = Math.min(800, Math.max(8, Number(o.right) || 20));
+        return { bottom, right, compact: !!o.compact };
+    }
+    function applyIndicatorLayout(layout) {
+        const L = readIndicatorLayout(layout);
+        indicator.style.left = '';
+        indicator.style.right = `${L.right}px`;
+        indicator.style.bottom = `${L.bottom}px`;
+        indicator.style.padding = L.compact ? '6px 10px' : '10px 20px';
+        indicator.style.fontSize = L.compact ? '12px' : '13px';
+        indicator.innerHTML = L.compact ? '✦' : '✦ XPath Helper';
+        indicator.dataset.compact = L.compact ? '1' : '';
+    }
+    function persistIndicatorLayout(partial) {
+        chrome.storage.local.get([INDICATOR_LAYOUT_KEY], (d) => {
+            const cur = readIndicatorLayout(d[INDICATOR_LAYOUT_KEY]);
+            const next = { ...cur, ...partial };
+            chrome.storage.local.set({ [INDICATOR_LAYOUT_KEY]: next });
+        });
+    }
+    try {
+        chrome.storage.local.get([INDICATOR_LAYOUT_KEY], (d) => {
+            applyIndicatorLayout(d[INDICATOR_LAYOUT_KEY]);
+        });
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (!isContextValid()) return;
+            if (area === 'local' && changes[INDICATOR_LAYOUT_KEY]) applyIndicatorLayout(changes[INDICATOR_LAYOUT_KEY].newValue);
+        });
+    } catch (e) {
+        if (!isContextInvalidatedError(e)) throw e;
+    }
+    indicator.addEventListener('dblclick', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        chrome.storage.local.get([INDICATOR_LAYOUT_KEY], (d) => {
+            const cur = readIndicatorLayout(d[INDICATOR_LAYOUT_KEY]);
+            persistIndicatorLayout({ compact: !cur.compact });
+        });
+    });
+    let dragIx = null;
+    indicator.addEventListener('mousedown', (ev) => {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        const rect = indicator.getBoundingClientRect();
+        dragIx = { sx: ev.clientX, sy: ev.clientY, startRight: window.innerWidth - rect.right, startBottom: window.innerHeight - rect.bottom, moved: false };
+        const onMove = (e2) => {
+            if (!dragIx) return;
+            const dx = e2.clientX - dragIx.sx;
+            const dy = e2.clientY - dragIx.sy;
+            if (Math.abs(dx) + Math.abs(dy) > 4) dragIx.moved = true;
+            const right = Math.min(window.innerWidth - 8, Math.max(8, dragIx.startRight - dx));
+            const bottom = Math.min(window.innerHeight - 8, Math.max(8, dragIx.startBottom - dy));
+            indicator.style.right = `${right}px`;
+            indicator.style.bottom = `${bottom}px`;
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            if (dragIx?.moved) {
+                suppressIndicatorClick = true;
+                setTimeout(() => { suppressIndicatorClick = false; }, 320);
+                const r = parseFloat(indicator.style.right) || 20;
+                const b = parseFloat(indicator.style.bottom) || 96;
+                persistIndicatorLayout({ right: r, bottom: b });
+            }
+            dragIx = null;
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+    indicator.addEventListener('click', (ev) => {
+        if (suppressIndicatorClick) return;
+        sendToPanel({ action: 'openPanel' });
+    });
     document.documentElement.appendChild(indicator);
     updateIndicatorActive();
 
@@ -132,6 +220,10 @@ function init() {
     try {
         chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
             if (!isContextValid()) return;
+            if (request.action === 'xpathHelperPing') {
+                sendResponse({ ok: true, href: typeof location?.href === 'string' ? location.href : '' });
+                return false;
+            }
             if (request.action === 'toggleInspectMode') {
                 isInspectMode = !isInspectMode;
                 if (!isInspectMode && currentElement) {
@@ -304,13 +396,55 @@ function init() {
     ) {
         const baseTimeout = defaultTimeout ?? selectorTimeoutMs;
         const results = [];
+        let execHighlightEl = null;
+        function clearExecutionStepHighlight() {
+            if (!execHighlightEl) return;
+            try {
+                if (execHighlightEl.isConnected) {
+                    execHighlightEl.style.outline = execHighlightEl.dataset.xphExecO ?? '';
+                    execHighlightEl.style.boxShadow = execHighlightEl.dataset.xphExecS ?? '';
+                }
+                delete execHighlightEl.dataset.xphExecO;
+                delete execHighlightEl.dataset.xphExecS;
+            } catch (_) {}
+            execHighlightEl = null;
+        }
+        /** Подсветка целевого элемента во время выполнения шага (до следующего шага или снятия). */
+        function highlightExecutionStepTarget(el) {
+            if (!el || el.nodeType !== 1) return;
+            clearExecutionStepHighlight();
+            execHighlightEl = el;
+            try {
+                execHighlightEl.dataset.xphExecO = execHighlightEl.style.outline || '';
+                execHighlightEl.dataset.xphExecS = execHighlightEl.style.boxShadow || '';
+                execHighlightEl.style.outline = '4px solid #00c9a7';
+                execHighlightEl.style.boxShadow =
+                    '0 0 0 3px rgba(0, 201, 167, 0.35), 0 4px 22px rgba(0, 102, 204, 0.22)';
+                execHighlightEl.scrollIntoView({ behavior: 'auto', block: 'center' });
+            } catch (_) {}
+        }
         // Настройки ожидания приходят из панели (см. executeList/executeStep)
-        async function waitForNetworkIdle(quietMs = waitNetworkQuietMs, timeoutMs = waitNetworkTimeoutMs) {
+        /** После клика на активном SPA «затихание» resource может не наступать минутами — не блокируем ответ панели. */
+        const POST_ACTION_NETWORK_IDLE_MAX_MS = 15000;
+        const POST_ACTION_DOM_STABLE_MAX_MS = 10000;
+
+        async function waitForNetworkIdle(quietMs = waitNetworkQuietMs, timeoutMs = waitNetworkTimeoutMs, stepIdForPulse = null) {
             let lastCount = -1;
             let stableSince = Date.now();
             const deadline = Date.now() + timeoutMs;
+            const waitStart = Date.now();
+            let lastPulse = waitStart;
             while (Date.now() < deadline) {
                 if (!isContextValid() || token !== runToken) return;
+                if (stepIdForPulse && Date.now() - lastPulse >= 12000) {
+                    lastPulse = Date.now();
+                    sendExecutionProgress({
+                        phase: 'waiting',
+                        stepId: stepIdForPulse,
+                        detail: 'ожидание затихания сети (performance.resource)',
+                        elapsedMs: Date.now() - waitStart,
+                    });
+                }
                 try {
                     const entries = performance.getEntriesByType?.('resource') || [];
                     const count = entries.length;
@@ -324,32 +458,86 @@ function init() {
                 await new Promise((r) => setTimeout(r, 50));
             }
         }
-        async function waitForDomStable(quietMs = waitDomQuietMs, timeoutMs = waitDomTimeoutMs) {
+        async function waitForDomStable(quietMs = waitDomQuietMs, timeoutMs = waitDomTimeoutMs, stepIdForPulse = null) {
+            const waitStart = Date.now();
+            let lastPulse = waitStart;
             return new Promise((resolve) => {
                 let timer = null;
+                let pulseIv = null;
+                if (stepIdForPulse) {
+                    pulseIv = setInterval(() => {
+                        if (Date.now() - waitStart >= timeoutMs) return;
+                        sendExecutionProgress({
+                            phase: 'waiting',
+                            stepId: stepIdForPulse,
+                            detail: 'ожидание стабильности DOM',
+                            elapsedMs: Date.now() - waitStart,
+                        });
+                    }, 12000);
+                }
                 const observer = new MutationObserver(() => {
                     if (timer) clearTimeout(timer);
                     timer = setTimeout(() => {
                         observer.disconnect();
+                        if (pulseIv) clearInterval(pulseIv);
                         resolve();
                     }, quietMs);
                 });
                 observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-                setTimeout(() => { observer.disconnect(); if (timer) clearTimeout(timer); resolve(); }, timeoutMs);
+                setTimeout(() => {
+                    observer.disconnect();
+                    if (timer) clearTimeout(timer);
+                    if (pulseIv) clearInterval(pulseIv);
+                    resolve();
+                }, timeoutMs);
             });
         }
-        async function waitForPageLoad(timeoutMs = 10000, { networkIdle = false, domStable = false } = {}) {
+        async function waitForPageLoad(
+            timeoutMs = 10000,
+            {
+                networkIdle = false,
+                domStable = false,
+                networkTimeoutMs: netTimeoutOverride,
+                domTimeoutMs: domTimeoutOverride,
+                stepIdForPulse = null,
+            } = {}
+        ) {
             const deadline = Date.now() + timeoutMs;
             while (document.readyState !== 'complete' && Date.now() < deadline) {
                 await new Promise((r) => setTimeout(r, 50));
                 if (!isContextValid() || token !== runToken) return;
             }
             await new Promise((r) => setTimeout(r, Math.max(0, waitReadyMs)));
-            if (networkIdle) await waitForNetworkIdle(waitNetworkQuietMs, waitNetworkTimeoutMs);
-            if (domStable) await waitForDomStable(waitDomQuietMs, waitDomTimeoutMs);
+            const netTo = netTimeoutOverride ?? waitNetworkTimeoutMs;
+            const domTo = domTimeoutOverride ?? waitDomTimeoutMs;
+            if (networkIdle) await waitForNetworkIdle(waitNetworkQuietMs, netTo, stepIdForPulse);
+            if (domStable) await waitForDomStable(waitDomQuietMs, domTo, stepIdForPulse);
         }
-        async function findElementByXPath(xpath, timeoutMs) {
-            const deadline = Date.now() + Math.max(0, timeoutMs || 0);
+        /** После клика/ввода ошибки ожидания не пробрасываем — иначе retry шага выполнит действие повторно. */
+        async function safePostMutationWaits(currentStep) {
+            const sid = currentStep?.id || null;
+            try {
+                await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
+                if (currentStep.params?.waitForLoad !== false) {
+                    const netCap = Math.min(waitNetworkTimeoutMs, POST_ACTION_NETWORK_IDLE_MAX_MS);
+                    const domCap = Math.min(waitDomTimeoutMs, POST_ACTION_DOM_STABLE_MAX_MS);
+                    await waitForPageLoad(10000, {
+                        networkIdle: true,
+                        domStable: true,
+                        networkTimeoutMs: netCap,
+                        domTimeoutMs: domCap,
+                        stepIdForPulse: sid,
+                    });
+                }
+            } catch (postErr) {
+                console.warn('[XPath Helper] Ожидание после действия (игнор для предотвращения повтора):', postErr?.message || postErr);
+            }
+        }
+        async function findElementByXPath(xpath, timeoutMs, stepIdForPulse = null) {
+            const maxWait = Math.max(0, timeoutMs || 0);
+            const deadline = Date.now() + maxWait;
+            const waitStart = Date.now();
+            let lastPulse = waitStart;
             while (true) {
                 let el;
                 try {
@@ -360,18 +548,113 @@ function init() {
                 }
                 if (el) return el;
                 if (timeoutMs <= 0 || Date.now() >= deadline) return null;
+                if (stepIdForPulse && maxWait >= 5000 && Date.now() - lastPulse >= 12000) {
+                    lastPulse = Date.now();
+                    sendExecutionProgress({
+                        phase: 'waiting',
+                        stepId: stepIdForPulse,
+                        detail: 'поиск элемента по XPath',
+                        elapsedMs: Date.now() - waitStart,
+                    });
+                }
                 await new Promise((r) => setTimeout(r, 200));
                 if (!isContextValid() || token !== runToken) return null;
             }
         }
 
-        function selectorCandidates(step) {
+        function escapeXPathLiteralSegment(str) {
+            return String(str).replace(/'/g, "''");
+        }
+
+        /** Если основной XPath вида //tag[contains(normalize-space(), '…')] — добавляем варианты с contains(.) и короткими фрагментами (Mat: текст в span, склейка без пробела). */
+        function deriveAutoRelaxedXpaths(primaryXpath) {
+            const raw = String(primaryXpath || '').trim();
+            const bracket = raw.indexOf('[contains(');
+            if (bracket < 0 || !/normalize-space\s*\(\s*\)/.test(raw)) return [];
+            const prefix = raw.slice(0, bracket);
+            const tagOk = /^\/\/[\w:*.-]+$/.test(prefix);
+            if (!tagOk) return [];
+            const litMatch = raw.match(/normalize-space\s*\(\s*\)\s*,\s*'((?:[^']|'')*)'/);
+            if (!litMatch) return [];
+            let inner = litMatch[1].replace(/''/g, "'");
+            const q = escapeXPathLiteralSegment;
+            const uniq = [];
+            const add = (xp) => {
+                if (xp && xp !== raw && !uniq.includes(xp)) uniq.push(xp);
+            };
+            add(`${prefix}[contains(., '${q(inner)}')]`);
+            const glued = inner.split(/(?<=[а-яёa-z])(?=[А-ЯЁA-Z])/);
+            for (const seg of glued) {
+                const t = seg.trim();
+                if (t.length >= 4) add(`${prefix}[contains(., '${q(t)}')]`);
+            }
+            const words = inner.split(/\s+/).map((w) => w.trim()).filter((w) => w.length >= 3);
+            for (const w of words.slice(0, 8)) {
+                add(`${prefix}[contains(normalize-space(.), '${q(w)}')]`);
+                add(`${prefix}[contains(., '${q(w)}')]`);
+            }
+            for (let n = Math.min(inner.length, 28); n >= 7; n -= 5) {
+                const pref = inner.slice(0, n).trim();
+                if (pref.length >= 6) add(`${prefix}[contains(., '${q(pref)}')]`);
+            }
+            return uniq;
+        }
+
+        /** Варианты для //tag[contains(concat(' ', normalize-space(@class), ' '), ' token ')] — часто ломается лишним пробелом; добавляем contains(@class, 'token'). */
+        function deriveClassConcatRelaxedXpaths(primaryXpath) {
+            const raw = String(primaryXpath || '').trim();
+            if (!raw.includes('normalize-space(@class)') || !raw.includes('concat(')) return [];
+            const pref = raw.match(/^(\/\/[\w:*.-]+)\[/);
+            if (!pref) return [];
+            const prefix = pref[1];
+            const litMatch = raw.match(/\)\s*,\s*'((?:[^']|'')*)'\s*\)\s*\]\s*$/);
+            if (!litMatch) return [];
+            const blob = litMatch[1].replace(/''/g, "'").trim();
+            const q = escapeXPathLiteralSegment;
+            const uniq = [];
+            const add = (xp) => {
+                if (xp && xp !== raw && !uniq.includes(xp)) uniq.push(xp);
+            };
+            const tokens = blob.split(/\s+/).filter((t) => t.length >= 2);
+            for (const t of tokens) add(`${prefix}[contains(@class, '${q(t)}')]`);
+            if (tokens.length === 0 && blob.length >= 2) add(`${prefix}[contains(@class, '${q(blob)}')]`);
+            return uniq;
+        }
+
+        function selectorCandidateEntries(step) {
             const primary = (step?.xpath || '').trim();
             const fx = Array.isArray(step?.params?.fallbackXPaths) ? step.params.fallbackXPaths.map((x) => String(x).trim()).filter(Boolean) : [];
+            const autoRelax = step?.params?.autoRelaxedXPathContains !== false;
+            const relaxed = autoRelax ? deriveAutoRelaxedXpaths(primary) : [];
+            const relaxedClass = autoRelax ? deriveClassConcatRelaxedXpaths(primary) : [];
+            const seen = new Set();
             const out = [];
-            if (primary) out.push(primary);
-            for (const x of fx) if (x && !out.includes(x)) out.push(x);
+            const add = (xpath, mode) => {
+                if (!xpath || seen.has(xpath)) return;
+                seen.add(xpath);
+                out.push({ xpath, mode });
+            };
+            add(primary, 'full');
+            for (const x of fx) add(x, 'full');
+            for (const x of relaxed) add(x, 'auto');
+            for (const x of relaxedClass) add(x, 'auto');
             return out;
+        }
+
+        /** Полный лимит — только основной XPath и fallbackXPaths; авто-варианты получают короткое окно (иначе после перезагрузки сумма даёт минуты ожидания). */
+        function xpathSearchBudgetMs(mode, fullMs) {
+            const cap = Math.max(0, fullMs);
+            if (mode === 'full') return cap;
+            return Math.min(1600, Math.max(450, Math.floor(cap / 3)));
+        }
+
+        async function findElementViaSelectors(step, fullTimeoutMs, stepIdForPulse) {
+            for (const { xpath, mode } of selectorCandidateEntries(step)) {
+                const ms = xpathSearchBudgetMs(mode, fullTimeoutMs);
+                const el = await findElementByXPath(xpath, ms, stepIdForPulse);
+                if (el) return el;
+            }
+            return null;
         }
 
         execSteps: for (let i = 0; i < steps.length; i++) {
@@ -382,6 +665,7 @@ function init() {
             const stepT0 = Date.now();
             const retryCount = step?.params?.retryCount ?? (step?.params?.retryOnError ? 3 : 1);
             const retryDelayMs = step?.params?.retryDelayMs ?? 300;
+            clearExecutionStepHighlight();
             sendExecutionProgress({ phase: 'start', stepId: id, index: i, total: steps.length });
             let lastErr = null;
             for (let attempt = 0; attempt < retryCount; attempt++) {
@@ -411,12 +695,9 @@ function init() {
 
                 if (step.action === 'wait_for_element') {
                     const timeout = step.params?.timeoutMs ?? baseTimeout;
-                    let found = null;
-                    for (const cand of selectorCandidates(step)) {
-                        found = await findElementByXPath(cand, timeout);
-                        if (found) break;
-                    }
-                    if (!found) throw new Error('Элемент не появился за ' + timeout + 'мс: ' + (step.xpath || '').substring(0, 80));
+                    const found = await findElementViaSelectors(step, timeout, id);
+                    if (!found) throw new Error('Элемент не появился за отведённое время (основной лимит ' + timeout + 'мс): ' + (step.xpath || '').substring(0, 80));
+                    highlightExecutionStepTarget(found);
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -426,10 +707,9 @@ function init() {
                 if (step.action === 'click_if_exists') {
                     const elOpt = await findElementByXPath(step.xpath, 0);
                     if (elOpt) {
-                        elOpt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        highlightExecutionStepTarget(elOpt);
                         elOpt.click();
-                        await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
-                        if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                        await safePostMutationWaits(step);
                     }
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
@@ -452,6 +732,7 @@ function init() {
                         } catch (_) {}
                     } else {
                         const elOpt = await findElementByXPath(step.xpath, 0);
+                        if (elOpt) highlightExecutionStepTarget(elOpt);
                         if (cond === 'element_exists') conditionResult = !!elOpt;
                         else if (cond === 'attribute_equals' && elOpt) conditionResult = (elOpt.getAttribute(attrName) || '') === expected;
                         else if (elOpt) {
@@ -506,7 +787,8 @@ function init() {
                         if (['url_equals', 'url_contains', 'url_matches'].includes(cond)) ok = check();
                         else if (cond === 'count_equals') ok = check();
                         else {
-                            const elOpt = await findElementByXPath(step.xpath, stepTimeout);
+                            const elOpt = await findElementByXPath(step.xpath, stepTimeout, id);
+                            if (elOpt) highlightExecutionStepTarget(elOpt);
                             if (cond === 'element_exists') ok = !!elOpt;
                             else if (cond === 'attribute_equals') ok = elOpt && (elOpt.getAttribute(attrName) || '') === expected;
                             else if (elOpt) {
@@ -534,19 +816,13 @@ function init() {
                 }
 
                 const stepTimeout = step.params?.timeoutMs ?? baseTimeout;
-                let el = null;
-                let usedXpath = '';
-                for (const cand of selectorCandidates(step)) {
-                    el = await findElementByXPath(cand, stepTimeout);
-                    if (el) { usedXpath = cand; break; }
-                }
-                if (!el) throw new Error('Элемент не найден (таймаут ' + stepTimeout + 'мс): ' + (step.xpath || '').substring(0, 80));
+                let el = await findElementViaSelectors(step, stepTimeout, id);
+                if (!el) throw new Error('Элемент не найден (основной таймаут ' + stepTimeout + 'мс на XPath; авто-варианты короче): ' + (step.xpath || '').substring(0, 80));
+                highlightExecutionStepTarget(el);
 
                 if (step.action === 'click') {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     el.click();
-                    await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
-                    if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                    await safePostMutationWaits(step);
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -554,7 +830,6 @@ function init() {
                 }
 
                 if (step.action === 'file_upload') {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     let fileInput = el;
                     const isFileInput = (el.tagName || '').toLowerCase() === 'input' && (el.type || '').toLowerCase() === 'file';
                     if (!isFileInput) {
@@ -572,6 +847,7 @@ function init() {
                         fileInput = findFileInput(el) || document.querySelector('input[type="file"]');
                         if (!fileInput) throw new Error('Рядом с кнопкой не найден input[type="file"]. Укажите XPath на сам input.');
                     }
+                    highlightExecutionStepTarget(fileInput);
                     const fileName = step.params?.fileName || 'file';
                     const base64 = step.params?.fileContentBase64;
                     const mime = /\.pdf$/i.test(fileName) ? 'application/pdf' : 'application/octet-stream';
@@ -593,8 +869,7 @@ function init() {
                     fileInput.files = dt.files;
                     fileInput.dispatchEvent(new Event('input', { bubbles: true }));
                     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
-                    if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                    await safePostMutationWaits(step);
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -602,7 +877,7 @@ function init() {
                 }
 
                 if (step.action === 'input' || step.action === 'set_date') {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    highlightExecutionStepTarget(el);
                     const value = step.params?.value ?? '';
                     const tag = (el.tagName || '').toLowerCase();
                     if (tag === 'input' || tag === 'textarea') {
@@ -620,8 +895,7 @@ function init() {
                         el.dispatchEvent(new Event('input', { bubbles: true }));
                         el.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                    await new Promise((r) => setTimeout(r, Math.max(0, waitPostActionMs)));
-                    if (step.params?.waitForLoad !== false) await waitForPageLoad(10000, { networkIdle: true, domStable: true });
+                    await safePostMutationWaits(step);
                     results.push({ id, ok: true, durationMs: Date.now() - stepT0 });
                     sendExecutionProgress({ phase: 'end', stepId: id, ok: true });
                     lastErr = null;
@@ -647,6 +921,7 @@ function init() {
                 if (!continueOnError) break;
             }
         }
+        clearExecutionStepHighlight();
         sendExecutionProgress({ phase: 'done' });
         return results;
     }
@@ -659,3 +934,5 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
+})();

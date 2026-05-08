@@ -31181,8 +31181,15 @@ function nodeSupportsRunFromHere(n) {
   const sr = Number(n?.data?.stepRef ?? 0);
   return Number.isFinite(sr) && sr > 0;
 }
+function flowEdgeKind(e) {
+  if (!e || typeof e !== "object") return "next";
+  const dk = e.data && typeof e.data === "object" ? e.data.kind : void 0;
+  const tk = e.kind;
+  const raw = dk != null && String(dk) !== "" ? dk : tk != null && String(tk) !== "" ? tk : "next";
+  return String(raw).toLowerCase();
+}
 function edgeKindIsDecorate(e) {
-  return String(e?.data?.kind || "") === "decorate";
+  return flowEdgeKind(e) === "decorate";
 }
 function nodeByIdFromList(nodeList) {
   return new Map(nodeList.map((n) => [n.id, n]));
@@ -31427,14 +31434,68 @@ function compareNodeExecutionOrder(a, b) {
   if (aEnd !== bEnd) return aEnd ? 1 : -1;
   return Number(da.stepRef || 0) - Number(db.stepRef || 0);
 }
+function buildGraphVisitOrder(nodeList, edgeList) {
+  const byId = new Map(nodeList.map((n) => [n.id, n]));
+  const nextEdges = (edgeList || []).filter((e) => {
+    if (!e || !e.source || !e.target || !byId.has(e.source) || !byId.has(e.target)) return false;
+    return flowEdgeKind(e) === "next";
+  });
+  const roots = nodeList.filter((n) => n.data?.action === "start");
+  let seeds = roots.length ? roots : nodeList.filter((n) => !nextEdges.some((e) => e.target === n.id));
+  if (!seeds.length && nodeList.length) seeds = [nodeList[0]];
+  seeds = [...seeds].sort(compareNodeExecutionOrder);
+  const order = /* @__PURE__ */ new Map();
+  let seq = 0;
+  const queue = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const s of seeds) {
+    if (!seen.has(s.id)) {
+      seen.add(s.id);
+      order.set(s.id, seq++);
+      queue.push(s);
+    }
+  }
+  let qi = 0;
+  while (qi < queue.length) {
+    const u = queue[qi++];
+    for (const e of nextEdges) {
+      if (e.source !== u.id) continue;
+      const v = e.target;
+      if (!byId.has(v) || seen.has(v)) continue;
+      seen.add(v);
+      order.set(v, seq++);
+      queue.push(byId.get(v));
+    }
+  }
+  const rest = nodeList.filter((n) => !seen.has(n.id)).sort(compareNodeExecutionOrder);
+  for (const n of rest) order.set(n.id, seq++);
+  return order;
+}
+function compareNodeByGraphVisit(a, b, visitOrder) {
+  const oa = visitOrder.get(a.id);
+  const ob = visitOrder.get(b.id);
+  if (oa !== ob) return (oa ?? 0) - (ob ?? 0);
+  return compareNodeExecutionOrder(a, b);
+}
 function snapPos16(p) {
   return {
     x: Math.round(Number(p.x) / 16) * 16,
     y: Math.round(Number(p.y) / 16) * 16
   };
 }
-function layoutNodesInGrid(nodeList, cols = FLOW_GRID_COLS, origin = { x: 48, y: 48 }) {
-  const sorted = [...nodeList].sort(compareNodeExecutionOrder);
+function nodeListHasNextEdges(nodeList, edgeList) {
+  const ids = new Set(nodeList.map((n) => n.id));
+  return (edgeList || []).some((e) => {
+    if (!e || !e.source || !e.target || !ids.has(e.source) || !ids.has(e.target)) return false;
+    const k = flowEdgeKind(e);
+    return k === "next";
+  });
+}
+function layoutNodesInGrid(nodeList, edgeList, cols = FLOW_GRID_COLS, origin = { x: 48, y: 48 }) {
+  const visit = nodeListHasNextEdges(nodeList, edgeList) ? buildGraphVisitOrder(nodeList, edgeList) : null;
+  const sorted = [...nodeList].sort(
+    (a, b) => visit ? compareNodeByGraphVisit(a, b, visit) : compareNodeExecutionOrder(a, b)
+  );
   const posById = /* @__PURE__ */ new Map();
   sorted.forEach((n, i) => {
     const col = i % cols;
@@ -31452,11 +31513,14 @@ function layoutNodesInGrid(nodeList, cols = FLOW_GRID_COLS, origin = { x: 48, y:
     position: posById.has(n.id) ? posById.get(n.id) : { ...n.position }
   }));
 }
-function layoutSelectedNodesInGrid(allNodes, selectedIds, cols = FLOW_GRID_COLS) {
+function layoutSelectedNodesInGrid(allNodes, selectedIds, edgeList, cols = FLOW_GRID_COLS) {
   if (!selectedIds.size) return allNodes;
   const sel = allNodes.filter((n) => selectedIds.has(n.id));
   if (!sel.length) return allNodes;
-  const sorted = [...sel].sort(compareNodeExecutionOrder);
+  const visit = nodeListHasNextEdges(allNodes, edgeList) ? buildGraphVisitOrder(allNodes, edgeList) : null;
+  const sorted = [...sel].sort(
+    (a, b) => visit ? compareNodeByGraphVisit(a, b, visit) : compareNodeExecutionOrder(a, b)
+  );
   const minX = Math.min(...sel.map((n) => n.position.x));
   const minY = Math.min(...sel.map((n) => n.position.y));
   const posById = /* @__PURE__ */ new Map();
@@ -31475,9 +31539,10 @@ function layoutSelectedNodesInGrid(allNodes, selectedIds, cols = FLOW_GRID_COLS)
 }
 function layoutNodesFlowByNextEdges(nodeList, edgeList) {
   const byId = new Map(nodeList.map((n) => [n.id, n]));
-  const nextEdges = edgeList.filter(
-    (e) => (e?.data?.kind || "next") === "next" && e.source && e.target && byId.has(e.source) && byId.has(e.target)
-  );
+  const nextEdges = edgeList.filter((e) => {
+    if (!e || !e.source || !e.target || !byId.has(e.source) || !byId.has(e.target)) return false;
+    return flowEdgeKind(e) === "next";
+  });
   const roots = nodeList.filter((n) => n.data?.action === "start");
   let seeds = roots.length ? roots : nodeList.filter((n) => !nextEdges.some((e) => e.target === n.id));
   if (!seeds.length && nodeList.length) seeds = [nodeList[0]];
@@ -31499,7 +31564,8 @@ function layoutNodesFlowByNextEdges(nodeList, edgeList) {
   }
   const assigned = [...level.values()];
   const maxL = assigned.length ? Math.max(...assigned) : 0;
-  const orphans = nodeList.filter((n) => !level.has(n.id)).sort(compareNodeExecutionOrder);
+  const visit = buildGraphVisitOrder(nodeList, edgeList);
+  const orphans = nodeList.filter((n) => !level.has(n.id)).sort((a, b) => compareNodeByGraphVisit(a, b, visit));
   orphans.forEach((n, i) => level.set(n.id, maxL + 1 + Math.floor(i / FLOW_GRID_COLS)));
   const byLevel = /* @__PURE__ */ new Map();
   nodeList.forEach((n) => {
@@ -31507,7 +31573,7 @@ function layoutNodesFlowByNextEdges(nodeList, edgeList) {
     if (!byLevel.has(L)) byLevel.set(L, []);
     byLevel.get(L).push(n);
   });
-  for (const arr of byLevel.values()) arr.sort(compareNodeExecutionOrder);
+  for (const arr of byLevel.values()) arr.sort((a, b) => compareNodeByGraphVisit(a, b, visit));
   const pos = /* @__PURE__ */ new Map();
   [...byLevel.keys()].sort((a, b) => a - b).forEach((L) => {
     const arr = byLevel.get(L);
@@ -32310,6 +32376,20 @@ function normalizeFlow(rawFlow, steps) {
   const byStepFlow = new Map(
     rawNodes.filter((n) => Number(n.stepRef) > 0).map((n) => [Number(n.stepRef), n])
   );
+  const stepIds = new Set(sortedSteps.map((s) => `step-${s.step}`));
+  const preEdgesForSlot = safeArray(rawFlow.edges).map((e) => {
+    const kind = String(e.kind || e?.data?.kind || "next");
+    if (kind === "decorate" || kind === "yes" || kind === "no") return null;
+    const source = oldToNewId.get(String(e.source)) || String(e.source || "");
+    const target = oldToNewId.get(String(e.target)) || String(e.target || "");
+    if (!source || !target || !stepIds.has(source) || !stepIds.has(target)) return null;
+    return { source, target, data: { kind: kind || "next" } };
+  }).filter(Boolean);
+  const preNodesForSlot = sortedSteps.map((s) => ({
+    id: `step-${s.step}`,
+    data: { stepRef: Number(s.step), action: stepToNodeData(s).action || "" }
+  }));
+  const visitSlots = nodeListHasNextEdges(preNodesForSlot, preEdgesForSlot) ? buildGraphVisitOrder(preNodesForSlot, preEdgesForSlot) : null;
   const nodes = sortedSteps.map((s, idx) => {
     const d = stepToNodeData(s);
     const nflow = byStepFlow.get(Number(s.step));
@@ -32327,12 +32407,13 @@ function normalizeFlow(rawFlow, steps) {
       }
     }
     d.preview = buildPreview(d);
+    const slot = visitSlots ? visitSlots.get(`step-${s.step}`) ?? idx : idx;
     const position = nflow ? {
-      x: Number(nflow.position?.x ?? 40 + idx % FLOW_GRID_COLS * STEP_GAP_X),
-      y: Number(nflow.position?.y ?? 40 + Math.floor(idx / FLOW_GRID_COLS) * STEP_GAP_Y)
+      x: Number(nflow.position?.x ?? 40 + slot % FLOW_GRID_COLS * STEP_GAP_X),
+      y: Number(nflow.position?.y ?? 40 + Math.floor(slot / FLOW_GRID_COLS) * STEP_GAP_Y)
     } : {
-      x: 40 + idx % FLOW_GRID_COLS * STEP_GAP_X,
-      y: 40 + Math.floor(idx / FLOW_GRID_COLS) * STEP_GAP_Y
+      x: 40 + slot % FLOW_GRID_COLS * STEP_GAP_X,
+      y: 40 + Math.floor(slot / FLOW_GRID_COLS) * STEP_GAP_Y
     };
     return {
       id: `step-${s.step}`,
@@ -32993,10 +33074,10 @@ function App() {
   const layoutGridAll = (0, import_react8.useCallback)(() => {
     setNodes((prev) => {
       const { annotations, steps } = partitionStrippedNodes(prev);
-      const laid = layoutNodesInGrid(steps, FLOW_GRID_COLS);
+      const laid = layoutNodesInGrid(steps, edges, FLOW_GRID_COLS);
       return refreshNodePreview(withGroupFrameNodes([...annotations, ...laid], groupsRef.current));
     });
-  }, [setNodes, refreshNodePreview]);
+  }, [setNodes, refreshNodePreview, edges]);
   const layoutGridSelection = (0, import_react8.useCallback)(() => {
     setNodes((prev) => {
       const ids = new Set(
@@ -33009,17 +33090,17 @@ function App() {
         return prev;
       }
       const { annotations, steps } = partitionStrippedNodes(prev);
-      const laid = layoutSelectedNodesInGrid(steps, ids, FLOW_GRID_COLS);
+      const laid = layoutSelectedNodesInGrid(steps, ids, edges, FLOW_GRID_COLS);
       return refreshNodePreview(withGroupFrameNodes([...annotations, ...laid], groupsRef.current));
     });
-  }, [setNodes, refreshNodePreview]);
+  }, [setNodes, refreshNodePreview, edges]);
   const layoutFlowByNextEdges = (0, import_react8.useCallback)(() => {
     setNodes((prev) => {
       const { annotations, steps } = partitionStrippedNodes(prev);
-      const laid = layoutNodesFlowByNextEdges(steps, edgesRef.current);
+      const laid = layoutNodesFlowByNextEdges(steps, edges);
       return refreshNodePreview(withGroupFrameNodes([...annotations, ...laid], groupsRef.current));
     });
-  }, [setNodes, refreshNodePreview]);
+  }, [setNodes, refreshNodePreview, edges]);
   const updateNodeDataById = (0, import_react8.useCallback)(
     (nodeId, patch) => {
       if (!nodeId) return;
@@ -34550,7 +34631,7 @@ function App() {
             className: "btn2",
             disabled: !scenario || nodes.length === 0,
             onClick: layoutGridAll,
-            title: "\u0421\u0435\u0442\u043A\u0430 2\xD7N: \u0448\u0430\u0433\u0438 \u0434\u0430\u043B\u044C\u0448\u0435 \u0434\u0440\u0443\u0433 \u043E\u0442 \u0434\u0440\u0443\u0433\u0430 + \u0441\u0432\u044F\u0437\u0438 \u043A\u0440\u0438\u0432\u044B\u043C\u0438 (simplebezier), \u043F\u043E\u0440\u044F\u0434\u043E\u043A start \u2192 stepRef \u2192 end"
+            title: "\u0421\u0435\u0442\u043A\u0430 2\xD7N: \u043F\u043E\u0440\u044F\u0434\u043E\u043A \u0438\u0437 \u043E\u0431\u0445\u043E\u0434\u0430 \u0433\u0440\u0430\u0444\u0430 \u043F\u043E \u0441\u0432\u044F\u0437\u044F\u043C next (BFS); \u0435\u0441\u043B\u0438 next \u043D\u0435\u0442 \u2014 \u043F\u043E \u043D\u043E\u043C\u0435\u0440\u0430\u043C \u0448\u0430\u0433\u043E\u0432 start \u2192 \u2026 \u2192 end"
           },
           "\u{1F4D0} \u0421\u0435\u0442\u043A\u0430 (\u0432\u0441\u0435)"
         ),
@@ -34561,7 +34642,7 @@ function App() {
             className: "btn2",
             disabled: !scenario,
             onClick: layoutGridSelection,
-            title: "\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u0430\u044F \u0441\u0435\u0442\u043A\u0430 \u0442\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u043D\u044B\u0445"
+            title: "\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u0430\u044F \u0441\u0435\u0442\u043A\u0430 \u0434\u043B\u044F \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u043D\u044B\u0445: \u043F\u043E\u0440\u044F\u0434\u043E\u043A \u043F\u043E \u0433\u0440\u0430\u0444\u0443 next (\u043A\u0430\u043A \u0443 \u0432\u0441\u0435\u0445 \u0443\u0437\u043B\u043E\u0432 \u0441\u0446\u0435\u043D\u044B)"
           },
           "\u{1F4D0} \u0421\u0435\u0442\u043A\u0430 (\u0432\u044B\u0434\u0435\u043B\u0435\u043D\u043D\u044B\u0435)"
         ),
@@ -34572,7 +34653,7 @@ function App() {
             className: "btn2",
             disabled: !scenario || nodes.length === 0,
             onClick: layoutFlowByNextEdges,
-            title: "\u0421\u043B\u043E\u0438 \u0441\u043B\u0435\u0432\u0430 \u043D\u0430\u043F\u0440\u0430\u0432\u043E \u043F\u043E \u0441\u0432\u044F\u0437\u044F\u043C next (\u043E\u0442 start \u0438\u043B\u0438 \u0431\u0435\u0437 \u0432\u0445\u043E\u0434\u044F\u0449\u0438\u0445 next)"
+            title: "\u0421\u043B\u043E\u0438 \u0441\u043B\u0435\u0432\u0430 \u043D\u0430\u043F\u0440\u0430\u0432\u043E \u043F\u043E longest-path \u043E\u0442 next; \u0432\u043D\u0443\u0442\u0440\u0438 \u0441\u043B\u043E\u044F \u2014 \u043F\u043E\u0440\u044F\u0434\u043E\u043A \u043E\u0431\u0445\u043E\u0434\u0430 \u0433\u0440\u0430\u0444\u0430, \u043D\u0435 \u043F\u043E \u043D\u043E\u043C\u0435\u0440\u0443 \u0448\u0430\u0433\u0430"
           },
           "\u2194 \u041F\u043E next"
         ),
